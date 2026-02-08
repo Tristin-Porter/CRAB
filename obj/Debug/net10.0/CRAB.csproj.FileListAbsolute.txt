@@ -1,0 +1,15 @@
+C:\Users\Trist\Downloads\CRAB\bin\Debug\net10.0\CRAB.exe
+C:\Users\Trist\Downloads\CRAB\bin\Debug\net10.0\CRAB.deps.json
+C:\Users\Trist\Downloads\CRAB\bin\Debug\net10.0\CRAB.runtimeconfig.json
+C:\Users\Trist\Downloads\CRAB\bin\Debug\net10.0\CRAB.dll
+C:\Users\Trist\Downloads\CRAB\bin\Debug\net10.0\CRAB.pdb
+C:\Users\Trist\Downloads\CRAB\obj\Debug\net10.0\CRAB.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Trist\Downloads\CRAB\obj\Debug\net10.0\CRAB.AssemblyInfoInputs.cache
+C:\Users\Trist\Downloads\CRAB\obj\Debug\net10.0\CRAB.AssemblyInfo.cs
+C:\Users\Trist\Downloads\CRAB\obj\Debug\net10.0\CRAB.csproj.CoreCompileInputs.cache
+C:\Users\Trist\Downloads\CRAB\obj\Debug\net10.0\CRAB.sourcelink.json
+C:\Users\Trist\Downloads\CRAB\obj\Debug\net10.0\CRAB.dll
+C:\Users\Trist\Downloads\CRAB\obj\Debug\net10.0\refint\CRAB.dll
+C:\Users\Trist\Downloads\CRAB\obj\Debug\net10.0\CRAB.pdb
+C:\Users\Trist\Downloads\CRAB\obj\Debug\net10.0\CRAB.genruntimeconfig.cache
+C:\Users\Trist\Downloads\CRAB\obj\Debug\net10.0\ref\CRAB.dll
