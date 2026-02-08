@@ -8,12 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="CLI/Program.cs" />
-    <Compile Include="Core/MapSet.cs" />
-    <Compile Include="Core/Orchestrator.cs" />
-    <Compile Include="Core/RuleSet.cs" />
-    <Compile Include="Core/TokenSet.cs" />
-    <Compile Include="Dependencies/CDTk/Boilerplate/CDTk.cs" />
+    <Compile Include="Dependencies/Boilerplate/CDTk.cs" />
   </ItemGroup>
 
 </Project>

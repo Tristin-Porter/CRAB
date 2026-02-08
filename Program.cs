@@ -1,9 +1,17 @@
+using CDTk;
+
 namespace CRAB;
 
 class Program
 {
     public static void Main()
     {
+        var CRAB = new Compiler()
+            .WithTokens(new Tokens())
+            .WithRules(new Rules())
+            .WithTarget(new WASM())
+            .Build();
+        
         // Graceful Ctrl+C
         System.Console.CancelKeyPress += (s, e) =>
         {
@@ -31,6 +39,9 @@ class Program
                 new New()
                     .AddSub(new Console())
                     .AddSub(new Project())
+            )
+            .Register(
+                new Help()
             );
 
         while (true)

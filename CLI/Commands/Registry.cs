@@ -22,6 +22,12 @@ public abstract class Command
 
 public class Registry
 {
+    public static Registry? Instance { get; private set; }
+    public Registry()
+    {
+        Instance = this;
+    }
+
     private readonly Dictionary<string, Command> _commands = new();
 
     public Registry Register(Command command)
@@ -58,6 +64,20 @@ public class Registry
     // ------------------------------
     private static string? Suggest(string input, Dictionary<string, Command> options)
     {
+        input = input.ToLower();
+
+        // 1. Strong prefix match
+        var prefixMatches = options.Keys
+            .Where(k => k.StartsWith(input))
+            .ToList();
+
+        if (prefixMatches.Count == 1)
+            return prefixMatches[0];
+
+        if (prefixMatches.Count > 1)
+            return prefixMatches.OrderBy(k => k.Length).First();
+
+        // 2. Levenshtein fallback
         string? best = null;
         int bestScore = int.MaxValue;
 
@@ -86,6 +106,7 @@ public class Registry
 
         return bestScore <= 3 ? best : null;
     }
+
 
     // ------------------------------
     // ⭐ Suggest flags
