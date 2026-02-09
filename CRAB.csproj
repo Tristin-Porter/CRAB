@@ -8,7 +8,19 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Compile Include="Dependencies/Boilerplate/CDTk.cs" />
+    <!-- Exclude test files from compilation -->
+    <Compile Remove="Testing/**/*.cs" />
+    <None Include="Testing/**/*.cs" />
+    
+    <!-- Exclude dependency source files - they are separate projects -->
+    <Compile Remove="Dependencies/**/*.cs" />
+    <None Include="Dependencies/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reference dependency projects -->
+    <ProjectReference Include="Dependencies/CDTk/CDTk.csproj" />
+    <ProjectReference Include="Dependencies/BADGER/Badger.csproj" />
   </ItemGroup>
 
 </Project>

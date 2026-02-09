@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Grammar_Generator</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>library</OutputType>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+	  
+	<GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+	<PackageId>CDTk</PackageId>
+	<Version>9.0.0</Version>
+	<Authors>Tristin Porter</Authors>
+	<Description>CDTk is a .NET library for building compilers, transpilers, and code generators. It provides a clean, unified API that makes language creation simple and intuitive.</Description>
+	<PackageTags>
+		compiler compiler-toolkit compiler-framework compiler-front-end
+		language-design language-tools dsl domain-specific-language
+		parser lexer tokenizer grammar syntax syntax-tree
+		semantic-analysis semantic-checking code-generation codegen
+		transpiler ir ast front-end front-end-compiler
+		language-processing text-processing .net dotnet
+	</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+	<Compile Remove=".gitignore" />
+	<Compile Remove="Testing/**/*.cs" />
+	<EmbeddedResource Remove=".gitignore" />
+	<None Remove=".gitignore" />
+  </ItemGroup>
+
+</Project>
