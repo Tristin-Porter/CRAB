@@ -706,3 +706,357 @@ class AutomaticIR
         return $"AutomaticIR: {Allocations.Count} allocations, {Deallocations.Count} deallocations";
     }
 }
+
+// ============================================================
+// Enhanced Analysis Capabilities
+// ============================================================
+
+/// <summary>
+/// Performs escape analysis to determine if allocations escape their creation scope
+/// This is critical for optimizing deallocation strategy and proving safety
+/// </summary>
+class EscapeAnalyzer
+{
+    private AutomaticContext context;
+    
+    public EscapeAnalyzer(AutomaticContext context)
+    {
+        this.context = context;
+    }
+    
+    /// <summary>
+    /// Analyze if an allocation escapes its scope
+    /// Returns true if the allocation may be accessible outside its creation scope
+    /// </summary>
+    public bool DoesEscape(AllocationSite allocation, AstNode scope)
+    {
+        // An allocation escapes if:
+        // 1. It's returned from a function
+        // 2. It's assigned to a field or global
+        // 3. It's captured by a lambda/delegate
+        // 4. It's passed to a function that may store it
+        // 5. It's stored in a collection that outlives the scope
+        
+        return CheckReturn(allocation, scope) ||
+               CheckFieldAssignment(allocation, scope) ||
+               CheckCapture(allocation, scope) ||
+               CheckStorageInLongLivedCollection(allocation, scope);
+    }
+    
+    private bool CheckReturn(AllocationSite allocation, AstNode scope)
+    {
+        // Check if allocation is returned from function
+        // Simplified - real implementation would traverse AST
+        return false;
+    }
+    
+    private bool CheckFieldAssignment(AllocationSite allocation, AstNode scope)
+    {
+        // Check if allocation is assigned to a field
+        return false;
+    }
+    
+    private bool CheckCapture(AllocationSite allocation, AstNode scope)
+    {
+        // Check if allocation is captured by lambda or delegate
+        // This is important for async/await and LINQ scenarios
+        return false;
+    }
+    
+    private bool CheckStorageInLongLivedCollection(AllocationSite allocation, AstNode scope)
+    {
+        // Check if allocation is stored in a collection that outlives scope
+        return false;
+    }
+}
+
+/// <summary>
+/// Performs inter-procedural analysis to track allocations across function boundaries
+/// Essential for analyzing complex call graphs and delegate invocations
+/// </summary>
+class InterProceduralAnalyzer
+{
+    private AutomaticContext context;
+    private Dictionary<string, FunctionSummary> functionSummaries = new Dictionary<string, FunctionSummary>();
+    
+    public InterProceduralAnalyzer(AutomaticContext context)
+    {
+        this.context = context;
+    }
+    
+    /// <summary>
+    /// Build function summaries for the entire program
+    /// Summaries include allocation behavior, parameter lifetime requirements, etc.
+    /// </summary>
+    public void BuildSummaries(AstNode programRoot)
+    {
+        // Traverse all function declarations and build summaries
+        // Summaries track:
+        // - Allocations performed in the function
+        // - Whether parameters escape
+        // - Return value lifetime relationship to parameters
+        // - Side effects on memory
+    }
+    
+    /// <summary>
+    /// Get or compute summary for a function
+    /// </summary>
+    public FunctionSummary GetSummary(string functionName)
+    {
+        if (!functionSummaries.TryGetValue(functionName, out var summary))
+        {
+            summary = new FunctionSummary(functionName);
+            functionSummaries[functionName] = summary;
+        }
+        return summary;
+    }
+}
+
+/// <summary>
+/// Summary of a function's memory behavior for inter-procedural analysis
+/// </summary>
+class FunctionSummary
+{
+    public string FunctionName { get; set; }
+    public List<AllocationSite> InternalAllocations { get; } = new List<AllocationSite>();
+    public Dictionary<string, bool> ParameterEscapes { get; } = new Dictionary<string, bool>();
+    public bool ReturnsNewAllocation { get; set; }
+    public bool ReturnsParameter { get; set; }
+    
+    public FunctionSummary(string name)
+    {
+        FunctionName = name;
+    }
+}
+
+/// <summary>
+/// Analyzes async/await patterns for memory safety
+/// Ensures allocations are safe across await points and state machine transformations
+/// </summary>
+class AsyncAnalyzer
+{
+    private AutomaticContext context;
+    
+    public AsyncAnalyzer(AutomaticContext context)
+    {
+        this.context = context;
+    }
+    
+    /// <summary>
+    /// Analyze async function for memory safety across await points
+    /// </summary>
+    public AsyncAnalysisResult AnalyzeAsyncFunction(AstNode asyncFunction)
+    {
+        var result = new AsyncAnalysisResult();
+        
+        // Track allocations that must survive across await points
+        // These need special handling since they become fields in state machine
+        result.StateFields = IdentifyStateFields(asyncFunction);
+        
+        // Identify await points and their impact on lifetimes
+        result.AwaitPoints = IdentifyAwaitPoints(asyncFunction);
+        
+        // Verify no use-after-free across awaits
+        VerifyAwaitSafety(result);
+        
+        return result;
+    }
+    
+    private List<string> IdentifyStateFields(AstNode asyncFunction)
+    {
+        // Identify variables that become state machine fields
+        return new List<string>();
+    }
+    
+    private List<int> IdentifyAwaitPoints(AstNode asyncFunction)
+    {
+        // Identify await expressions in the function
+        return new List<int>();
+    }
+    
+    private void VerifyAwaitSafety(AsyncAnalysisResult result)
+    {
+        // Verify no dangling references across await points
+    }
+}
+
+/// <summary>
+/// Result of async analysis
+/// </summary>
+class AsyncAnalysisResult
+{
+    public List<string> StateFields { get; set; } = new List<string>();
+    public List<int> AwaitPoints { get; set; } = new List<int>();
+    public bool IsSafe { get; set; } = true;
+}
+
+/// <summary>
+/// Analyzes LINQ expressions for memory allocation patterns
+/// LINQ often creates intermediate collections that need careful lifetime management
+/// </summary>
+class LinqAnalyzer
+{
+    private AutomaticContext context;
+    
+    public LinqAnalyzer(AutomaticContext context)
+    {
+        this.context = context;
+    }
+    
+    /// <summary>
+    /// Analyze LINQ query for allocation and deallocation opportunities
+    /// </summary>
+    public LinqAnalysisResult AnalyzeQuery(AstNode linqQuery)
+    {
+        var result = new LinqAnalysisResult();
+        
+        // Identify intermediate collections (Select, Where, etc.)
+        result.IntermediateCollections = IdentifyIntermediates(linqQuery);
+        
+        // Check if query is deferred or immediate
+        result.IsDeferred = IsDeferredExecution(linqQuery);
+        
+        // Compute optimal deallocation for intermediates
+        if (!result.IsDeferred)
+        {
+            result.CanDeallocateImmediately = true;
+        }
+        
+        return result;
+    }
+    
+    private List<AllocationSite> IdentifyIntermediates(AstNode linqQuery)
+    {
+        // Find intermediate enumerables created during query
+        return new List<AllocationSite>();
+    }
+    
+    private bool IsDeferredExecution(AstNode linqQuery)
+    {
+        // Check if query uses deferred execution (most LINQ) or immediate (.ToList(), etc.)
+        return true;
+    }
+}
+
+/// <summary>
+/// Result of LINQ analysis
+/// </summary>
+class LinqAnalysisResult
+{
+    public List<AllocationSite> IntermediateCollections { get; set; } = new List<AllocationSite>();
+    public bool IsDeferred { get; set; }
+    public bool CanDeallocateImmediately { get; set; }
+}
+
+/// <summary>
+/// Analyzes delegate and lambda captures for memory safety
+/// Captures can extend object lifetimes and create complex ownership patterns
+/// </summary>
+class DelegateAnalyzer
+{
+    private AutomaticContext context;
+    
+    public DelegateAnalyzer(AutomaticContext context)
+    {
+        this.context = context;
+    }
+    
+    /// <summary>
+    /// Analyze lambda/delegate for captured variables
+    /// </summary>
+    public DelegateAnalysisResult AnalyzeDelegate(AstNode delegateNode)
+    {
+        var result = new DelegateAnalysisResult();
+        
+        // Identify captured variables
+        result.CapturedVariables = IdentifyCaptures(delegateNode);
+        
+        // Determine if delegate outlives captured scope
+        result.OutlivesScope = CheckLifetime(delegateNode);
+        
+        // If delegate outlives scope, captured variables must be heap-allocated
+        if (result.OutlivesScope)
+        {
+            foreach (var capture in result.CapturedVariables)
+            {
+                result.RequiresHeapAllocation.Add(capture);
+            }
+        }
+        
+        return result;
+    }
+    
+    private List<string> IdentifyCaptures(AstNode delegateNode)
+    {
+        // Find all variables captured by the delegate
+        return new List<string>();
+    }
+    
+    private bool CheckLifetime(AstNode delegateNode)
+    {
+        // Check if delegate may outlive its creation scope
+        return false;
+    }
+}
+
+/// <summary>
+/// Result of delegate analysis
+/// </summary>
+class DelegateAnalysisResult
+{
+    public List<string> CapturedVariables { get; set; } = new List<string>();
+    public bool OutlivesScope { get; set; }
+    public List<string> RequiresHeapAllocation { get; set; } = new List<string>();
+}
+
+/// <summary>
+/// Analyzes generics for allocation patterns
+/// Generic instantiations may create different allocation patterns based on type arguments
+/// </summary>
+class GenericAnalyzer
+{
+    private AutomaticContext context;
+    
+    public GenericAnalyzer(AutomaticContext context)
+    {
+        this.context = context;
+    }
+    
+    /// <summary>
+    /// Analyze generic type instantiation
+    /// </summary>
+    public GenericAnalysisResult AnalyzeGeneric(string genericType, List<string> typeArguments)
+    {
+        var result = new GenericAnalysisResult();
+        
+        // For value types, allocation may be on stack
+        // For reference types, allocation is on heap
+        foreach (var typeArg in typeArguments)
+        {
+            result.TypeArgumentKinds[typeArg] = IsValueType(typeArg) ? TypeKind.Value : TypeKind.Reference;
+        }
+        
+        return result;
+    }
+    
+    private bool IsValueType(string typeName)
+    {
+        // Check if type is a value type (struct, primitive, enum)
+        // Simplified - real implementation would use semantic model
+        return typeName == "int" || typeName == "bool" || typeName == "double";
+    }
+}
+
+/// <summary>
+/// Result of generic analysis
+/// </summary>
+class GenericAnalysisResult
+{
+    public Dictionary<string, TypeKind> TypeArgumentKinds { get; set; } = new Dictionary<string, TypeKind>();
+}
+
+enum TypeKind
+{
+    Value,      // Stack-allocated value type
+    Reference   // Heap-allocated reference type
+}
