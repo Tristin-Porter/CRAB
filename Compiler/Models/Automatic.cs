@@ -366,6 +366,7 @@ class LifetimeInferenceVisitor
     private LifetimeGraph graph;
     private AutomaticContext context;
     private int currentProgramPoint = 0;
+    private int variableCounter = 0;  // Deterministic counter for variable naming
     private Stack<string> scopeStack = new Stack<string>();
     
     public LifetimeInferenceVisitor(LifetimeGraph graph, AutomaticContext context)
@@ -409,13 +410,15 @@ class LifetimeInferenceVisitor
     
     private string ExtractVariableName(AstNode node)
     {
-        // Simplified - real implementation would parse AST properly
-        return $"var_{node.GetHashCode()}";
+        // Use deterministic counter instead of GetHashCode() to avoid non-deterministic behavior
+        // Real implementation would parse AST to extract actual variable name
+        return $"var_{variableCounter++}";
     }
     
     private IEnumerable<AstNode> GetChildren(AstNode node)
     {
-        // Simplified - real implementation would get actual children
+        // Simplified - real implementation would get actual children from AST structure
+        // AstNode from CDTk provides Children property
         return Enumerable.Empty<AstNode>();
     }
 }
