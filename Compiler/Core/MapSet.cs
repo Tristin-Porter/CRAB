@@ -137,10 +137,7 @@ class WASM : MapSet
     public Map IfStatement = @"(if {condition}
   (then
 {thenStmt}
-  )
-  (else
-{elseClause}
-  )
+  ){elseClause}
 )";
     
     /// <summary>Switch statement</summary>
@@ -153,9 +150,12 @@ class WASM : MapSet
     public Map IterationStatement = "{stmt}";
     
     /// <summary>While loop</summary>
-    public Map WhileStatement = @"(loop $while
-  (br_if $while {condition})
+    public Map WhileStatement = @"(block $while_exit
+  (loop $while_loop
+    (br_if $while_exit (i32.eqz {condition}))
 {body}
+    (br $while_loop)
+  )
 )";
     
     /// <summary>Do-while loop</summary>
@@ -324,10 +324,11 @@ class WASM : MapSet
     public Map ParenthesizedExpression = "{expr}";
     
     /// <summary>Member access expression</summary>
-    public Map MemberAccessExpression = "(struct.get ${type} ${member} {target})";
+    public Map MemberAccessExpression = "(struct.get ${type}.${member} {target})";
     
     /// <summary>Method invocation</summary>
-    public Map InvocationExpression = "(call ${target} {args})";
+    public Map InvocationExpression = @";; call {target}
+(call ${target} {args})";
     
     /// <summary>Element/indexer access</summary>
     public Map ElementAccessExpression = @";; {target}[{indices}]
@@ -461,7 +462,7 @@ class WASM : MapSet
     public Map FalseLiteral = "(i32.const 0)";
     
     /// <summary>Null literal</summary>
-    public Map NullLiteral = "(ref.null)";
+    public Map NullLiteral = "(ref.null any)";
     
     // ============================================================
     // TYPES
@@ -506,14 +507,14 @@ class WASM : MapSet
     /// <summary>Primitive type - char</summary>
     public Map CharType = "i32";
     
-    /// <summary>Primitive type - decimal (maps to i64 for now)</summary>
-    public Map DecimalType = "i64";
+    /// <summary>Primitive type - decimal (represented as struct with i64 components for 128-bit precision)</summary>
+    public Map DecimalType = "(ref $Decimal)";
     
-    /// <summary>Primitive type - nint (native int, C# 9+)</summary>
-    public Map NIntType = "i32";
+    /// <summary>Primitive type - nint (native int, pointer-sized, i32 on 32-bit, i64 on 64-bit)</summary>
+    public Map NIntType = "i32 ;; TODO: Use i64 for 64-bit targets";
     
-    /// <summary>Primitive type - nuint (native uint, C# 9+)</summary>
-    public Map NUIntType = "i32";
+    /// <summary>Primitive type - nuint (native uint, pointer-sized, i32 on 32-bit, i64 on 64-bit)</summary>
+    public Map NUIntType = "i32 ;; TODO: Use i64 for 64-bit targets";
     
     /// <summary>String type</summary>
     public Map StringType = "(ref $String)";
@@ -701,7 +702,8 @@ class WASM : MapSet
     public Map BitwiseXorOperator = "i32.xor";
     
     /// <summary>Bitwise NOT</summary>
-    public Map BitwiseNotOperator = "i32.const -1\ni32.xor";
+    public Map BitwiseNotOperator = @"(i32.xor
+  (i32.const -1))";
     
     /// <summary>Left shift operator</summary>
     public Map LeftShiftOperator = "i32.shl";
