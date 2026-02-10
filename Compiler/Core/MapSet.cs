@@ -16,6 +16,25 @@ using CDTk;
 class WASM : MapSet
 {
     // ============================================================
+    // SEMANTIC ANALYSIS MODELS
+    // ============================================================
+    
+    /// <summary>
+    /// Automatic memory model (CTGC) for semantic analysis.
+    /// Performs lifetime inference, region analysis, and memory safety verification.
+    /// Provides annotations for WASM generation with automatic memory management.
+    /// </summary>
+    public Automatic AutomaticModel => new Automatic(__AllRules!, __Ast!);
+    
+    /// <summary>
+    /// Manual memory model for semantic analysis.
+    /// Performs verification of manual{} blocks using abstract interpretation,
+    /// symbolic execution, and ownership graphs.
+    /// Provides annotations for WASM generation with verified manual memory.
+    /// </summary>
+    public Manual ManualModel => new Manual(__AllRules!, __Ast!);
+    
+    // ============================================================
     // MODULE STRUCTURE
     // ============================================================
     

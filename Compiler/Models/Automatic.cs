@@ -18,27 +18,40 @@ using System.Linq;
 /// 6. All guarantees are proven statically - no runtime overhead
 /// 
 /// The automatic model applies to all code outside manual/unsafe blocks.
+/// 
+/// This model is instantiated as a property in the MapSet to perform semantic analysis
+/// and provide memory management annotations for WASM generation.
 /// </summary>
 public class Automatic : Model
 {
+    private readonly __AllRules _rules;
+    private readonly __Ast _ast;
+
+    /// <summary>
+    /// Constructor for CDTk integration - called from MapSet property
+    /// </summary>
+    public Automatic(__AllRules rules, __Ast ast)
+    {
+        _rules = rules ?? throw new ArgumentNullException(nameof(rules));
+        _ast = ast ?? throw new ArgumentNullException(nameof(ast));
+    }
+
     /// <summary>
     /// Build automatic memory analysis and transformation for the input AST
     /// </summary>
     public override object Build(object input)
     {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
+        // Use the AST from constructor when called from MapSet
+        var ast = _ast?.Root ?? input as AstNode;
+        if (ast == null)
+        {
+            throw new InvalidOperationException("Automatic model requires AST input");
+        }
 
         var context = new AutomaticContext();
         
         try
         {
-            // Phase 1: Parse and build initial representation
-            var ast = input as AstNode;
-            if (ast == null)
-            {
-                throw new InvalidOperationException("Automatic model requires AST input");
-            }
             
             // Phase 2: Perform lifetime inference
             var lifetimeGraph = InferLifetimes(ast, context);
