@@ -18,27 +18,45 @@ using System.Linq;
 /// 6. All guarantees are proven statically - no runtime overhead
 /// 
 /// The automatic model applies to all code outside manual/unsafe blocks.
+/// 
+/// This model is instantiated as a property in the MapSet to perform semantic analysis
+/// and provide memory management annotations for WASM generation.
 /// </summary>
 public class Automatic : Model
 {
+    private readonly __AllRules _rules;
+    private readonly __Ast _ast;
+
+    /// <summary>
+    /// Constructor for CDTk integration - called from MapSet property
+    /// </summary>
+    public Automatic(__AllRules rules, __Ast ast)
+    {
+        _rules = rules ?? throw new ArgumentNullException(nameof(rules));
+        _ast = ast ?? throw new ArgumentNullException(nameof(ast));
+    }
+
+    /// <summary>
+    /// Access to grammar rules - can be used for rule-specific analysis
+    /// </summary>
+    protected __AllRules Rules => _rules;
+
     /// <summary>
     /// Build automatic memory analysis and transformation for the input AST
     /// </summary>
     public override object Build(object input)
     {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
+        // Use the AST from constructor when called from MapSet
+        var ast = _ast?.Root ?? input as AstNode;
+        if (ast == null)
+        {
+            throw new InvalidOperationException("Automatic model requires AST input");
+        }
 
         var context = new AutomaticContext();
         
         try
         {
-            // Phase 1: Parse and build initial representation
-            var ast = input as AstNode;
-            if (ast == null)
-            {
-                throw new InvalidOperationException("Automatic model requires AST input");
-            }
             
             // Phase 2: Perform lifetime inference
             var lifetimeGraph = InferLifetimes(ast, context);
@@ -55,10 +73,10 @@ public class Automatic : Model
             // Phase 6: Verify memory safety guarantees
             VerifyMemorySafety(allocations, deallocations, lifetimeGraph, context);
             
-            // Phase 7: Generate transformed IR with explicit deallocation
-            var transformedIR = GenerateIR(ast, allocations, deallocations, context);
+            // Phase 7: Return annotated AST with memory management metadata
+            var annotations = AnnotateAST(ast, allocations, deallocations, context);
             
-            return transformedIR;
+            return annotations;
         }
         catch (Exception ex)
         {
@@ -150,32 +168,33 @@ public class Automatic : Model
     }
     
     /// <summary>
-    /// Phase 6: Generate IR with explicit memory management instructions
-    /// The output IR contains:
-    /// - Original program logic
-    /// - Explicit allocation metadata
-    /// - Explicit deallocation instructions at computed points
-    /// - Region management instructions
+    /// Phase 6: Annotate AST with memory management metadata
+    /// The annotated AST contains:
+    /// - Original program structure (AST)
+    /// - Allocation metadata for each allocation site
+    /// - Deallocation point markers
+    /// - Region information
+    /// This metadata is used by MapSet to generate WASM with memory management
     /// </summary>
-    private object GenerateIR(
+    private object AnnotateAST(
         AstNode ast,
         List<AllocationSite> allocations,
         List<DeallocationPoint> deallocations,
         AutomaticContext context)
     {
-        var generator = new AutomaticIRGenerator(context);
-        return generator.Generate(ast, allocations, deallocations);
+        var annotator = new AutomaticAnnotator(context);
+        return annotator.Annotate(ast, allocations, deallocations);
     }
 
     /// <summary>
     /// Wrapper method for compiler pipeline integration.
-    /// Analyzes the AST and returns AutomaticIR with diagnostics.
+    /// Analyzes the AST and returns annotated AST with diagnostics.
     /// </summary>
-    public AutomaticIR Analyze(AstNode ast)
+    public AutomaticAnnotations Analyze(AstNode ast)
     {
         try
         {
-            var result = Build(ast) as AutomaticIR;
+            var result = Build(ast) as AutomaticAnnotations;
             if (result != null)
             {
                 // Result is already safe if Build succeeded
@@ -189,7 +208,7 @@ public class Automatic : Model
         }
         
         // Return failed result
-        return new AutomaticIR
+        return new AutomaticAnnotations
         {
             OriginalAST = ast,
             IsSafe = false,
@@ -695,26 +714,29 @@ class MemorySafetyVerifier
 /// <summary>
 /// Generates IR with explicit memory management
 /// </summary>
-class AutomaticIRGenerator
+/// <summary>
+/// Annotates AST with automatic memory management metadata
+/// </summary>
+class AutomaticAnnotator
 {
     private AutomaticContext context;
     
-    public AutomaticIRGenerator(AutomaticContext context)
+    public AutomaticAnnotator(AutomaticContext context)
     {
         this.context = context;
     }
     
-    public object Generate(
+    public object Annotate(
         AstNode ast,
         List<AllocationSite> allocations,
         List<DeallocationPoint> deallocations)
     {
-        // Generate IR that includes:
-        // 1. Original program logic
-        // 2. Explicit allocation metadata
-        // 3. Deallocation instructions at computed points
+        // Annotate AST with memory management metadata:
+        // 1. Original AST structure (for MapSet)
+        // 2. Allocation metadata for each allocation site
+        // 3. Deallocation point markers (where to insert free instructions)
         
-        var ir = new AutomaticIR
+        var annotations = new AutomaticAnnotations
         {
             OriginalAST = ast,
             Allocations = allocations,
@@ -728,14 +750,15 @@ class AutomaticIRGenerator
             }
         };
         
-        return ir;
+        return annotations;
     }
 }
 
 /// <summary>
-/// Intermediate representation with automatic memory management
+/// Annotated AST with automatic memory management metadata
+/// Used by MapSet to generate WASM with memory management instructions
 /// </summary>
-public class AutomaticIR
+public class AutomaticAnnotations
 {
     public AstNode? OriginalAST { get; set; }
     internal List<AllocationSite> Allocations { get; set; } = new List<AllocationSite>();
@@ -746,7 +769,7 @@ public class AutomaticIR
     
     public override string ToString()
     {
-        return $"AutomaticIR: {Allocations.Count} allocations, {Deallocations.Count} deallocations";
+        return $"AutomaticAnnotations: {Allocations.Count} allocations, {Deallocations.Count} deallocations";
     }
 }
 

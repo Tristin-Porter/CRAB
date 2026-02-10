@@ -302,7 +302,7 @@ public Map SizeofExpression = @";; sizeof({type})
 (i32.const {size})"; // {size} requires semantic analysis
 ```
 
-These annotations guide the integration with CRAB's semantic analysis phase.
+These annotations guide the integration with CRAB's memory models (which perform semantic analysis).
 
 ### 4. Platform-Dependent Types
 
@@ -357,10 +357,21 @@ The MapSet integrates with CRAB's compilation pipeline:
 1. **Input**: C# source code
 2. **Tokenization**: TokenSet (Tokens class) → token stream
 3. **Parsing**: RuleSet (Rules class) → AST
-4. **Semantic Analysis**: Type checking, symbol resolution
-5. **Memory Model**: Automatic.cs or Manual.cs → IR with memory annotations
-6. **Code Generation**: **MapSet (WASM class)** → WAT output
-7. **Output**: WebAssembly binary (.wasm)
+4. **Semantic Analysis & Memory Verification**: Models (as MapSet properties) → Analysis results
+   - `AutomaticModel` - CTGC analysis for automatic memory
+   - `ManualModel` - Verification for manual memory blocks
+5. **Code Generation**: **MapSet (WASM class)** → Direct WAT output using model results
+6. **Output**: WebAssembly binary (.wasm)
+
+**CDTk Integration**: Models are instantiated as properties within the MapSet class:
+```csharp
+class WASM : MapSet
+{
+    public Automatic AutomaticModel => new Automatic(__AllRules!, __Ast!);
+    public Manual ManualModel => new Manual(__AllRules!, __Ast!);
+    // ... Map fields use model results ...
+}
+```
 
 The MapSet is instantiated in Program.cs:
 

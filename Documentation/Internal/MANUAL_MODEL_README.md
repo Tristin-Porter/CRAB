@@ -63,13 +63,13 @@ Mathematically proves the following properties:
 - **No lifetime dependencies** - Lifetimes are model-local
 - This isolation is **mandatory** for global safety guarantees
 
-### Phase 9: IR Generation
-- Generates verified ManualIR with:
-  - Original AST
+### Phase 9: AST Annotation
+- Annotates AST with verification metadata:
+  - Original AST structure
   - Manual blocks with annotations
   - Ownership graphs
-  - Verification metadata
-- Ready for WASM lowering
+  - Verification proofs
+- Used by MapSet for WASM generation
 
 ## Core Components
 
@@ -457,21 +457,34 @@ Isolation ensures both models' safety proofs remain sound:
 ### Workflow
 
 1. **Parse**: CDTk parses C# source including manual{} blocks
-2. **Semantic Analysis**: Type checking, name resolution
+2. **Semantic Analysis**: Type checking, name resolution (via CDTk Models)
 3. **Memory Model Selection**:
    - Automatic model for code outside manual blocks
    - Manual model for code inside manual{} blocks
-4. **Verification**: Each model verifies its code
+4. **Verification**: Each model verifies its code and provides analysis results
 5. **Isolation Check**: Verify no cross-model interactions
-6. **IR Generation**: Both models produce verified IR
-7. **WASM Lowering**: IR lowered to WASM MVP
+6. **WASM Generation**: MapSet uses model results to generate WASM MVP
 
 ### CDTk Integration
 
-Manual model inherits from `Model` base class:
-- `Build(object input)` processes AST
-- Returns verified ManualIR
-- Integrates seamlessly with compiler pipeline
+Manual model integrates with MapSet per CDTk design pattern:
+
+```csharp
+class WASM : MapSet
+{
+    // Model property - instantiated with CDTk shortcuts
+    public Manual ManualModel => new Manual(__AllRules!, __Ast!);
+    
+    // Maps can access model results during WASM generation
+    public Map SomeMap = "..."; // Can use ManualModel.Build(...) if needed
+}
+```
+
+Key points:
+- Inherits from `Model` base class
+- Constructor accepts `__AllRules` and `__Ast` from MapSet
+- `Build(object input)` processes AST and returns verification results
+- Integrates seamlessly with CDTk's compilation pipeline
 
 ### Diagnostics
 

@@ -21,27 +21,45 @@ using System.Linq;
 /// 
 /// The manual model applies to code inside manual{} or unsafe{} blocks.
 /// Intentionally slower to compile to encourage use of automatic model.
+/// 
+/// This model is instantiated as a property in the MapSet to perform semantic analysis
+/// and provide verification annotations for WASM generation.
 /// </summary>
 public class Manual : Model
 {
+    private readonly __AllRules _rules;
+    private readonly __Ast _ast;
+
+    /// <summary>
+    /// Constructor for CDTk integration - called from MapSet property
+    /// </summary>
+    public Manual(__AllRules rules, __Ast ast)
+    {
+        _rules = rules ?? throw new ArgumentNullException(nameof(rules));
+        _ast = ast ?? throw new ArgumentNullException(nameof(ast));
+    }
+
+    /// <summary>
+    /// Access to grammar rules - can be used for rule-specific analysis
+    /// </summary>
+    protected __AllRules Rules => _rules;
+
     /// <summary>
     /// Build manual memory analysis and verification for the input AST
     /// </summary>
     public override object Build(object input)
     {
-        if (input == null)
-            throw new ArgumentNullException(nameof(input));
+        // Use the AST from constructor when called from MapSet
+        var ast = _ast?.Root ?? input as AstNode;
+        if (ast == null)
+        {
+            throw new InvalidOperationException("Manual model requires AST input");
+        }
 
         var context = new ManualContext();
         
         try
         {
-            // Phase 1: Parse and extract manual blocks
-            var ast = input as AstNode;
-            if (ast == null)
-            {
-                throw new InvalidOperationException("Manual model requires AST input");
-            }
             
             // Phase 2: Extract manual/unsafe blocks
             var manualBlocks = ExtractManualBlocks(ast, context);
@@ -67,10 +85,10 @@ public class Manual : Model
             // Phase 9: Enforce isolation from automatic model
             EnforceModelIsolation(manualBlocks, context);
             
-            // Phase 10: Generate verified IR
-            var verifiedIR = GenerateVerifiedIR(ast, manualBlocks, ownershipGraphs, context);
+            // Phase 10: Return annotated AST with verification metadata
+            var annotations = AnnotateVerifiedAST(ast, manualBlocks, ownershipGraphs, context);
             
-            return verifiedIR;
+            return annotations;
         }
         catch (Exception ex)
         {
@@ -202,27 +220,33 @@ public class Manual : Model
     }
     
     /// <summary>
-    /// Phase 9: Generate verified IR with manual memory annotations
+    /// Phase 9: Annotate AST with manual memory verification metadata
+    /// The annotated AST contains:
+    /// - Original program structure (AST)
+    /// - Manual block metadata
+    /// - Ownership graph information
+    /// - Verification proofs
+    /// This metadata is used by MapSet to generate WASM with verified manual memory management
     /// </summary>
-    private object GenerateVerifiedIR(
+    private object AnnotateVerifiedAST(
         AstNode ast,
         List<ManualBlock> blocks,
         List<OwnershipGraph> ownershipGraphs,
         ManualContext context)
     {
-        var generator = new ManualIRGenerator(context);
-        return generator.Generate(ast, blocks, ownershipGraphs);
+        var annotator = new ManualAnnotator(context);
+        return annotator.Annotate(ast, blocks, ownershipGraphs);
     }
 
     /// <summary>
     /// Wrapper method for compiler pipeline integration.
-    /// Analyzes the AST and returns ManualIR with diagnostics.
+    /// Analyzes the AST and returns annotated AST with diagnostics.
     /// </summary>
-    public ManualIR Analyze(AstNode ast)
+    public ManualAnnotations Analyze(AstNode ast)
     {
         try
         {
-            var result = Build(ast) as ManualIR;
+            var result = Build(ast) as ManualAnnotations;
             if (result != null)
             {
                 // Result is already safe if Build succeeded
@@ -236,7 +260,7 @@ public class Manual : Model
         }
         
         // Return failed result
-        return new ManualIR
+        return new ManualAnnotations
         {
             OriginalAST = ast,
             IsSafe = false,
@@ -536,7 +560,11 @@ class EscapeViolation
 /// <summary>
 /// Intermediate representation for verified manual memory code
 /// </summary>
-public class ManualIR
+/// <summary>
+/// Annotated AST with manual memory verification metadata
+/// Used by MapSet to generate WASM with verified manual memory management
+/// </summary>
+public class ManualAnnotations
 {
     public AstNode? OriginalAST { get; set; }
     internal List<ManualBlock> ManualBlocks { get; set; } = new List<ManualBlock>();
@@ -547,7 +575,7 @@ public class ManualIR
     
     public override string ToString()
     {
-        return $"ManualIR: {ManualBlocks.Count} manual blocks, verified safe";
+        return $"ManualAnnotations: {ManualBlocks.Count} manual blocks, verified safe";
     }
 }
 
@@ -926,18 +954,27 @@ class ModelIsolationEnforcer
 /// <summary>
 /// Generates verified IR for manual memory code
 /// </summary>
-class ManualIRGenerator
+/// <summary>
+/// Annotates AST with manual memory verification metadata
+/// </summary>
+class ManualAnnotator
 {
     private readonly ManualContext context;
     
-    public ManualIRGenerator(ManualContext context)
+    public ManualAnnotator(ManualContext context)
     {
         this.context = context;
     }
     
-    public object Generate(AstNode ast, List<ManualBlock> blocks, List<OwnershipGraph> graphs)
+    public object Annotate(AstNode ast, List<ManualBlock> blocks, List<OwnershipGraph> graphs)
     {
-        var ir = new ManualIR
+        // Annotate AST with manual memory verification metadata:
+        // 1. Original AST structure (for MapSet)
+        // 2. Manual block metadata
+        // 3. Ownership graph information
+        // 4. Verification proofs
+        
+        var annotations = new ManualAnnotations
         {
             OriginalAST = ast,
             ManualBlocks = blocks,
@@ -951,6 +988,6 @@ class ManualIRGenerator
             }
         };
         
-        return ir;
+        return annotations;
     }
 }

@@ -57,14 +57,14 @@ The automatic model processes C# code through 6 sequential phases:
 - **Method**: Constraint solving over lifetime graph
 - **Output**: Diagnostics if violations found
 
-#### Phase 6: IR Generation
-- **Purpose**: Generate transformed IR with explicit memory management
-- **Output**: AutomaticIR with:
-  - Original AST
+#### Phase 6: AST Annotation
+- **Purpose**: Annotate AST with memory management metadata
+- **Output**: AutomaticAnnotations with:
+  - Original AST (preserved structure)
   - Allocation metadata
-  - Deallocation instructions
-  - Region management
-- **Ready for**: WASM lowering
+  - Deallocation point markers
+  - Region information
+- **Used by**: MapSet for WASM generation
 
 ## Advanced Analysis Capabilities
 
@@ -140,14 +140,14 @@ Handles generic type instantiations:
 - **Links**: To deallocation point and lifetime node
 
 ### DeallocationPoint
-- **Purpose**: IR insertion point for deallocation
+- **Purpose**: Marks where memory should be freed in WASM output
 - **Strategy**: Immediate, Regional, or Deferred
 - **Timing**: Computed via liveness analysis
 
-### AutomaticIR
-- **Purpose**: Transformed intermediate representation
-- **Contents**: Original AST + allocation metadata + deallocation instructions
-- **Target**: WASM lowering phase
+### AutomaticAnnotations
+- **Purpose**: Annotated AST for MapSet consumption
+- **Contents**: Original AST + allocation metadata + deallocation point markers
+- **Target**: MapSet translates to WASM with memory management
 
 ## Memory Safety Guarantees
 
@@ -217,7 +217,7 @@ The implementation provides **mathematical proofs** of the following guarantees:
 - **Allocation Tracking**: O(n) - Single AST traversal
 - **Deallocation Computation**: O(n + e) - Linear in nodes and edges
 - **Safety Verification**: O(n + e) - Constraint checking
-- **IR Generation**: O(n) - Direct transformation
+- **AST Annotation**: O(n) - Direct annotation of existing AST
 
 **Total**: O(n²) worst case, O(n log n) typical case
 
