@@ -133,7 +133,7 @@ class WASM : MapSet
     /// <summary>Selection statement dispatcher</summary>
     public Map SelectionStatement = "{stmt}";
     
-    /// <summary>If statement</summary>
+    /// <summary>If statement (else clause should be omitted if empty, handled by template processing)</summary>
     public Map IfStatement = @"(if {condition}
   (then
 {thenStmt}
@@ -303,9 +303,9 @@ class WASM : MapSet
     public Map NameofExpression = @";; nameof({expr})
 (i32.const 0) ;; string offset";
     
-    /// <summary>Sizeof expression</summary>
+    /// <summary>Sizeof expression - should return actual type size; requires type information from semantic analysis</summary>
     public Map SizeofExpression = @";; sizeof({type})
-(i32.const 4)";
+(i32.const {size})";
     
     /// <summary>Checked expression</summary>
     public Map CheckedExpression = @";; checked {expr}
@@ -323,10 +323,10 @@ class WASM : MapSet
     /// <summary>Parenthesized expression</summary>
     public Map ParenthesizedExpression = "{expr}";
     
-    /// <summary>Member access expression</summary>
+    /// <summary>Member access expression - handles struct field access; properties, methods, and static access require additional logic</summary>
     public Map MemberAccessExpression = "(struct.get ${type}.${member} {target})";
     
-    /// <summary>Method invocation</summary>
+    /// <summary>Method invocation - simplified direct call; virtual dispatch/interfaces require call_indirect, instance methods need 'this' parameter</summary>
     public Map InvocationExpression = @";; call {target}
 (call ${target} {args})";
     
@@ -510,11 +510,11 @@ class WASM : MapSet
     /// <summary>Primitive type - decimal (represented as struct with i64 components for 128-bit precision)</summary>
     public Map DecimalType = "(ref $Decimal)";
     
-    /// <summary>Primitive type - nint (native int, pointer-sized, i32 on 32-bit, i64 on 64-bit)</summary>
-    public Map NIntType = "i32 ;; TODO: Use i64 for 64-bit targets";
+    /// <summary>Primitive type - nint (native int, pointer-sized): requires compile-time selection of i32/i64 based on target</summary>
+    public Map NIntType = "i32 ;; FIXME: Platform-dependent, use i64 for 64-bit targets";
     
-    /// <summary>Primitive type - nuint (native uint, pointer-sized, i32 on 32-bit, i64 on 64-bit)</summary>
-    public Map NUIntType = "i32 ;; TODO: Use i64 for 64-bit targets";
+    /// <summary>Primitive type - nuint (native uint, pointer-sized): requires compile-time selection of i32/i64 based on target</summary>
+    public Map NUIntType = "i32 ;; FIXME: Platform-dependent, use i64 for 64-bit targets";
     
     /// <summary>String type</summary>
     public Map StringType = "(ref $String)";
@@ -701,8 +701,9 @@ class WASM : MapSet
     /// <summary>Bitwise XOR</summary>
     public Map BitwiseXorOperator = "i32.xor";
     
-    /// <summary>Bitwise NOT</summary>
+    /// <summary>Bitwise NOT - XOR with -1 to flip all bits</summary>
     public Map BitwiseNotOperator = @"(i32.xor
+  {operand}
   (i32.const -1))";
     
     /// <summary>Left shift operator</summary>
