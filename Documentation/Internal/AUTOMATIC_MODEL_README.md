@@ -176,8 +176,26 @@ void Use() {
 The automatic model is the **default** memory model for CRAB:
 - Applies to all code outside `manual { }` blocks
 - Transparent to developers (same C# syntax)
-- Integrates with CDTk's Model system
-- Annotates AST for MapSet to generate WASM with memory management
+- Integrates with CDTk's Model system as a MapSet property
+- Instantiated as `public Automatic AutomaticModel => new Automatic(__AllRules!, __Ast!);`
+- Provides analysis results that MapSet uses to generate WASM with memory management
+
+## Integration with MapSet
+
+Per CDTk design pattern, the Automatic model is a property of the WASM MapSet class:
+
+```csharp
+class WASM : MapSet
+{
+    // Model property - instantiated with CDTk shortcuts
+    public Automatic AutomaticModel => new Automatic(__AllRules!, __Ast!);
+    
+    // Maps can access model results during WASM generation
+    public Map SomeMap = "..."; // Can use AutomaticModel.Build(...) if needed
+}
+```
+
+The model receives `__AllRules` (all grammar rules) and `__Ast` (parsed AST) from the MapSet, allowing it to perform comprehensive semantic analysis.
 
 ## Isolation from Manual Model
 

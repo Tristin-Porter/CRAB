@@ -357,11 +357,21 @@ The MapSet integrates with CRAB's compilation pipeline:
 1. **Input**: C# source code
 2. **Tokenization**: TokenSet (Tokens class) → token stream
 3. **Parsing**: RuleSet (Rules class) → AST
-4. **Semantic Analysis & Memory Verification**: CDTk Models (Automatic.cs or Manual.cs) → Annotated AST
-5. **Code Generation**: **MapSet (WASM class)** → Direct WAT output
+4. **Semantic Analysis & Memory Verification**: Models (as MapSet properties) → Analysis results
+   - `AutomaticModel` - CTGC analysis for automatic memory
+   - `ManualModel` - Verification for manual memory blocks
+5. **Code Generation**: **MapSet (WASM class)** → Direct WAT output using model results
 6. **Output**: WebAssembly binary (.wasm)
 
-**No IR layer**: The MapSet translates the annotated AST directly to WASM.
+**CDTk Integration**: Models are instantiated as properties within the MapSet class:
+```csharp
+class WASM : MapSet
+{
+    public Automatic AutomaticModel => new Automatic(__AllRules!, __Ast!);
+    public Manual ManualModel => new Manual(__AllRules!, __Ast!);
+    // ... Map fields use model results ...
+}
+```
 
 The MapSet is instantiated in Program.cs:
 
