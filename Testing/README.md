@@ -51,15 +51,17 @@ WASM generation and validation tests:
 
 ```bash
 # Run all tests
-dotnet test
+./run_tests.sh
 
 # Run specific category
-dotnet test --filter Category=Automatic
-dotnet test --filter Category=Manual
-dotnet test --filter Category=Language
+./run_tests.sh automatic
+./run_tests.sh manual
+./run_tests.sh language
+./run_tests.sh integration
+./run_tests.sh wasm
 
-# Run with coverage
-dotnet test /p:CollectCoverage=true
+# Test individual file
+dotnet run -- check Testing/Automatic/Lifetime/LifetimeInferenceTests.cs
 ```
 
 ## Test Guidelines
@@ -73,11 +75,30 @@ dotnet test /p:CollectCoverage=true
 ## Test Status
 
 - ✅ Frontend (Tokens, Rules, MapSet): Tested via existing summaries
-- 🔨 Automatic Memory Model: Tests to be created
-- 🔨 Manual Memory Model: Tests to be created
-- 🔨 Language Features: Tests to be created
-- 🔨 Integration: Tests to be created
-- 🔨 WASM Output: Tests to be created
+- ✅ Automatic Memory Model: Comprehensive tests created
+  - ✅ Lifetime inference
+  - ✅ Region analysis
+  - ✅ Deallocation computation
+  - ✅ Safety verification
+  - ✅ Escape analysis
+  - ✅ Async/await memory management
+  - ✅ LINQ optimization
+- ✅ Manual Memory Model: Comprehensive tests created
+  - ✅ Ownership graph construction
+  - ✅ Symbolic execution
+  - ✅ Safety property verification
+  - ✅ Model isolation
+  - ✅ Pointer operations
+- ✅ Language Features: Comprehensive tests created
+  - ✅ Basic language features
+  - ✅ Generics
+  - ✅ Modern C# features
+- ✅ Integration: Real-world tests created
+  - ✅ Complete programs
+  - ✅ Data structures
+- ✅ WASM Output: Validation tests created
+  - ✅ Correctness tests
+  - ✅ MVP compliance tests
 
 ## Example Test Structure
 
