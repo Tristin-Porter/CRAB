@@ -353,16 +353,14 @@ To validate this implementation, the following test categories are recommended:
 - Ownership verification for manual mode
 - Escape analysis
 - Abstract interpretation engine
+- **Output**: Annotated AST with memory metadata
 
-### Phase 4: IR Generation
-- Lower AST to CRAB IR
-- Preserve memory model annotations
-- Optimization passes
-
-### Phase 5: WASM Backend
-- WASM MVP code generation
+### Phase 4: WASM Code Generation
+- Direct AST → WASM translation via MapSet
+- Uses memory model annotations
+- No intermediate representation
 - Linear memory layout
-- Function lowering
+- Function compilation
 - Exception handling via explicit returns
 
 ## Conclusion
