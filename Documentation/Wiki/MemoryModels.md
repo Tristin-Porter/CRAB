@@ -13,7 +13,7 @@ CRAB provides two distinct memory models, each with different trade-offs and gua
 3. **Allocation Tracking**: Identifies all memory allocations in the program
 4. **Deallocation Computation**: Calculates optimal deallocation points
 5. **Safety Verification**: Mathematically proves memory safety
-6. **IR Generation**: Generates code with explicit deallocation instructions
+6. **AST Annotation**: Annotates AST with deallocation point markers for MapSet
 
 ### Safety Guarantees
 

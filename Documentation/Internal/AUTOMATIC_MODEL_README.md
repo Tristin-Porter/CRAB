@@ -47,10 +47,10 @@ Mathematically proves the following guarantees:
 4. **No Dangling Pointers**: No pointers outlive their pointees
 5. **No Aliasing Violations**: Mutable aliases are tracked and verified safe
 
-### Phase 6: IR Generation
-- Produces transformed IR with explicit memory management instructions
-- Original program logic + allocation metadata + deallocation instructions
-- Output is ready for lowering to WASM with deterministic memory behavior
+### Phase 6: AST Annotation
+- Annotates AST with memory management metadata
+- Original AST structure + allocation metadata + deallocation point markers
+- Output is used by MapSet for direct WASM generation with deterministic memory behavior
 
 ## Advanced Features
 
@@ -177,7 +177,7 @@ The automatic model is the **default** memory model for CRAB:
 - Applies to all code outside `manual { }` blocks
 - Transparent to developers (same C# syntax)
 - Integrates with CDTk's Model system
-- Feeds transformed IR to WASM backend
+- Annotates AST for MapSet to generate WASM with memory management
 
 ## Isolation from Manual Model
 

@@ -63,13 +63,13 @@ Mathematically proves the following properties:
 - **No lifetime dependencies** - Lifetimes are model-local
 - This isolation is **mandatory** for global safety guarantees
 
-### Phase 9: IR Generation
-- Generates verified ManualIR with:
-  - Original AST
+### Phase 9: AST Annotation
+- Annotates AST with verification metadata:
+  - Original AST structure
   - Manual blocks with annotations
   - Ownership graphs
-  - Verification metadata
-- Ready for WASM lowering
+  - Verification proofs
+- Used by MapSet for WASM generation
 
 ## Core Components
 
@@ -457,20 +457,19 @@ Isolation ensures both models' safety proofs remain sound:
 ### Workflow
 
 1. **Parse**: CDTk parses C# source including manual{} blocks
-2. **Semantic Analysis**: Type checking, name resolution
+2. **Semantic Analysis**: Type checking, name resolution (via CDTk Models)
 3. **Memory Model Selection**:
    - Automatic model for code outside manual blocks
    - Manual model for code inside manual{} blocks
-4. **Verification**: Each model verifies its code
+4. **Verification**: Each model verifies its code and annotates AST
 5. **Isolation Check**: Verify no cross-model interactions
-6. **IR Generation**: Both models produce verified IR
-7. **WASM Lowering**: IR lowered to WASM MVP
+6. **WASM Generation**: MapSet translates annotated AST to WASM MVP
 
 ### CDTk Integration
 
 Manual model inherits from `Model` base class:
 - `Build(object input)` processes AST
-- Returns verified ManualIR
+- Returns annotated AST with verification metadata
 - Integrates seamlessly with compiler pipeline
 
 ### Diagnostics
