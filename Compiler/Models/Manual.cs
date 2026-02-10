@@ -40,6 +40,11 @@ public class Manual : Model
     }
 
     /// <summary>
+    /// Access to grammar rules - can be used for rule-specific analysis
+    /// </summary>
+    protected __AllRules Rules => _rules;
+
+    /// <summary>
     /// Build manual memory analysis and verification for the input AST
     /// </summary>
     public override object Build(object input)

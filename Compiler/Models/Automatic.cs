@@ -37,6 +37,11 @@ public class Automatic : Model
     }
 
     /// <summary>
+    /// Access to grammar rules - can be used for rule-specific analysis
+    /// </summary>
+    protected __AllRules Rules => _rules;
+
+    /// <summary>
     /// Build automatic memory analysis and transformation for the input AST
     /// </summary>
     public override object Build(object input)

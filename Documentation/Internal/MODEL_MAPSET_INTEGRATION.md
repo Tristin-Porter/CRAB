@@ -18,7 +18,7 @@ class Maps : MapSet
     public MyModel Model => new MyModel(__AllRules!, __Ast!);
     
     // Maps can use model results
-    public Map SomeRule = "..."; // Can call Model.Build(...) if needed
+    public Map SomeExpression = "..."; // Can call Model.Build(...) if needed
 }
 ```
 
@@ -323,7 +323,8 @@ class Example
      (struct.new $List_int)           ;; new List<int>()
      (local.set $list)
      (call $List_Add $list (i32.const 42))
-     (call $Console_WriteLine (array.get $list (i32.const 0)))
+     (call $Console_WriteLine 
+       (call $List_get_Item $list (i32.const 0)))  ;; list[0] access
      (call $free (local.get $list))   ;; CTGC-inserted deallocation
    )
 ```
