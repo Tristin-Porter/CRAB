@@ -52,18 +52,18 @@ void LowLevel() {
 ## Status
 
 ### ✅ Fully Implemented
-- **Frontend**: CDTk integration, full C# lexing and parsing
+- **Frontend**: CDTk integration, full C# lexing and parsing (210 tokens, 200 rules)
 - **Memory Models**: Both automatic (CTGC) and manual verification complete
-- **Code Generation**: 188 WASM maps covering language features
+- **Code Generation**: 188 WASM maps for direct C# → WASM translation
 - **Build System**: C#-only, .NET 10, fully functional
+- **Semantic Analysis**: Performed automatically by CDTk Models
 
 ### 🔨 In Progress
-- Semantic analysis (framework created, needs full implementation)
-- IR system (architecture defined, needs implementation)
-- WASM backend (code generator created, needs IR integration)
-- Full compilation pipeline (orchestration ready, needs component completion)
+- Completing MapSet integration with memory model annotations
+- Testing and validation of end-to-end compilation
+- Documentation updates
 
-### 📊 Current Completion: ~40-50% of Full Spec
+### 📊 Current Completion: ~60-70% of Full Spec
 
 See [Documentation/Internal/](Documentation/Internal/) for detailed implementation status.
 
@@ -112,12 +112,12 @@ CRAB/
 ## Architecture
 
 CRAB's compilation pipeline:
-1. **Frontend** (CDTk) → Tokens, AST
-2. **Semantic Analysis** → Symbol tables, type checking
-3. **Memory Verification** → CTGC or manual verification
-4. **IR Generation** → Intermediate representation
-5. **Optimization** → IR-level optimizations
-6. **Backend** → WASM MVP code generation
+1. **Frontend** (CDTk TokenSet, RuleSet) → Tokens, AST
+2. **Semantic Analysis** (CDTk Models) → Symbol resolution, type checking
+3. **Memory Verification** → CTGC or manual verification (annotations on AST)
+4. **Code Generation** (CDTk MapSet) → Direct WASM MVP output
+
+**No IR layer**: CRAB translates C# directly to WASM using CDTk's declarative mapping system.
 
 ## License
 

@@ -69,10 +69,10 @@ The manual model processes code through a rigorous verification pipeline:
 - **Critical**: Ensures both models' proofs remain sound
 - **Output**: Diagnostics if isolation violated
 
-#### Phase 9: IR Generation
-- **Purpose**: Generate verified IR
-- **Contents**: AST + blocks + ownership graphs + metadata
-- **Output**: ManualIR ready for WASM lowering
+#### Phase 9: AST Annotation
+- **Purpose**: Annotate AST with verification metadata
+- **Contents**: AST + blocks + ownership graphs + verification proofs
+- **Output**: ManualAnnotations for MapSet consumption
 
 ## Memory Safety Guarantees
 
@@ -209,15 +209,15 @@ Contents:
 Critical: Model isolation
 ```
 
-### ManualIR
+### ManualAnnotations
 ```
-Purpose: Verified intermediate representation
+Purpose: Annotated AST for MapSet consumption
 Contents:
-  - OriginalAST
+  - OriginalAST (preserved structure)
   - ManualBlocks with annotations
   - OwnershipGraphs
   - Verification metadata
-Target: WASM lowering
+Target: MapSet translates to WASM with verified manual memory
 ```
 
 ## Model Isolation
