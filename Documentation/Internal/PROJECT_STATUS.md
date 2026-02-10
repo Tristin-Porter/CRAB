@@ -8,7 +8,7 @@
 
 The CRAB compiler has achieved significant progress toward 100% specification compliance, with a fully functional frontend, complete memory model implementations, and a solid architectural foundation. CRAB uses CDTk for the entire compilation pipeline: TokenSet for lexing, RuleSet for parsing, Models (integrated as MapSet properties) for semantic analysis, and MapSet for direct C# → WASM translation. **There is no IR layer** - translation is direct from C# AST to WASM MVP.
 
-**Models are integrated per CDTk design**: The Automatic and Manual memory models are properties of the MapSet class, instantiated with `__AllRules` and `__Ast`, allowing them to perform semantic analysis and provide results that Maps can use during WASM generation.
+**Models are integrated per CDTk design**: The Automatic and Manual memory models are properties of the MapSet class, instantiated with `__AllRules` and `__Ast`. During WASM generation, the MapSet calls `AutomaticModel.Build()` to get memory management annotations and `ManualModel.Build()` to get verification results. These annotations guide the Maps in generating WASM with proper memory management and verified manual memory operations.
 
 ## Completed Components (100% Implementation)
 
