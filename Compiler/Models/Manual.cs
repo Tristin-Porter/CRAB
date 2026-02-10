@@ -67,10 +67,10 @@ public class Manual : Model
             // Phase 9: Enforce isolation from automatic model
             EnforceModelIsolation(manualBlocks, context);
             
-            // Phase 10: Generate verified IR
-            var verifiedIR = GenerateVerifiedIR(ast, manualBlocks, ownershipGraphs, context);
+            // Phase 10: Return annotated AST with verification metadata
+            var annotations = AnnotateVerifiedAST(ast, manualBlocks, ownershipGraphs, context);
             
-            return verifiedIR;
+            return annotations;
         }
         catch (Exception ex)
         {
@@ -202,27 +202,33 @@ public class Manual : Model
     }
     
     /// <summary>
-    /// Phase 9: Generate verified IR with manual memory annotations
+    /// Phase 9: Annotate AST with manual memory verification metadata
+    /// The annotated AST contains:
+    /// - Original program structure (AST)
+    /// - Manual block metadata
+    /// - Ownership graph information
+    /// - Verification proofs
+    /// This metadata is used by MapSet to generate WASM with verified manual memory management
     /// </summary>
-    private object GenerateVerifiedIR(
+    private object AnnotateVerifiedAST(
         AstNode ast,
         List<ManualBlock> blocks,
         List<OwnershipGraph> ownershipGraphs,
         ManualContext context)
     {
-        var generator = new ManualIRGenerator(context);
-        return generator.Generate(ast, blocks, ownershipGraphs);
+        var annotator = new ManualAnnotator(context);
+        return annotator.Annotate(ast, blocks, ownershipGraphs);
     }
 
     /// <summary>
     /// Wrapper method for compiler pipeline integration.
-    /// Analyzes the AST and returns ManualIR with diagnostics.
+    /// Analyzes the AST and returns annotated AST with diagnostics.
     /// </summary>
-    public ManualIR Analyze(AstNode ast)
+    public ManualAnnotations Analyze(AstNode ast)
     {
         try
         {
-            var result = Build(ast) as ManualIR;
+            var result = Build(ast) as ManualAnnotations;
             if (result != null)
             {
                 // Result is already safe if Build succeeded
@@ -236,7 +242,7 @@ public class Manual : Model
         }
         
         // Return failed result
-        return new ManualIR
+        return new ManualAnnotations
         {
             OriginalAST = ast,
             IsSafe = false,
@@ -536,7 +542,11 @@ class EscapeViolation
 /// <summary>
 /// Intermediate representation for verified manual memory code
 /// </summary>
-public class ManualIR
+/// <summary>
+/// Annotated AST with manual memory verification metadata
+/// Used by MapSet to generate WASM with verified manual memory management
+/// </summary>
+public class ManualAnnotations
 {
     public AstNode? OriginalAST { get; set; }
     internal List<ManualBlock> ManualBlocks { get; set; } = new List<ManualBlock>();
@@ -547,7 +557,7 @@ public class ManualIR
     
     public override string ToString()
     {
-        return $"ManualIR: {ManualBlocks.Count} manual blocks, verified safe";
+        return $"ManualAnnotations: {ManualBlocks.Count} manual blocks, verified safe";
     }
 }
 
@@ -926,18 +936,27 @@ class ModelIsolationEnforcer
 /// <summary>
 /// Generates verified IR for manual memory code
 /// </summary>
-class ManualIRGenerator
+/// <summary>
+/// Annotates AST with manual memory verification metadata
+/// </summary>
+class ManualAnnotator
 {
     private readonly ManualContext context;
     
-    public ManualIRGenerator(ManualContext context)
+    public ManualAnnotator(ManualContext context)
     {
         this.context = context;
     }
     
-    public object Generate(AstNode ast, List<ManualBlock> blocks, List<OwnershipGraph> graphs)
+    public object Annotate(AstNode ast, List<ManualBlock> blocks, List<OwnershipGraph> graphs)
     {
-        var ir = new ManualIR
+        // Annotate AST with manual memory verification metadata:
+        // 1. Original AST structure (for MapSet)
+        // 2. Manual block metadata
+        // 3. Ownership graph information
+        // 4. Verification proofs
+        
+        var annotations = new ManualAnnotations
         {
             OriginalAST = ast,
             ManualBlocks = blocks,
@@ -951,6 +970,6 @@ class ManualIRGenerator
             }
         };
         
-        return ir;
+        return annotations;
     }
 }
