@@ -7,4 +7,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Exclude test files from compilation -->
+    <Compile Remove="Testing/**/*.cs" />
+    <None Include="Testing/**/*.cs" />
+  </ItemGroup>
+
 </Project>
