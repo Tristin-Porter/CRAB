@@ -19,7 +19,7 @@ using System.Linq;
 /// 
 /// The automatic model applies to all code outside manual/unsafe blocks.
 /// </summary>
-class Automatic : Model
+public class Automatic : Model
 {
     /// <summary>
     /// Build automatic memory analysis and transformation for the input AST
@@ -166,6 +166,44 @@ class Automatic : Model
         var generator = new AutomaticIRGenerator(context);
         return generator.Generate(ast, allocations, deallocations);
     }
+
+    /// <summary>
+    /// Wrapper method for compiler pipeline integration.
+    /// Analyzes the AST and returns AutomaticIR with diagnostics.
+    /// </summary>
+    public AutomaticIR Analyze(AstNode ast)
+    {
+        try
+        {
+            var result = Build(ast) as AutomaticIR;
+            if (result != null)
+            {
+                // Result is already safe if Build succeeded
+                result.IsSafe = true;
+                return result;
+            }
+        }
+        catch (Exception)
+        {
+            // Return failed result
+        }
+        
+        // Return failed result
+        return new AutomaticIR
+        {
+            OriginalAST = ast,
+            IsSafe = false,
+            Diagnostics = new List<Diagnostic>
+            {
+                new Diagnostic(
+                    Stage.SemanticAnalysis,
+                    DiagnosticLevel.Error,
+                    "Automatic memory model analysis failed",
+                    new SourceSpan(0, 0, 0, 0)
+                )
+            }
+        };
+    }
 }
 
 // ============================================================
@@ -238,7 +276,7 @@ class LifetimeGraph
 /// <summary>
 /// A value with an inferred lifetime
 /// </summary>
-class LifetimeNode
+internal class LifetimeNode
 {
     public string Id { get; set; }
     public string Name { get; set; }
@@ -295,7 +333,7 @@ class LifetimeScope
 /// A memory region groups allocations with similar lifetimes
 /// Enables bulk deallocation and memory layout optimization
 /// </summary>
-class MemoryRegion
+internal class MemoryRegion
 {
     public string Id { get; set; }
     public string Name { get; set; }
@@ -313,14 +351,14 @@ class MemoryRegion
 /// <summary>
 /// A single allocation site in the program
 /// </summary>
-class AllocationSite
+public class AllocationSite
 {
     public string Id { get; set; }
     public AstNode? AllocationNode { get; set; }
     public string TypeName { get; set; }
     public int Size { get; set; }
-    public MemoryRegion? Region { get; set; }
-    public LifetimeNode? Lifetime { get; set; }
+    internal MemoryRegion? Region { get; set; }
+    internal LifetimeNode? Lifetime { get; set; }
     public bool IsEscaping { get; set; }  // Does allocation escape its creation scope?
     
     public AllocationSite(string id, string typeName)
@@ -333,12 +371,12 @@ class AllocationSite
 /// <summary>
 /// A computed deallocation point in the program
 /// </summary>
-class DeallocationPoint
+public class DeallocationPoint
 {
     public string Id { get; set; }
     public AllocationSite Allocation { get; set; }
     public int ProgramPoint { get; set; }
-    public DeallocationStrategy Strategy { get; set; }
+    internal DeallocationStrategy Strategy { get; set; }
     
     public DeallocationPoint(string id, AllocationSite allocation)
     {
@@ -347,7 +385,7 @@ class DeallocationPoint
     }
 }
 
-enum DeallocationStrategy
+internal enum DeallocationStrategy
 {
     Immediate,     // Deallocate immediately after last use
     Regional,      // Deallocate as part of region cleanup
@@ -697,12 +735,14 @@ class AutomaticIRGenerator
 /// <summary>
 /// Intermediate representation with automatic memory management
 /// </summary>
-class AutomaticIR
+public class AutomaticIR
 {
     public AstNode? OriginalAST { get; set; }
-    public List<AllocationSite> Allocations { get; set; } = new List<AllocationSite>();
-    public List<DeallocationPoint> Deallocations { get; set; } = new List<DeallocationPoint>();
+    internal List<AllocationSite> Allocations { get; set; } = new List<AllocationSite>();
+    internal List<DeallocationPoint> Deallocations { get; set; } = new List<DeallocationPoint>();
     public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
+    public List<Diagnostic> Diagnostics { get; set; } = new List<Diagnostic>();
+    public bool IsSafe { get; set; } = true;
     
     public override string ToString()
     {

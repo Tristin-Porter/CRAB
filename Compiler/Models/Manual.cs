@@ -22,7 +22,7 @@ using System.Linq;
 /// The manual model applies to code inside manual{} or unsafe{} blocks.
 /// Intentionally slower to compile to encourage use of automatic model.
 /// </summary>
-class Manual : Model
+public class Manual : Model
 {
     /// <summary>
     /// Build manual memory analysis and verification for the input AST
@@ -213,6 +213,44 @@ class Manual : Model
         var generator = new ManualIRGenerator(context);
         return generator.Generate(ast, blocks, ownershipGraphs);
     }
+
+    /// <summary>
+    /// Wrapper method for compiler pipeline integration.
+    /// Analyzes the AST and returns ManualIR with diagnostics.
+    /// </summary>
+    public ManualIR Analyze(AstNode ast)
+    {
+        try
+        {
+            var result = Build(ast) as ManualIR;
+            if (result != null)
+            {
+                // Result is already safe if Build succeeded
+                result.IsSafe = true;
+                return result;
+            }
+        }
+        catch (Exception)
+        {
+            // Return failed result
+        }
+        
+        // Return failed result
+        return new ManualIR
+        {
+            OriginalAST = ast,
+            IsSafe = false,
+            Diagnostics = new List<Diagnostic>
+            {
+                new Diagnostic(
+                    Stage.SemanticAnalysis,
+                    DiagnosticLevel.Error,
+                    "Manual memory model verification failed",
+                    new SourceSpan(0, 0, 0, 0)
+                )
+            }
+        };
+    }
 }
 
 // ============================================================
@@ -258,12 +296,12 @@ enum ManualDiagnosticLevel
 /// <summary>
 /// Represents a manual{} or unsafe{} block in the code
 /// </summary>
-class ManualBlock
+public class ManualBlock
 {
     public string Id { get; set; }
     public AstNode? BlockNode { get; set; }
     public bool IsUnsafeKeyword { get; set; }  // True if using legacy unsafe{} instead of manual{}
-    public List<PointerOperation> Operations { get; } = new List<PointerOperation>();
+    internal List<PointerOperation> Operations { get; } = new List<PointerOperation>();
     
     public ManualBlock(string id)
     {
@@ -274,7 +312,7 @@ class ManualBlock
 /// <summary>
 /// Represents a pointer operation (allocation, dereference, free, etc.)
 /// </summary>
-class PointerOperation
+internal class PointerOperation
 {
     public string Id { get; set; }
     public PointerOperationType Type { get; set; }
@@ -302,34 +340,34 @@ enum PointerOperationType
 /// Ownership graph tracking ownership relationships between pointers
 /// Nodes are memory regions, edges represent ownership
 /// </summary>
-class OwnershipGraph
+public class OwnershipGraph
 {
     private readonly Dictionary<string, OwnershipNode> nodes = new Dictionary<string, OwnershipNode>();
     private readonly List<OwnershipEdge> edges = new List<OwnershipEdge>();
     
-    public void AddNode(OwnershipNode node)
+    internal void AddNode(OwnershipNode node)
     {
         nodes[node.Id] = node;
     }
     
-    public void AddEdge(OwnershipEdge edge)
+    internal void AddEdge(OwnershipEdge edge)
     {
         edges.Add(edge);
     }
     
-    public OwnershipNode? GetNode(string id)
+    internal OwnershipNode? GetNode(string id)
     {
         return nodes.TryGetValue(id, out var node) ? node : null;
     }
     
-    public IEnumerable<OwnershipNode> GetNodes() => nodes.Values;
-    public IEnumerable<OwnershipEdge> GetEdges() => edges;
+    internal IEnumerable<OwnershipNode> GetNodes() => nodes.Values;
+    internal IEnumerable<OwnershipEdge> GetEdges() => edges;
 }
 
 /// <summary>
 /// Node in ownership graph representing a memory region or pointer
 /// </summary>
-class OwnershipNode
+internal class OwnershipNode
 {
     public string Id { get; set; }
     public string Name { get; set; }
@@ -356,7 +394,7 @@ enum OwnershipStatus
 /// <summary>
 /// Edge in ownership graph representing ownership relationship
 /// </summary>
-class OwnershipEdge
+internal class OwnershipEdge
 {
     public string FromId { get; set; }
     public string ToId { get; set; }
@@ -498,12 +536,14 @@ class EscapeViolation
 /// <summary>
 /// Intermediate representation for verified manual memory code
 /// </summary>
-class ManualIR
+public class ManualIR
 {
     public AstNode? OriginalAST { get; set; }
-    public List<ManualBlock> ManualBlocks { get; set; } = new List<ManualBlock>();
-    public List<OwnershipGraph> OwnershipGraphs { get; set; } = new List<OwnershipGraph>();
+    internal List<ManualBlock> ManualBlocks { get; set; } = new List<ManualBlock>();
+    internal List<OwnershipGraph> OwnershipGraphs { get; set; } = new List<OwnershipGraph>();
     public Dictionary<string, object> Metadata { get; set; } = new Dictionary<string, object>();
+    public List<Diagnostic> Diagnostics { get; set; } = new List<Diagnostic>();
+    public bool IsSafe { get; set; } = true;
     
     public override string ToString()
     {
