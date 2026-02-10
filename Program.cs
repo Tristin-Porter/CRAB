@@ -40,9 +40,10 @@ class Program
                     .AddSub(new Console())
                     .AddSub(new Project())
             )
-            .Register(
-                new Help()
-            );
+            .Register(new Compile())
+            .Register(new Build())
+            .Register(new Run())
+            .Register(new Help());
 
         while (true)
         {

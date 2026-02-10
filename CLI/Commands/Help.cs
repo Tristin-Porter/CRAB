@@ -12,7 +12,7 @@
             if (args.Length == 0)
             {
                 System.Console.WriteLine("Available commands:");
-                foreach (var cmd in Registry.Instance.Commands.Values)
+                foreach (var cmd in Registry.Instance?.Commands.Values ?? Enumerable.Empty<Command>())
                 {
                     System.Console.WriteLine($"  {cmd.Name} - {cmd.Description}");
                 }
@@ -21,7 +21,7 @@
             else
             {
                 string commandName = args[0];
-                if (Registry.Instance.Commands.TryGetValue(commandName, out var cmd))
+                if (Registry.Instance?.Commands.TryGetValue(commandName, out var cmd) == true)
                 {
                     System.Console.WriteLine($"{cmd.Name} - {cmd.Description}");
                     if (cmd.SupportedFlags.Count > 0)
