@@ -79,6 +79,7 @@ if [ $# -eq 0 ]; then
     test_category "Language Features" "Testing/Language"
     test_category "Integration" "Testing/Integration"
     test_category "WASM Output" "Testing/WASM"
+    test_category "Optimization" "Testing/Optimization"
 elif [ "$1" == "automatic" ]; then
     test_category "Automatic Memory" "Testing/Automatic"
 elif [ "$1" == "manual" ]; then
@@ -89,9 +90,11 @@ elif [ "$1" == "integration" ]; then
     test_category "Integration" "Testing/Integration"
 elif [ "$1" == "wasm" ]; then
     test_category "WASM Output" "Testing/WASM"
+elif [ "$1" == "optimization" ]; then
+    test_category "Optimization" "Testing/Optimization"
 else
     print_status "$RED" "Unknown test category: $1"
-    echo "Usage: $0 [automatic|manual|language|integration|wasm]"
+    echo "Usage: $0 [automatic|manual|language|integration|wasm|optimization]"
     exit 1
 fi
 
