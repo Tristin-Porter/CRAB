@@ -28,33 +28,17 @@ This document provides a comprehensive overview of CRAB's compiler architecture,
 │  │  • Lifetime inference    │  │  • Ownership graphs    │  │
 │  │  • Region analysis       │  │  • Symbolic execution  │  │
 │  │  • Escape analysis       │  │  • Safety verification │  │
+│  │  → AST Annotations       │  │  → AST Annotations     │  │
 │  └──────────────────────────┘  └────────────────────────┘  │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              Intermediate Representation (IR)                │
-│  • Memory-annotated IR                                       │
-│  • Control flow graphs                                       │
-│  • Data flow information                                     │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Optimization Passes                       │
-│  • Dead code elimination                                     │
-│  • Constant folding                                          │
-│  • Inlining                                                  │
-│  • LINQ optimization                                         │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  WASM MVP Backend                            │
-│  • Function lowering                                         │
-│  • Memory layout                                             │
-│  • Control flow lowering                                     │
-│  • WASM emission                                             │
+│              WASM Code Generation (MapSet)                   │
+│  • Direct AST → WASM translation                             │
+│  • Uses annotations for memory management                    │
+│  • No intermediate representation                            │
+│  • Produces pure WASM MVP                                    │
 └────────────────────────┬────────────────────────────────────┘
                          │
                          ▼
@@ -213,120 +197,67 @@ This document provides a comprehensive overview of CRAB's compiler architecture,
    - Discharge or report violations
    ```
 
-### 3. Intermediate Representation (IR)
+### 3. WASM Code Generation (MapSet)
 
-**Purpose:** WASM-friendly IR that preserves memory annotations.
+**Purpose:** Directly translate C# AST to WASM MVP with no intermediate representation.
 
-**Design:**
-
-```
-IR ::= Program(modules)
-Module ::= Function* + Global* + Data*
-Function ::= Param* + Local* + Block
-Block ::= Instruction*
-
-Instruction ::=
-  | Alloc(size, lifetime, region)
-  | Free(ptr, proof)
-  | Load(ptr, offset, type)
-  | Store(ptr, offset, value, type)
-  | Call(func, args)
-  | Br(label, condition?)
-  | Return(value?)
-  | ...
-```
+**Technology:** CDTk MapSet with memory model annotations
 
 **Key Features:**
-- Memory annotations (lifetime, region, ownership)
-- Control flow graph (CFG) embedded
-- Data flow information
-- Type information preserved
-- Optimization-friendly
+- Direct AST → WASM translation
+- Memory annotations guide code generation
+- No intermediate representation layer
+- Declarative mapping approach
+- Type information from AST
+- Memory safety enforced by annotations
 
-### 4. Optimization Passes
+**How It Works:**
+
+1. **MapSet Receives**:
+   - C# AST from frontend
+   - Automatic model annotations (allocations, deallocations, lifetimes)
+   - Manual model annotations (ownership proofs, verification results)
+
+2. **MapSet Generates**:
+   - WASM module structure
+   - Function definitions with memory management
+   - Linear memory layout
+   - Proper deallocation instructions
+   - Verified manual memory operations
+
+3. **Translation Process**:
+   ```
+   C# AST Node          Memory Annotation         WASM Output
+   -----------          -----------------         -----------
+   new MyClass()   →    Alloc(site_1)        →   call $malloc + initialize
+   obj.Method()    →    Use(site_1)          →   call $method
+   } end scope    →    Dealloc(site_1)       →   call $free
+   
+   manual { ... }  →    Verified(proof)      →   verified WASM code
+   ```
+
+### 4. Optimization
 
 **Purpose:** Generate efficient WASM while preserving safety.
 
-**Passes:**
+**Note:** Optimizations are performed during MapSet translation, not as separate passes.
 
-#### Dead Code Elimination
-```
-Algorithm: Mark-and-sweep
-1. Mark all reachable instructions
-2. Sweep unmarked instructions
-3. Update control flow
-```
+**Optimization Strategies:**
 
-#### Constant Folding
-```
-Algorithm: Symbolic evaluation
-1. Evaluate compile-time constants
-2. Replace operations with results
-3. Simplify control flow
-```
+#### Allocation Optimization
+- Stack allocation when possible
+- Allocation coalescing
+- Lifetime-based optimization
 
-#### Inlining
-```
-Algorithm: Heuristic-based
-1. Identify inline candidates
-2. Cost-benefit analysis
-3. Inline small/hot functions
-4. Update call sites
-```
+#### LINQ Optimization  
+- Query fusion in memory model
+- Eliminate intermediate allocations
+- Direct WASM generation for common patterns
 
-#### LINQ Optimization
-```
-Algorithm: Deforestation
-1. Identify LINQ query chains
-2. Fuse operations
-3. Eliminate intermediate allocations
-4. Generate optimized code
-```
-
-### 5. WASM Backend
-
-**Purpose:** Lower IR to WASM MVP bytecode.
-
-**Phases:**
-
-#### Function Lowering
-```
-1. Map IR functions to WASM functions
-2. Generate function signatures
-3. Allocate WASM locals
-4. Lower function bodies
-```
-
-#### Memory Layout
-```
-1. Compute struct layouts
-2. Generate linear memory layout
-3. Emit memory initialization
-4. Create vtables for virtual dispatch
-```
-
-#### Control Flow Lowering
-```
-IR                  WASM
----                 ----
-if-then-else    →   block + br_if
-while-loop      →   loop + br_if
-for-loop        →   loop + br_if
-try-catch       →   block nesting
-```
-
-#### Code Generation
-```
-IR Instruction      WASM Instruction(s)
---------------      -------------------
-Alloc(size)     →   i32.const size + call $malloc
-Free(ptr)       →   local.get ptr + call $free
-Load(ptr, off)  →   local.get ptr + i32.load offset=off
-Store(ptr, v)   →   local.get ptr + local.get v + i32.store
-Call(f, args)   →   [args] + call $f
-Br(label)       →   br $label
-Return(val)     →   local.get val + return
-```
+#### Control Flow Optimization
+- Pattern matching optimization
+- Branch elimination
+- Tail call optimization
 
 ## Design Decisions
 

@@ -142,7 +142,8 @@ Create `crab.config.json` in your project directory:
   },
   "output": {
     "directory": "./bin",
-    "preserveIR": false
+    "emitText": false,
+    "optimize": "release"
   }
 }
 ```

@@ -712,7 +712,7 @@ class MemorySafetyVerifier
 }
 
 /// <summary>
-/// Generates IR with explicit memory management
+/// Generates annotations with explicit memory management metadata
 /// </summary>
 /// <summary>
 /// Annotates AST with automatic memory management metadata

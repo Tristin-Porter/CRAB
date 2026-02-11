@@ -181,11 +181,7 @@ Yes! Use `--emit-text` to generate WAT (WASM Text):
 crab compile program.cs --emit-text -o program.wat
 ```
 
-You can also emit the IR:
-
-```bash
-crab compile program.cs --emit-ir -o program.ir
-```
+You can inspect the WAT file to see the direct C# → WASM translation with memory management annotations embedded.
 
 ### Where can I run the generated WASM?
 
