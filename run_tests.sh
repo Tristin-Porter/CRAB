@@ -41,13 +41,18 @@ test_file() {
     
     echo -n "Testing ${category}: $(basename $file)... "
     
-    if dotnet run -- check "$file" > /dev/null 2>&1; then
+    # Create temp output file
+    local temp_output=$(mktemp /tmp/crab_test_XXXXXX.wasm)
+    
+    if dotnet run -- compile "$file" --output "$temp_output" > /dev/null 2>&1; then
         print_status "$GREEN" "✓ PASS"
         PASSED_TESTS=$((PASSED_TESTS + 1))
+        rm -f "$temp_output"
         return 0
     else
         print_status "$RED" "✗ FAIL"
         FAILED_TESTS=$((FAILED_TESTS + 1))
+        rm -f "$temp_output"
         return 1
     fi
 }

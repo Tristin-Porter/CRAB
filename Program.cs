@@ -4,7 +4,7 @@ namespace CRAB;
 
 class Program
 {
-    public static void Main()
+    public static void Main(string[] args)
     {
         var CRAB = new Compiler()
             .WithTokens(new Tokens())
@@ -45,6 +45,15 @@ class Program
             .Register(new Run())
             .Register(new Help());
 
+        // If command-line arguments are provided, execute directly (non-interactive mode)
+        if (args.Length > 0)
+        {
+            var commandLine = string.Join(" ", args);
+            registry.Run(commandLine);
+            return;
+        }
+
+        // Interactive mode
         while (true)
         {
             System.Console.Write("> ");
