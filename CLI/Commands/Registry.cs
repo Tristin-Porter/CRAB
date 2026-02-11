@@ -154,7 +154,7 @@ public class Registry
         }
 
         // Subcommand?
-        if (parts.Length > 1)
+        if (parts.Length > 1 && cmd.Subcommands.Count > 0)
         {
             parts[1] = parts[1].ToLower();
 

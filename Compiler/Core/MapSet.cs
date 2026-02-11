@@ -34,6 +34,16 @@ class WASM : MapSet
     /// </summary>
     public Manual ManualModel => new Manual(__AllRules!, __Ast!);
     
+    /// <summary>
+    /// Optimization model for code transformations.
+    /// Applies safe optimizations that preserve 100% memory safety guarantees.
+    /// Performs dead code elimination, constant folding, CSE, inlining,
+    /// loop optimizations, tail call optimization, and peephole optimizations.
+    /// All transformations preserve CTGC deallocation points and ownership semantics.
+    /// Used by Maps to generate optimized WASM while maintaining safety.
+    /// </summary>
+    public Optimization OptimizationModel => new Optimization(__AllRules!, __Ast!);
+    
     // ============================================================
     // HELPER METHODS FOR MODEL INTEGRATION
     // ============================================================
@@ -72,6 +82,26 @@ class WASM : MapSet
         catch
         {
             // If verification fails, return null - compilation will fail with diagnostics
+            return null;
+        }
+    }
+    
+    /// <summary>
+    /// Get optimization annotations for code transformations.
+    /// This is called during WASM generation to apply safe optimizations.
+    /// If optimization fails, Maps generate unoptimized but safe WASM.
+    /// </summary>
+    private OptimizationAnnotations? GetOptimizationAnnotations()
+    {
+        if (__Ast?.Root == null) return null;
+        
+        try
+        {
+            return OptimizationModel.Build(__Ast.Root) as OptimizationAnnotations;
+        }
+        catch
+        {
+            // If optimization fails, return null - Maps will generate unoptimized WASM
             return null;
         }
     }
