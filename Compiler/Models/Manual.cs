@@ -952,7 +952,7 @@ class ModelIsolationEnforcer
 }
 
 /// <summary>
-/// Generates verified IR for manual memory code
+/// Generates verified annotations for manual memory code
 /// </summary>
 /// <summary>
 /// Annotates AST with manual memory verification metadata

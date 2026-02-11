@@ -119,10 +119,10 @@ CRAB/
 
 CRAB's compilation pipeline:
 1. **Frontend** (CDTk TokenSet, RuleSet) → Tokens, AST
-2. **Memory Verification** (Automatic & Manual Models) → Annotated AST (serves as IR)
-3. **Code Generation** (CDTk MapSet) → WASM MVP output
+2. **Memory Verification** (Automatic & Manual Models) → Annotated AST with memory metadata
+3. **Code Generation** (CDTk MapSet) → Direct WASM MVP output
 
-The annotated AST produced by memory models serves as CRAB's intermediate representation, encoding memory model information, control flow, data flow, and providing guidance for WASM generation - fulfilling the specification's IR requirements through CDTk's Model-based architecture.
+**No IR Layer**: CRAB translates directly from C# AST to WASM MVP using CDTk's declarative MapSet. Memory models annotate the AST with metadata (allocations, deallocations, ownership info) that guides WASM generation, but there is no intermediate representation - translation is direct.
 
 ## License
 

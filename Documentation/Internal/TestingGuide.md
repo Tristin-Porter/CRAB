@@ -410,18 +410,10 @@ wasmtime --profile performance.wasm
 dotnet run -- compile --verbose Testing/Test.cs
 ```
 
-### Emit IR
+### Emit WAT (WASM Text Format)
 
 ```bash
-# Emit intermediate representation
-dotnet run -- compile --emit-ir Testing/Test.cs
-cat Test.ir
-```
-
-### Emit WAT
-
-```bash
-# Emit WASM text format
+# Emit WASM text format for inspection
 dotnet run -- compile --emit-text Testing/Test.cs
 cat Test.wat
 ```
@@ -532,9 +524,9 @@ Tests should not depend on each other or shared state.
 
 ### Test Compiles but Incorrect Behavior
 
-1. Emit IR and inspect
-2. Emit WAT and verify WASM
-3. Run with verbose output
+1. Emit WAT and inspect WASM code
+2. Run with verbose output to see memory model analysis
+3. Check annotations on AST nodes
 4. Compare with expected behavior
 
 ### Performance Test Fails
