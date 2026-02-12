@@ -50,7 +50,7 @@ Compile and run:
 # Compile to WebAssembly
 crab compile Hello.cs
 
-# Run with a WASM runtime
+# Run (BADGER compiles WAT to native and executes)
 crab run Hello.wat
 ```
 
@@ -126,21 +126,22 @@ Flags:
 
 ### `crab run`
 
-Execute a compiled WASM file:
+Execute a compiled WAT file by using BADGER to compile it to native assembly and run:
 
 ```bash
-# Run a WAT/WASM file
+# Run a WAT file (compiled to native via BADGER)
 crab run Program.wat
 
 # Run with arguments
 crab run Program.wat arg1 arg2
 
-# Specify runtime
-crab run Program.wat --runtime wasmtime
+# Specify architecture (default: x86_64)
+crab run Program.wat --arch x86_64
 ```
 
 Flags:
-- `--runtime <name>` - WASM runtime (wasmtime, wasmer, node)
+- `--arch <name>` - Target architecture (x86_64, x86_32, arm64, arm32)
+- `--format <fmt>` - Output format (native, pe)
 
 ### `crab help`
 
