@@ -106,7 +106,36 @@ dotnet run
 
 # Compile to WASM
 > compile myprogram.cs
+
+# Compile to native assembly (C# → WAT → ASM)
+> compile myprogram.cs --to-asm --arch x86_64
 ```
+
+## BADGER Integration
+
+CRAB integrates with **BADGER** (Better Assembler for Dependable Generation of Efficient Results) to provide a complete compilation pipeline from C# to native assembly:
+
+```
+C# Source → [CRAB] → WAT → [BADGER] → Native Assembly
+```
+
+### Full Pipeline Example
+
+```bash
+# Compile C# directly to x86_64 native binary
+crab compile program.cs --to-asm --arch x86_64 --format native --output program.bin
+
+# Compile to Windows PE executable
+crab compile program.cs --to-asm --arch x86_64 --format pe --output program.exe
+
+# Cross-compile to ARM64
+crab compile program.cs --to-asm --arch arm64 --output program-arm64.bin
+```
+
+**Supported Architectures**: x86_64, x86_32, x86_16, arm64, arm32  
+**Output Formats**: native (bare metal), pe (Windows PE)
+
+See [Documentation/BADGER-Integration.md](Documentation/BADGER-Integration.md) for complete details.
 
 ## Documentation
 
