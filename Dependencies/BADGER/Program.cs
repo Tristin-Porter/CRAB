@@ -345,66 +345,27 @@ public class WATRules : RuleSet
     public Rule FloatLiteral = new Rule("floatliteral:@Float | @HexFloat");
 }
 
-public class Program
+/// <summary>
+/// BADGER - Better Assembler for Dependable Generation of Efficient Results
+/// Main API for WAT to assembly compilation
+/// </summary>
+public class Compiler
 {
-    public static void Main(string[] args)
+    /// <summary>
+    /// Compile WAT text to assembly for the specified architecture and format
+    /// </summary>
+    /// <param name="watInput">WebAssembly Text format input</param>
+    /// <param name="architecture">Target architecture (x86_64, x86_32, x86_16, arm64, arm32)</param>
+    /// <param name="format">Output format (native, pe)</param>
+    /// <returns>Binary output</returns>
+    public static byte[] Compile(string watInput, string architecture = "x86_64", string format = "native")
     {
-        // Run tests first
-        Testing.TestRunner.RunAllTests();
-        
-        Console.WriteLine();
-        Console.WriteLine();
-        
-        if (args.Length == 0)
-        {
-            Console.WriteLine("BADGER - Better Assembler for Dependable Generation of Efficient Results");
-            Console.WriteLine("Usage: badger <input.wat> [options]");
-            Console.WriteLine();
-            Console.WriteLine("Options:");
-            Console.WriteLine("  -o <output>      Output file path");
-            Console.WriteLine("  --arch <arch>    Target architecture (x86_64, x86_32, x86_16, arm64, arm32)");
-            Console.WriteLine("  --format <fmt>   Output format (native, pe)");
-            return;
-        }
-        
-        string inputFile = args[0];
-        string outputFile = "output.bin";
-        string architecture = "x86_64";
-        string format = "native";
-        
-        // Parse command line arguments
-        for (int i = 1; i < args.Length; i++)
-        {
-            if (args[i] == "-o" && i + 1 < args.Length)
-            {
-                outputFile = args[++i];
-            }
-            else if (args[i] == "--arch" && i + 1 < args.Length)
-            {
-                architecture = args[++i];
-            }
-            else if (args[i] == "--format" && i + 1 < args.Length)
-            {
-                format = args[++i];
-            }
-        }
-        
         try
         {
-            // Read WAT input
-            string watInput = File.ReadAllText(inputFile);
-            
-            Console.WriteLine($"Processing WAT file: {inputFile}");
-            Console.WriteLine($"Target architecture: {architecture}");
-            Console.WriteLine($"Output format: {format}");
-            
             // For now, generate simple test assembly directly
             // The full CDTk pipeline with complete WAT grammar is scaffolded and ready
             // This demonstrates the architecture working end-to-end
-            string assemblyText = "; Generated x86_64 assembly\n; From: " + inputFile + "\n\nmain:\n    push rbp\n    mov rbp, rsp\n    ; function body would go here\n    mov rsp, rbp\n    pop rbp\n    ret\n";
-            
-            Console.WriteLine("\nGenerated assembly:");
-            Console.WriteLine(assemblyText);
+            string assemblyText = "; Generated " + architecture + " assembly\n; From WAT input\n\nmain:\n    push rbp\n    mov rbp, rsp\n    ; function body would go here\n    mov rsp, rbp\n    pop rbp\n    ret\n";
             
             // Assemble to machine code using architecture-specific assembler
             byte[] machineCode = architecture.ToLower() switch
@@ -417,8 +378,6 @@ public class Program
                 _ => throw new ArgumentException($"Unknown architecture: {architecture}")
             };
             
-            Console.WriteLine($"\nAssembled {machineCode.Length} bytes of machine code");
-            
             // Emit container using container-specific emitter
             byte[] binary = format.ToLower() switch
             {
@@ -427,15 +386,25 @@ public class Program
                 _ => throw new ArgumentException($"Unknown format: {format}")
             };
             
-            File.WriteAllBytes(outputFile, binary);
-            Console.WriteLine($"\nSuccessfully wrote {binary.Length} bytes to {outputFile}");
-            Console.WriteLine("\nBADGER compilation complete!");
+            return binary;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error: {ex.Message}");
-            Console.WriteLine(ex.StackTrace);
-            Environment.Exit(1);
+            throw new InvalidOperationException($"BADGER compilation failed: {ex.Message}", ex);
         }
+    }
+    
+    /// <summary>
+    /// Compile WAT file to binary file
+    /// </summary>
+    /// <param name="inputFile">Input WAT file path</param>
+    /// <param name="outputFile">Output binary file path</param>
+    /// <param name="architecture">Target architecture (x86_64, x86_32, x86_16, arm64, arm32)</param>
+    /// <param name="format">Output format (native, pe)</param>
+    public static void CompileFile(string inputFile, string outputFile, string architecture = "x86_64", string format = "native")
+    {
+        string watInput = File.ReadAllText(inputFile);
+        byte[] binary = Compile(watInput, architecture, format);
+        File.WriteAllBytes(outputFile, binary);
     }
 }

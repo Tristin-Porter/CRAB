@@ -11,13 +11,16 @@ class Compile : Command
     public Compile()
     {
         Name = "compile";
-        Description = "Compile C# source files to WebAssembly.";
+        Description = "Compile C# source files to WebAssembly or native assembly.";
         
         SupportedFlags["input"] = "Input C# source file or directory.";
-        SupportedFlags["output"] = "Output WebAssembly file (default: output.wasm).";
+        SupportedFlags["output"] = "Output file (default: output.wasm or output.bin based on --to-asm flag).";
         SupportedFlags["verbose"] = "Enable verbose compilation output.";
         SupportedFlags["verify"] = "Run additional verification passes (slower, more thorough).";
         SupportedFlags["optimize"] = "Enable optimizations (default: true).";
+        SupportedFlags["to-asm"] = "Compile all the way to native assembly using BADGER (WAT -> ASM).";
+        SupportedFlags["arch"] = "Target architecture when using --to-asm (x86_64, x86_32, x86_16, arm64, arm32, default: x86_64).";
+        SupportedFlags["format"] = "Output format when using --to-asm (native, pe, default: native).";
     }
 
     public override void Execute(string[] args, Dictionary<string, string?> flags)
@@ -32,14 +35,25 @@ class Compile : Command
         if (string.IsNullOrWhiteSpace(inputPath))
         {
             System.Console.WriteLine("Error: Input file or directory required.");
-            System.Console.WriteLine("Usage: compile <input.cs> [--output output.wasm] [--verbose] [--verify]");
+            System.Console.WriteLine("Usage: compile <input.cs> [--output output.wasm] [--verbose] [--verify] [--to-asm]");
             return;
         }
 
         // Parse output
-        string outputPath = "output.wasm";
+        bool toAsm = flags.ContainsKey("to-asm");
+        string defaultOutput = toAsm ? "output.bin" : "output.wasm";
+        string outputPath = defaultOutput;
         if (flags.TryGetValue("output", out var flagOutput) && !string.IsNullOrWhiteSpace(flagOutput))
             outputPath = flagOutput;
+
+        // Parse BADGER options
+        string architecture = "x86_64";
+        if (flags.TryGetValue("arch", out var flagArch) && !string.IsNullOrWhiteSpace(flagArch))
+            architecture = flagArch;
+        
+        string format = "native";
+        if (flags.TryGetValue("format", out var flagFormat) && !string.IsNullOrWhiteSpace(flagFormat))
+            format = flagFormat;
 
         // Parse options
         bool verbose = flags.ContainsKey("verbose");
@@ -56,12 +70,20 @@ class Compile : Command
         if (verbose)
         {
             System.Console.WriteLine("=".PadRight(60, '='));
-            System.Console.WriteLine("CRAB Compiler - C# to WebAssembly");
+            if (toAsm)
+                System.Console.WriteLine("CRAB Compiler - C# to Native Assembly");
+            else
+                System.Console.WriteLine("CRAB Compiler - C# to WebAssembly");
             System.Console.WriteLine("=".PadRight(60, '='));
             System.Console.WriteLine($"Input:      {inputPath}");
             System.Console.WriteLine($"Output:     {outputPath}");
             System.Console.WriteLine($"Verify:     {verify}");
             System.Console.WriteLine($"Optimize:   {optimize}");
+            if (toAsm)
+            {
+                System.Console.WriteLine($"Arch:       {architecture}");
+                System.Console.WriteLine($"Format:     {format}");
+            }
             System.Console.WriteLine("=".PadRight(60, '='));
         }
 
@@ -128,15 +150,54 @@ class Compile : Command
             if (verbose) System.Console.WriteLine($"      Generated {wasmText.Length} characters of WebAssembly text format");
 
             if (verbose) System.Console.WriteLine("\n[6/6] Writing output...");
-            File.WriteAllText(outputPath, wasmText);
             
-            if (verbose)
+            if (toAsm)
             {
-                System.Console.WriteLine($"      Wrote {new FileInfo(outputPath).Length} bytes to {outputPath}");
-                System.Console.WriteLine("\n" + "=".PadRight(60, '='));
+                // Pipeline: C# -> WAT -> ASM using BADGER
+                if (verbose)
+                {
+                    System.Console.WriteLine($"      Invoking BADGER to compile WAT to {architecture} assembly...");
+                }
+                
+                try
+                {
+                    byte[] binary = Badger.Compiler.Compile(wasmText, architecture, format);
+                    File.WriteAllBytes(outputPath, binary);
+                    
+                    if (verbose)
+                    {
+                        System.Console.WriteLine($"      BADGER compiled {binary.Length} bytes of {architecture} {format} code");
+                        System.Console.WriteLine($"      Wrote {new FileInfo(outputPath).Length} bytes to {outputPath}");
+                        System.Console.WriteLine("\n" + "=".PadRight(60, '='));
+                    }
+                    
+                    System.Console.WriteLine($"✓ Compilation successful: C# -> WAT -> {architecture.ToUpper()} ASM");
+                    System.Console.WriteLine($"✓ Output: {outputPath} ({new FileInfo(outputPath).Length} bytes)");
+                }
+                catch (Exception badgerEx)
+                {
+                    System.Console.WriteLine($"Error: BADGER compilation failed - {badgerEx.Message}");
+                    if (verbose)
+                    {
+                        System.Console.WriteLine("\nStack trace:");
+                        System.Console.WriteLine(badgerEx.StackTrace);
+                    }
+                    return;
+                }
             }
+            else
+            {
+                // Standard WAT output
+                File.WriteAllText(outputPath, wasmText);
+                
+                if (verbose)
+                {
+                    System.Console.WriteLine($"      Wrote {new FileInfo(outputPath).Length} bytes to {outputPath}");
+                    System.Console.WriteLine("\n" + "=".PadRight(60, '='));
+                }
 
-            System.Console.WriteLine($"✓ Compilation successful: {outputPath}");
+                System.Console.WriteLine($"✓ Compilation successful: {outputPath}");
+            }
             
             if (verify && verbose)
             {

@@ -17,6 +17,9 @@ class Build : Command
         SupportedFlags["output"] = "Output directory (default: ./bin).";
         SupportedFlags["config"] = "Build configuration: debug or release (default: debug).";
         SupportedFlags["verbose"] = "Enable verbose build output.";
+        SupportedFlags["to-asm"] = "Build all the way to native assembly using BADGER (WAT -> ASM).";
+        SupportedFlags["arch"] = "Target architecture when using --to-asm (x86_64, x86_32, x86_16, arm64, arm32, default: x86_64).";
+        SupportedFlags["format"] = "Output format when using --to-asm (native, pe, default: native).";
     }
 
     public override void Execute(string[] args, Dictionary<string, string?> flags)
@@ -88,7 +91,9 @@ class Build : Command
             // Create output directory
             if (verbose) System.Console.WriteLine("\n[2/4] Preparing output directory...");
             Directory.CreateDirectory(outputPath);
-            string outputFile = Path.Combine(outputPath, "output.wasm");
+            
+            bool toAsm = flags.ContainsKey("to-asm");
+            string outputFile = Path.Combine(outputPath, toAsm ? "output.bin" : "output.wasm");
 
             // Compile each file or concatenate them
             if (verbose) System.Console.WriteLine("\n[3/4] Compiling project...");
@@ -102,6 +107,18 @@ class Build : Command
             
             if (verbose)
                 compileFlags["verbose"] = null;
+            
+            // Pass through BADGER flags if building to assembly
+            if (toAsm)
+            {
+                compileFlags["to-asm"] = null;
+                
+                if (flags.TryGetValue("arch", out var arch))
+                    compileFlags["arch"] = arch;
+                    
+                if (flags.TryGetValue("format", out var fmt))
+                    compileFlags["format"] = fmt;
+            }
 
             compileCommand.Execute(Array.Empty<string>(), compileFlags);
 
