@@ -598,11 +598,132 @@ class ManualBlockExtractor
     public List<ManualBlock> Extract(AstNode ast)
     {
         var blocks = new List<ManualBlock>();
+        int blockId = 0;
         
-        // Simplified - real implementation would traverse AST to find manual/unsafe blocks
-        // Look for manual{} and unsafe{} block nodes
+        // Traverse AST to find manual{} and unsafe{} blocks
+        ExtractRecursive(ast, blocks, ref blockId);
         
         return blocks;
+    }
+    
+    private void ExtractRecursive(AstNode node, List<ManualBlock> blocks, ref int blockId)
+    {
+        if (node == null) return;
+        
+        string nodeType = node.GetType().Name;
+        
+        // Detect manual or unsafe block nodes
+        if (nodeType.Contains("ManualBlock") || nodeType.Contains("UnsafeBlock"))
+        {
+            var block = new ManualBlock($"block_{blockId++}")
+            {
+                BlockNode = node,
+                IsUnsafeKeyword = nodeType.Contains("Unsafe")
+            };
+            
+            // Issue warning for unsafe keyword usage
+            if (block.IsUnsafeKeyword)
+            {
+                context.Diagnostics.Add(new ManualDiagnostic(
+                    ManualDiagnosticLevel.Warning,
+                    "Use of 'unsafe' keyword is deprecated. Please use 'manual' keyword instead."
+                ));
+            }
+            
+            // Extract pointer operations within this block
+            ExtractOperations(node, block);
+            
+            blocks.Add(block);
+        }
+        
+        // Recursively process children
+        var childrenProperty = node.GetType().GetProperty("Children");
+        if (childrenProperty != null)
+        {
+            var children = childrenProperty.GetValue(node) as System.Collections.IEnumerable;
+            if (children != null)
+            {
+                foreach (var child in children)
+                {
+                    if (child is AstNode childNode)
+                    {
+                        ExtractRecursive(childNode, blocks, ref blockId);
+                    }
+                }
+            }
+        }
+    }
+    
+    private void ExtractOperations(AstNode blockNode, ManualBlock block)
+    {
+        int opId = 0;
+        int programPoint = 0;
+        
+        // Extract pointer operations from the block
+        // This would parse stackalloc, pointer dereferences, etc.
+        TraverseForOperations(blockNode, block, ref opId, ref programPoint);
+    }
+    
+    private void TraverseForOperations(AstNode node, ManualBlock block, ref int opId, ref int programPoint)
+    {
+        if (node == null) return;
+        
+        string nodeType = node.GetType().Name;
+        
+        // Detect stackalloc
+        if (nodeType.Contains("StackAlloc"))
+        {
+            var op = new PointerOperation($"op_{opId++}", PointerOperationType.Allocate)
+            {
+                PointerName = ExtractPointerName(node),
+                ProgramPoint = programPoint++
+            };
+            block.Operations.Add(op);
+        }
+        // Detect pointer dereference
+        else if (nodeType.Contains("PointerIndirection") || nodeType.Contains("Dereference"))
+        {
+            var op = new PointerOperation($"op_{opId++}", PointerOperationType.Dereference)
+            {
+                PointerName = ExtractPointerName(node),
+                ProgramPoint = programPoint++
+            };
+            block.Operations.Add(op);
+        }
+        // Detect address-of operator
+        else if (nodeType.Contains("AddressOf"))
+        {
+            var op = new PointerOperation($"op_{opId++}", PointerOperationType.AddressOf)
+            {
+                PointerName = ExtractPointerName(node),
+                ProgramPoint = programPoint++
+            };
+            block.Operations.Add(op);
+        }
+        
+        // Recursively process children
+        var childrenProperty = node.GetType().GetProperty("Children");
+        if (childrenProperty != null)
+        {
+            var children = childrenProperty.GetValue(node) as System.Collections.IEnumerable;
+            if (children != null)
+            {
+                foreach (var child in children)
+                {
+                    if (child is AstNode childNode)
+                    {
+                        TraverseForOperations(childNode, block, ref opId, ref programPoint);
+                    }
+                }
+            }
+        }
+    }
+    
+    private string ExtractPointerName(AstNode node)
+    {
+        // Extract variable/pointer name from AST node
+        // In real implementation would parse node structure
+        return "ptr";
     }
 }
 
@@ -707,13 +828,42 @@ class SymbolicExecutor
     {
         var results = new List<SymbolicExecutionResult>();
         
-        int pathId = 0;
-        foreach (var block in blocks)
+        // Execute symbolic execution on each block
+        for (int i = 0; i < blocks.Count; i++)
         {
-            var result = new SymbolicExecutionResult($"path_{pathId++}");
+            var block = blocks[i];
+            var state = i < states.Count ? states[i] : new AbstractState();
             
-            // Execute symbolically, tracking constraints
-            // Verify safety properties on all paths
+            var result = new SymbolicExecutionResult($"path_{i}");
+            
+            // Verify each operation symbolically
+            foreach (var op in block.Operations)
+            {
+                // Verify pointer is valid before use
+                if (op.Type == PointerOperationType.Dereference)
+                {
+                    if (op.PointerName != null && !state.ValidPointers.Contains(op.PointerName))
+                    {
+                        result.IsSafe = false;
+                        result.SafetyViolations.Add($"Invalid pointer dereference: {op.PointerName} at point {op.ProgramPoint}");
+                    }
+                    else if (op.PointerName != null)
+                    {
+                        // Add constraint that pointer must be valid
+                        result.Constraints.Add(new SymbolicConstraint(
+                            $"{op.PointerName} != null && valid({op.PointerName})",
+                            true
+                        ));
+                    }
+                }
+                
+                // Verify no use after free
+                if (op.PointerName != null && state.FreedPointers.Contains(op.PointerName))
+                {
+                    result.IsSafe = false;
+                    result.SafetyViolations.Add($"Use after free: {op.PointerName} at point {op.ProgramPoint}");
+                }
+            }
             
             results.Add(result);
         }
