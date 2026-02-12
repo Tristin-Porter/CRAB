@@ -9,6 +9,8 @@ namespace CRAB;
 /// </summary>
 class Run : Command
 {
+    private const string Separator = "============================================================";
+    
     public Run()
     {
         Name = "run";
@@ -84,14 +86,14 @@ class Run : Command
 
         if (verbose)
         {
-            System.Console.WriteLine("=".PadRight(60, '='));
+            System.Console.WriteLine(Separator);
             System.Console.WriteLine("CRAB Runner (WAT -> Native via BADGER)");
-            System.Console.WriteLine("=".PadRight(60, '='));
+            System.Console.WriteLine(Separator);
             System.Console.WriteLine($"Input:      {watFile}");
             System.Console.WriteLine($"Arch:       {architecture}");
             System.Console.WriteLine($"Format:     {format}");
             System.Console.WriteLine($"Arguments:  {programArgs}");
-            System.Console.WriteLine("=".PadRight(60, '='));
+            System.Console.WriteLine(Separator);
             System.Console.WriteLine();
         }
 
@@ -125,14 +127,8 @@ class Run : Command
             if (verbose) System.Console.WriteLine($"      Compiled {nativeBinary.Length} bytes of native code");
 
             // Write temporary executable
-            string tempExecutable = Path.GetTempFileName();
-            
-            // Determine file extension based on format and OS
-            if (format == "pe" || (Environment.OSVersion.Platform == PlatformID.Win32NT))
-            {
-                // Windows PE executable
-                tempExecutable = Path.ChangeExtension(tempExecutable, ".exe");
-            }
+            string extension = (format == "pe") ? ".exe" : "";
+            string tempExecutable = Path.Combine(Path.GetTempPath(), $"crab_{Guid.NewGuid()}{extension}");
             
             File.WriteAllBytes(tempExecutable, nativeBinary);
 
@@ -163,7 +159,7 @@ class Run : Command
 
             // Execute the native binary
             if (verbose) System.Console.WriteLine("\n[3/3] Executing native program...");
-            if (verbose) System.Console.WriteLine("=".PadRight(60, '='));
+            if (verbose) System.Console.WriteLine(Separator);
 
             var startInfo = new ProcessStartInfo
             {
@@ -202,9 +198,9 @@ class Run : Command
 
             if (verbose)
             {
-                System.Console.WriteLine("=".PadRight(60, '='));
+                System.Console.WriteLine(Separator);
                 System.Console.WriteLine($"Process exited with code: {process.ExitCode}");
-                System.Console.WriteLine("=".PadRight(60, '='));
+                System.Console.WriteLine(Separator);
             }
 
             // Clean up temporary file
