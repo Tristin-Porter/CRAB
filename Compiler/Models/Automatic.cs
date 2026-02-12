@@ -539,11 +539,127 @@ class AllocationTracker
     public List<AllocationSite> Track(AstNode ast)
     {
         var allocations = new List<AllocationSite>();
+        int allocId = 0;
         
-        // Simplified - real implementation would traverse AST and find all allocations
-        // Look for: new expressions, array allocations, delegate creations, etc.
+        // Traverse AST to find allocation sites
+        TrackAllocationsRecursive(ast, allocations, ref allocId);
+        
+        // Assign allocations to regions based on their lifetimes
+        foreach (var allocation in allocations)
+        {
+            var bestRegion = FindBestRegion(allocation);
+            if (bestRegion != null)
+            {
+                allocation.Region = bestRegion;
+                bestRegion.Allocations.Add(allocation);
+            }
+        }
         
         return allocations;
+    }
+    
+    private void TrackAllocationsRecursive(AstNode node, List<AllocationSite> allocations, ref int allocId)
+    {
+        if (node == null) return;
+        
+        // Detect allocation patterns in AST
+        string nodeType = node.GetType().Name;
+        
+        // Handle 'new' expressions
+        if (nodeType.Contains("NewExpression") || nodeType.Contains("ObjectCreation"))
+        {
+            var allocation = new AllocationSite($"alloc_{allocId++}", ExtractTypeName(node))
+            {
+                AllocationNode = node,
+                Size = EstimateSize(node)
+            };
+            allocations.Add(allocation);
+        }
+        
+        // Handle array allocations
+        else if (nodeType.Contains("ArrayCreation"))
+        {
+            var allocation = new AllocationSite($"alloc_{allocId++}", "Array")
+            {
+                AllocationNode = node,
+                Size = EstimateArraySize(node)
+            };
+            allocations.Add(allocation);
+        }
+        
+        // Handle delegate/lambda allocations
+        else if (nodeType.Contains("Lambda") || nodeType.Contains("Delegate"))
+        {
+            var allocation = new AllocationSite($"alloc_{allocId++}", "Delegate")
+            {
+                AllocationNode = node,
+                Size = 16  // Typical delegate size
+            };
+            allocations.Add(allocation);
+        }
+        
+        // Handle string literals
+        else if (nodeType.Contains("StringLiteral"))
+        {
+            var allocation = new AllocationSite($"alloc_{allocId++}", "String")
+            {
+                AllocationNode = node,
+                Size = EstimateStringSize(node)
+            };
+            allocations.Add(allocation);
+        }
+        
+        // Recursively process children (if CDTk AST provides Children property)
+        // This is a simplified implementation
+        var childrenProperty = node.GetType().GetProperty("Children");
+        if (childrenProperty != null)
+        {
+            var children = childrenProperty.GetValue(node) as System.Collections.IEnumerable;
+            if (children != null)
+            {
+                foreach (var child in children)
+                {
+                    if (child is AstNode childNode)
+                    {
+                        TrackAllocationsRecursive(childNode, allocations, ref allocId);
+                    }
+                }
+            }
+        }
+    }
+    
+    private MemoryRegion? FindBestRegion(AllocationSite allocation)
+    {
+        // Find region that best matches this allocation's lifetime
+        // Prefer regions with similar start/end points
+        return regions.FirstOrDefault();  // Simplified - assign to first region
+    }
+    
+    private string ExtractTypeName(AstNode node)
+    {
+        // Extract type name from AST node
+        // In real implementation, would parse the node structure
+        return "Object";
+    }
+    
+    private int EstimateSize(AstNode node)
+    {
+        // Estimate object size based on type
+        // Default to pointer size
+        return 8;
+    }
+    
+    private int EstimateArraySize(AstNode node)
+    {
+        // Estimate array size from AST
+        // Would parse array dimensions and element type
+        return 64;  // Default estimate
+    }
+    
+    private int EstimateStringSize(AstNode node)
+    {
+        // Estimate string size from literal
+        return 32;  // Default string allocation
     }
 }
 

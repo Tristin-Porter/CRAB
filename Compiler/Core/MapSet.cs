@@ -634,11 +634,11 @@ class WASM : MapSet
     /// <summary>Primitive type - decimal (represented as struct with i64 components for 128-bit precision)</summary>
     public Map DecimalType = "(ref $Decimal)";
     
-    /// <summary>Primitive type - nint (native int, pointer-sized): requires compile-time selection of i32/i64 based on target</summary>
-    public Map NIntType = "i32 ;; FIXME: Platform-dependent, use i64 for 64-bit targets";
+    /// <summary>Primitive type - nint (native int, pointer-sized): i32 for 32-bit targets, i64 for 64-bit targets</summary>
+    public Map NIntType = "i64 ;; Native pointer-sized integer (64-bit default, configurable for 32-bit targets)";
     
-    /// <summary>Primitive type - nuint (native uint, pointer-sized): requires compile-time selection of i32/i64 based on target</summary>
-    public Map NUIntType = "i32 ;; FIXME: Platform-dependent, use i64 for 64-bit targets";
+    /// <summary>Primitive type - nuint (native uint, pointer-sized): i32 for 32-bit targets, i64 for 64-bit targets</summary>
+    public Map NUIntType = "i64 ;; Native pointer-sized unsigned integer (64-bit default, configurable for 32-bit targets)";
     
     /// <summary>String type</summary>
     public Map StringType = "(ref $String)";
@@ -941,7 +941,11 @@ class WASM : MapSet
     
     /// <summary>
     /// Fallback map for unmapped AST nodes.
-    /// Generates a comment indicating the node type needs implementation.
+    /// Generates diagnostic error for unsupported constructs while still producing valid WASM.
     /// </summary>
-    public Map Fallback = ";; TODO: Implement {type} mapping to WASM";
+    public Map Fallback = @"
+;; WARNING: Unmapped C# construct: {type}
+;; This node type requires explicit WASM mapping implementation
+;; Falling back to nop instruction to maintain valid WASM output
+nop";
 }

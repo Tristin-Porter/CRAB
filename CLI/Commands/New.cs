@@ -39,7 +39,68 @@ class Console : Command
             return;
         }
 
-        System.Console.WriteLine($"Creating a new console application '{name}'...");
+        try
+        {
+            System.Console.WriteLine($"Creating a new console application '{name}'...");
+            
+            // Create project directory
+            var projectPath = Path.Combine(Directory.GetCurrentDirectory(), name);
+            if (Directory.Exists(projectPath))
+            {
+                System.Console.WriteLine($"Error: Directory '{name}' already exists.");
+                return;
+            }
+            
+            Directory.CreateDirectory(projectPath);
+            
+            // Create Program.cs with console template
+            var programContent = @"using System;
+
+namespace " + name + @"
+{
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            Console.WriteLine(""Hello from CRAB!"");
+            
+            if (args.Length > 0)
+            {
+                Console.WriteLine(""Arguments:"");
+                foreach (var arg in args)
+                {
+                    Console.WriteLine($""  {arg}"");
+                }
+            }
+        }
+    }
+}
+";
+            File.WriteAllText(Path.Combine(projectPath, "Program.cs"), programContent);
+            
+            // Create .crab project file
+            var projectFileContent = @"{
+  ""name"": """ + name + @""",
+  ""type"": ""console"",
+  ""output"": ""bin"",
+  ""sources"": [""*.cs""]
+}
+";
+            File.WriteAllText(Path.Combine(projectPath, $"{name}.crab"), projectFileContent);
+            
+            System.Console.WriteLine($"✓ Created {name}/");
+            System.Console.WriteLine($"✓ Created {name}/Program.cs");
+            System.Console.WriteLine($"✓ Created {name}/{name}.crab");
+            System.Console.WriteLine();
+            System.Console.WriteLine("Next steps:");
+            System.Console.WriteLine($"  cd {name}");
+            System.Console.WriteLine("  crab build");
+            System.Console.WriteLine("  crab run bin/Program.wat");
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"Error creating console application: {ex.Message}");
+        }
     }
 }
 
@@ -68,6 +129,62 @@ class Project : Command
             return;
         }
 
-        System.Console.WriteLine($"Creating a new empty project '{name}'...");
+        try
+        {
+            System.Console.WriteLine($"Creating a new empty project '{name}'...");
+            
+            // Create project directory
+            var projectPath = Path.Combine(Directory.GetCurrentDirectory(), name);
+            if (Directory.Exists(projectPath))
+            {
+                System.Console.WriteLine($"Error: Directory '{name}' already exists.");
+                return;
+            }
+            
+            Directory.CreateDirectory(projectPath);
+            Directory.CreateDirectory(Path.Combine(projectPath, "src"));
+            
+            // Create .crab project file
+            var projectFileContent = @"{
+  ""name"": """ + name + @""",
+  ""type"": ""library"",
+  ""output"": ""bin"",
+  ""sources"": [""src/*.cs""]
+}
+";
+            File.WriteAllText(Path.Combine(projectPath, $"{name}.crab"), projectFileContent);
+            
+            // Create README.md
+            var readmeContent = $@"# {name}
+
+A CRAB project.
+
+## Building
+
+```bash
+crab build
+```
+
+## Structure
+
+- `src/` - Source files
+- `bin/` - Build output
+";
+            File.WriteAllText(Path.Combine(projectPath, "README.md"), readmeContent);
+            
+            System.Console.WriteLine($"✓ Created {name}/");
+            System.Console.WriteLine($"✓ Created {name}/src/");
+            System.Console.WriteLine($"✓ Created {name}/{name}.crab");
+            System.Console.WriteLine($"✓ Created {name}/README.md");
+            System.Console.WriteLine();
+            System.Console.WriteLine("Next steps:");
+            System.Console.WriteLine($"  cd {name}");
+            System.Console.WriteLine("  # Add your .cs files to src/");
+            System.Console.WriteLine("  crab build");
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"Error creating project: {ex.Message}");
+        }
     }
 }

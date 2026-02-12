@@ -12,6 +12,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 
+[assembly: InternalsVisibleTo("CRAB")]
+
 namespace CDTk
 {
     // ============================================================
