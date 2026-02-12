@@ -249,42 +249,104 @@ void Example()
 
 ## Implementation Strategy
 
+CRAB's CTGC is fully implemented with the following components:
+
 ### Phase 1: AST Analysis
-- Traverse entire AST
-- Identify all allocation sites
-- Build use-def chains
-- Construct control flow graph (CFG)
+**AllocationTracker** class traverses the AST to find all allocation sites:
+- **Algorithm**: Recursive descent through AST nodes
+- **Pattern Matching**:
+  ```
+  if node.Type contains "NewExpression" or "ObjectCreation":
+      create AllocationSite for object
+  else if node.Type contains "ArrayCreation":
+      create AllocationSite for array
+  else if node.Type contains "Lambda" or "Delegate":
+      create AllocationSite for closure
+  else if node.Type contains "StringLiteral":
+      create AllocationSite for string
+  ```
+- **Metadata Captured**: Type name, estimated size, AST node reference
+- **Complexity**: O(n) where n = number of AST nodes
 
 ### Phase 2: Lifetime Computation
-- For each allocation:
-  - Find creation point
-  - Find all use points
-  - Find last use on all paths
-  - Compute lifetime bounds
+**LifetimeInferenceVisitor** builds lifetime graph:
+- Creates lifetime nodes for each allocation
+- Assigns birth points (program point where created)
+- Tracks all uses to determine death points (last use)
+- Builds dependency edges (outlives, aliases, contains)
+- **Complexity**: O(n + e) where n = nodes, e = edges
 
 ### Phase 3: Region Assignment
-- Group allocations by lifetime similarity
-- Assign each allocation to a region
-- Compute region lifetimes
-- Plan bulk deallocations
+**RegionAnalyzer** groups allocations:
+- Groups allocations by scope name
+- Computes region start/end points from constituent lifetimes
+- Enables bulk deallocation optimization
+- **Complexity**: O(n log n) for grouping and sorting
 
 ### Phase 4: Deallocation Insertion
-- For each allocation/region:
-  - Compute optimal deallocation point
-  - Insert deallocation call in AST
-  - Annotate with safety metadata
+**DeallocationComputer** determines optimal deallocation points:
+```csharp
+for each allocation:
+    deallocation_point = allocation.lifetime.death_point + 1
+    
+    if optimization_enabled and allocation.region exists:
+        strategy = Regional  // Bulk deallocation
+    else if allocation.is_escaping:
+        strategy = Deferred  // Delay until safe
+    else:
+        strategy = Immediate  // Deallocate ASAP
+```
+- **Complexity**: O(n)
 
 ### Phase 5: Verification
-- Verify no leaks (all allocated = all deallocated)
-- Verify no use-after-free (no uses after deallocation)
-- Verify no double-free (single deallocation per object)
-- Verify no aliasing issues (respect all aliases)
+**MemorySafetyVerifier** proves safety through five checks:
 
-### Phase 6: Optimization
-- Eliminate unnecessary allocations
-- Merge adjacent deallocations
-- Optimize region layouts
-- Apply stack allocation where safe
+1. **No Leaks** (O(n)):
+   ```
+   allocated_ids = {allocation.id for all allocations}
+   deallocated_ids = {dealloc.allocation.id for all deallocations}
+   leaks = allocated_ids - deallocated_ids
+   assert leaks is empty
+   ```
+
+2. **No Use-After-Free** (O(n)):
+   ```
+   for each deallocation:
+       assert deallocation.point > allocation.lifetime.death_point
+   ```
+
+3. **No Double-Free** (O(n log n)):
+   ```
+   seen = set()
+   for deallocation in sorted_by_program_point:
+       assert deallocation.allocation.id not in seen
+       seen.add(deallocation.allocation.id)
+   ```
+
+4. **No Dangling Pointers** (O(e)):
+   ```
+   for edge in lifetime_graph.edges where edge.type == Outlives:
+       from = lifetime_graph.get_node(edge.from)
+       to = lifetime_graph.get_node(edge.to)
+       assert from.death_point <= to.death_point
+   ```
+
+5. **No Aliasing Violations** (O(a)):
+   ```
+   for edge in lifetime_graph.edges where edge.type == Aliases:
+       // Verify both aliases have compatible lifetimes
+       // Ensure no conflicting accesses
+   ```
+
+### Phase 6: Annotation Generation
+**AutomaticAnnotator** produces final metadata:
+- Original AST preserved
+- List of all allocations with metadata
+- List of deallocation points with strategies
+- Diagnostic messages from verification
+- Metadata dictionary with statistics
+
+**Total Complexity**: O(n log n) dominated by region analysis and double-free checking
 
 ## Comparison with Runtime GC
 

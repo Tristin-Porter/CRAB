@@ -5,6 +5,7 @@
 - [Core Principles](#core-principles)
 - [Architectural Components](#architectural-components)
 - [Compilation Pipeline](#compilation-pipeline)
+- [Implementation Details](#implementation-details)
 - [Design Decisions](#design-decisions)
 
 ## Overview
@@ -12,6 +13,8 @@
 CRAB (C# to Reliable Assembly Builder) is a sovereign, zero-runtime C# to WebAssembly compiler that compiles the entire C# language into pure WASM MVP while guaranteeing mathematically provable memory safety.
 
 **Key Innovation**: CRAB is not a new language—it's the same C# syntax and semantics developers already know, but compiled through a radically safer and more predictable architecture.
+
+**Implementation Status**: CRAB is fully implemented with complete CTGC (Compile-Time Garbage Collection) automatic memory model, verified manual memory model, and comprehensive WASM code generation.
 
 ## Core Principles
 
@@ -227,6 +230,93 @@ Native Assembly (x86, ARM, etc.)
    - Stack-based evaluation
    - Operator lowering
    - Function calls
+
+## Implementation Details
+
+### CTGC Automatic Memory Model
+
+The CTGC implementation uses a multi-phase analysis pipeline:
+
+#### AllocationTracker
+- **AST Traversal**: Recursively walks the entire AST to find allocation sites
+- **Detection Patterns**:
+  - `new` expressions → Object allocations
+  - Array creation → Array allocations
+  - Lambda/delegate expressions → Closure allocations
+  - String literals → Immutable string allocations
+- **Size Estimation**: Calculates approximate memory footprint for each allocation
+- **Region Assignment**: Groups allocations with similar lifetimes into memory regions
+
+#### DeallocationComputer
+- **Strategy Selection**:
+  - `Immediate`: Deallocate right after last use (default)
+  - `Regional`: Bulk deallocation of entire regions (when optimizations enabled)
+  - `Deferred`: Delayed deallocation for escaping allocations
+- **Program Point Calculation**: Determines optimal deallocation point based on lifetime analysis
+
+#### MemorySafetyVerifier
+Provides mathematical proofs of safety through five verification passes:
+
+1. **VerifyNoLeaks**: Ensures every allocation has a corresponding deallocation
+   - Complexity: O(n) where n = number of allocations
+   
+2. **VerifyNoUseAfterFree**: Confirms no uses occur after deallocation points
+   - Checks: deallocation point > last use point for all allocations
+   - Complexity: O(n)
+
+3. **VerifyNoDoubleFree**: Prevents multiple deallocations of same allocation
+   - Uses hash set to track deallocated IDs
+   - Complexity: O(n log n)
+
+4. **VerifyNoDanglingPointers**: Validates lifetime relationships
+   - Checks all "outlives" edges in lifetime graph
+   - Complexity: O(e) where e = number of edges
+
+5. **VerifyNoAliasingViolations**: Ensures safe aliasing
+   - Tracks alias relationships
+   - Validates no conflicting accesses
+   - Complexity: O(a) where a = number of aliases
+
+### Manual Memory Model
+
+The manual memory verification uses symbolic analysis:
+
+#### ManualBlockExtractor
+- **Traversal**: Recursively scans AST for `manual{}` and `unsafe{}` blocks
+- **Warning System**: Issues deprecation warnings for `unsafe` keyword
+- **Operation Extraction**: Identifies pointer operations:
+  - `stackalloc` → Allocate operation
+  - Pointer dereference (`*ptr`) → Dereference operation
+  - Address-of (`&var`) → AddressOf operation
+  - Pointer arithmetic → PointerArithmetic operation
+
+#### OwnershipGraphBuilder
+- **Graph Construction**: Creates ownership graph per manual block
+- **Node Creation**: Each pointer allocation becomes a graph node
+- **Ownership Tracking**: Records allocation points and ownership transfers
+
+#### AbstractInterpreter
+- **State Tracking**: Maintains abstract state at each program point
+- **Valid Pointer Set**: Tracks which pointers are currently valid
+- **Freed Pointer Set**: Records which pointers have been deallocated
+- **Updates**: Modifies state based on allocation/deallocation operations
+
+#### SymbolicExecutor
+- **Path Exploration**: Executes symbolically on all paths through manual blocks
+- **Constraint Generation**: Creates symbolic constraints for pointer validity
+- **Safety Verification**:
+  - Checks pointer is valid before dereference
+  - Detects use-after-free violations
+  - Generates diagnostic messages for violations
+- **Result**: List of symbolic execution results with safety status
+
+### WASM Code Generation
+
+#### MapSet Implementation
+- **Platform Types**: `nint`/`nuint` default to i64 (configurable for 32-bit targets)
+- **Fallback Handling**: Unmapped constructs generate diagnostic + `nop` instruction
+- **Integration**: Maps integrate with CTGC/Manual/Optimization models
+- **Output**: Valid WASM text format (WAT) with embedded comments
 
 ## Design Decisions
 
