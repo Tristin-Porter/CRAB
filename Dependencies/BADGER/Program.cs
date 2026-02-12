@@ -349,7 +349,7 @@ public class WATRules : RuleSet
 /// BADGER - Better Assembler for Dependable Generation of Efficient Results
 /// Main API for WAT to assembly compilation
 /// </summary>
-public class Compiler
+public class BadgerCompiler
 {
     /// <summary>
     /// Compile WAT text to assembly for the specified architecture and format

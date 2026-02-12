@@ -141,7 +141,7 @@ BADGER is now a library (not an executable) and exposes the following API:
 ```csharp
 namespace Badger;
 
-public class Compiler
+public class BadgerCompiler
 {
     // Compile WAT text to binary
     public static byte[] Compile(

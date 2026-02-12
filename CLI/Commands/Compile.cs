@@ -161,17 +161,17 @@ class Compile : Command
                 
                 try
                 {
-                    byte[] binary = Badger.Compiler.Compile(wasmText, architecture, format);
+                    byte[] binary = Badger.BadgerCompiler.Compile(wasmText, architecture, format);
                     File.WriteAllBytes(outputPath, binary);
                     
                     if (verbose)
                     {
-                        System.Console.WriteLine($"      BADGER compiled {binary.Length} bytes of {architecture} {format} code");
+                        System.Console.WriteLine($"      BADGER compiled {binary.Length} bytes of {GetArchitectureDisplayName(architecture)} {format} code");
                         System.Console.WriteLine($"      Wrote {new FileInfo(outputPath).Length} bytes to {outputPath}");
                         System.Console.WriteLine("\n" + "=".PadRight(60, '='));
                     }
                     
-                    System.Console.WriteLine($"✓ Compilation successful: C# -> WAT -> {architecture.ToUpper()} ASM");
+                    System.Console.WriteLine($"✓ Compilation successful: C# -> WAT -> {GetArchitectureDisplayName(architecture)} ASM");
                     System.Console.WriteLine($"✓ Output: {outputPath} ({new FileInfo(outputPath).Length} bytes)");
                 }
                 catch (Exception badgerEx)
@@ -220,6 +220,19 @@ class Compile : Command
                 System.Console.WriteLine(ex.StackTrace);
             }
         }
+    }
+
+    private string GetArchitectureDisplayName(string architecture)
+    {
+        return architecture.ToLower() switch
+        {
+            "x86_64" => "x86-64",
+            "x86_32" => "x86-32",
+            "x86_16" => "x86-16",
+            "arm64" => "ARM64",
+            "arm32" => "ARM32",
+            _ => architecture.ToUpper()
+        };
     }
 
     private string ReadSourceCode(string path)
