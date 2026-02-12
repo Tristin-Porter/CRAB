@@ -53,8 +53,8 @@ public class Optimization : Model
     /// </summary>
     public override object Build(object input)
     {
-        // Use the AST from constructor when called from MapSet
-        var ast = _ast?.Root ?? input as AstNode;
+        // Get the AST node from the input parameter
+        var ast = input as AstNode;
         if (ast == null)
         {
             throw new InvalidOperationException("Optimization model requires AST input");

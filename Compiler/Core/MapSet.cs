@@ -45,68 +45,6 @@ class WASM : MapSet
     public Optimization OptimizationModel => new Optimization(__AllRules!, __Ast!);
     
     // ============================================================
-    // HELPER METHODS FOR MODEL INTEGRATION
-    // ============================================================
-    
-    /// <summary>
-    /// Get memory management annotations from the automatic model.
-    /// This is called during WASM generation to insert deallocation instructions.
-    /// </summary>
-    private AutomaticAnnotations? GetAutomaticAnnotations()
-    {
-        if (__Ast?.Root == null) return null;
-        
-        try
-        {
-            return AutomaticModel.Build(__Ast.Root) as AutomaticAnnotations;
-        }
-        catch
-        {
-            // If model analysis fails, return null - Maps will generate basic WASM
-            return null;
-        }
-    }
-    
-    /// <summary>
-    /// Get manual memory verification results.
-    /// This is called during WASM generation to verify manual blocks.
-    /// </summary>
-    private ManualAnnotations? GetManualAnnotations()
-    {
-        if (__Ast?.Root == null) return null;
-        
-        try
-        {
-            return ManualModel.Build(__Ast.Root) as ManualAnnotations;
-        }
-        catch
-        {
-            // If verification fails, return null - compilation will fail with diagnostics
-            return null;
-        }
-    }
-    
-    /// <summary>
-    /// Get optimization annotations for code transformations.
-    /// This is called during WASM generation to apply safe optimizations.
-    /// If optimization fails, Maps generate unoptimized but safe WASM.
-    /// </summary>
-    private OptimizationAnnotations? GetOptimizationAnnotations()
-    {
-        if (__Ast?.Root == null) return null;
-        
-        try
-        {
-            return OptimizationModel.Build(__Ast.Root) as OptimizationAnnotations;
-        }
-        catch
-        {
-            // If optimization fails, return null - Maps will generate unoptimized WASM
-            return null;
-        }
-    }
-    
-    // ============================================================
     // MODULE STRUCTURE
     // ============================================================
     
