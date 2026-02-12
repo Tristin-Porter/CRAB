@@ -48,7 +48,7 @@ Compile and run:
 # Compile to WebAssembly
 crab compile Hello.cs
 
-# Run with WASM runtime
+# Run (BADGER compiles WAT to native executable and runs it)
 crab run Hello.wat
 ```
 
@@ -67,15 +67,14 @@ cd MyApp
 # Build the project
 crab build
 
-# Run the output
+# Run the output (BADGER compiles to native and executes)
 crab run bin/Program.wat
 ```
 
 ## Installation
 
 ### Prerequisites
-- .NET 10.0 SDK (for building CRAB itself)
-- A WASM runtime (wasmtime, wasmer, or node.js)
+- .NET 10.0 SDK (for building CRAB itself only)
 
 ### Build from Source
 
@@ -195,11 +194,11 @@ C# Source Code
       ↓
 [ WASM Generation ]
       ↓
-WebAssembly (WAT/WASM)
+WebAssembly Text (WAT)
       ↓
-[ Optional: BADGER ]
+[ BADGER Assembly ]
       ↓
-Native Assembly (x86, ARM, etc.)
+Native Executable (x86-64, ARM, etc.)
 ```
 
 ## Examples
@@ -282,7 +281,7 @@ crab compile Program.cs --verbose
 crab build
 crab build --config release
 
-# Run WASM files
+# Run WAT files (compiled to native via BADGER)
 crab run Program.wat
 crab run Program.wat arg1 arg2
 
@@ -415,9 +414,9 @@ Read [Architecture.md](Documentation/Architecture.md) to understand:
 
 CRAB uses:
 - **CDTk** - Compiler Development Toolkit (parser framework)
-- **BADGER** - Binary Assembler and Disassembler Generator (optional, for native targets)
+- **BADGER** - Binary Assembler and Disassembler Generator (WAT to native assembly compiler)
 
-Both are included in the `Dependencies/` directory.
+Both are included in the `Dependencies/` directory. No external WASM runtime needed!
 
 ## Comparison with Other Languages
 

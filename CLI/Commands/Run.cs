@@ -1,22 +1,27 @@
 using System.IO;
 using System.Diagnostics;
+using Badger;
 
 namespace CRAB;
 
 /// <summary>
-/// Run command - runs a compiled WebAssembly file
+/// Run command - compiles WAT to native assembly via BADGER and executes it
 /// </summary>
 class Run : Command
 {
+    private const string Separator = "============================================================";
+    
     public Run()
     {
         Name = "run";
-        Description = "Run a compiled WebAssembly file.";
+        Description = "Run a compiled WebAssembly file by compiling to native assembly via BADGER.";
         
-        SupportedFlags["input"] = "Input WebAssembly file or project directory.";
-        SupportedFlags["runtime"] = "WebAssembly runtime to use (wasmtime, wasmer, node, default: wasmtime).";
-        SupportedFlags["args"] = "Arguments to pass to the WebAssembly module.";
+        SupportedFlags["input"] = "Input WebAssembly file (WAT) or project directory.";
+        SupportedFlags["arch"] = "Target architecture (x86_64, x86_32, x86_16, arm64, arm32, default: x86_64).";
+        SupportedFlags["format"] = "Output format (native, pe, default: native).";
+        SupportedFlags["args"] = "Arguments to pass to the program.";
         SupportedFlags["verbose"] = "Enable verbose output.";
+        SupportedFlags["keep-temp"] = "Keep temporary executable files after execution.";
     }
 
     public override void Execute(string[] args, Dictionary<string, string?> flags)
@@ -30,24 +35,28 @@ class Run : Command
 
         if (string.IsNullOrWhiteSpace(inputPath))
         {
-            System.Console.WriteLine("Error: Input file or project directory required.");
-            System.Console.WriteLine("Usage: run <file.wasm> [--runtime wasmtime|wasmer|node] [--args \"...\"]");
+            System.Console.WriteLine("Error: Input WAT file or project directory required.");
+            System.Console.WriteLine("Usage: run <file.wat> [--arch x86_64] [--format native] [--args \"...\"]");
             return;
         }
 
-        // Determine WASM file path
-        string wasmFile;
+        // Determine WAT file path
+        string watFile;
         if (File.Exists(inputPath))
         {
-            wasmFile = inputPath;
+            watFile = inputPath;
         }
         else if (Directory.Exists(inputPath))
         {
-            // Look for output.wasm in bin directory
-            wasmFile = Path.Combine(inputPath, "bin", "output.wasm");
-            if (!File.Exists(wasmFile))
+            // Look for output.wat or output.wasm in bin directory
+            watFile = Path.Combine(inputPath, "bin", "output.wat");
+            if (!File.Exists(watFile))
             {
-                System.Console.WriteLine($"Error: No compiled output found at {wasmFile}");
+                watFile = Path.Combine(inputPath, "bin", "output.wasm");
+            }
+            if (!File.Exists(watFile))
+            {
+                System.Console.WriteLine($"Error: No compiled output found in bin directory");
                 System.Console.WriteLine("Hint: Run 'build' first to compile the project.");
                 return;
             }
@@ -58,56 +67,104 @@ class Run : Command
             return;
         }
 
-        // Parse runtime
-        string runtime = "wasmtime";
-        if (flags.TryGetValue("runtime", out var flagRuntime) && !string.IsNullOrWhiteSpace(flagRuntime))
-            runtime = flagRuntime.ToLower();
+        // Parse architecture and format
+        string architecture = "x86_64";
+        if (flags.TryGetValue("arch", out var flagArch) && !string.IsNullOrWhiteSpace(flagArch))
+            architecture = flagArch.ToLower();
 
-        // Parse module arguments
-        string moduleArgs = "";
+        string format = "native";
+        if (flags.TryGetValue("format", out var flagFormat) && !string.IsNullOrWhiteSpace(flagFormat))
+            format = flagFormat.ToLower();
+
+        // Parse program arguments
+        string programArgs = "";
         if (flags.TryGetValue("args", out var flagArgs) && !string.IsNullOrWhiteSpace(flagArgs))
-            moduleArgs = flagArgs;
+            programArgs = flagArgs;
 
         bool verbose = flags.ContainsKey("verbose");
+        bool keepTemp = flags.ContainsKey("keep-temp");
 
         if (verbose)
         {
-            System.Console.WriteLine("=".PadRight(60, '='));
-            System.Console.WriteLine("CRAB WebAssembly Runner");
-            System.Console.WriteLine("=".PadRight(60, '='));
-            System.Console.WriteLine($"File:       {wasmFile}");
-            System.Console.WriteLine($"Runtime:    {runtime}");
-            System.Console.WriteLine($"Arguments:  {moduleArgs}");
-            System.Console.WriteLine("=".PadRight(60, '='));
+            System.Console.WriteLine(Separator);
+            System.Console.WriteLine("CRAB Runner (WAT -> Native via BADGER)");
+            System.Console.WriteLine(Separator);
+            System.Console.WriteLine($"Input:      {watFile}");
+            System.Console.WriteLine($"Arch:       {architecture}");
+            System.Console.WriteLine($"Format:     {format}");
+            System.Console.WriteLine($"Arguments:  {programArgs}");
+            System.Console.WriteLine(Separator);
             System.Console.WriteLine();
         }
 
         try
         {
-            // Check if runtime is available
-            if (!IsRuntimeAvailable(runtime))
+            // Read WAT file
+            if (verbose) System.Console.WriteLine("[1/3] Reading WAT file...");
+            string watContent = File.ReadAllText(watFile);
+            
+            if (verbose) System.Console.WriteLine($"      Read {watContent.Length} characters");
+
+            // Compile WAT to native assembly using BADGER
+            if (verbose) System.Console.WriteLine($"\n[2/3] Compiling WAT to {GetArchitectureDisplayName(architecture)} assembly via BADGER...");
+            
+            byte[] nativeBinary;
+            try
             {
-                System.Console.WriteLine($"Error: Runtime '{runtime}' not found in PATH.");
-                System.Console.WriteLine("\nSupported runtimes:");
-                System.Console.WriteLine("  - wasmtime: Install from https://wasmtime.dev/");
-                System.Console.WriteLine("  - wasmer:   Install from https://wasmer.io/");
-                System.Console.WriteLine("  - node:     Requires Node.js with WASM support");
+                nativeBinary = BadgerCompiler.Compile(watContent, architecture, format);
+            }
+            catch (Exception badgerEx)
+            {
+                System.Console.WriteLine($"Error: BADGER compilation failed - {badgerEx.Message}");
+                if (verbose)
+                {
+                    System.Console.WriteLine("\nStack trace:");
+                    System.Console.WriteLine(badgerEx.StackTrace);
+                }
                 return;
             }
 
-            // Execute the WebAssembly module
-            string runtimeArgs = runtime switch
+            if (verbose) System.Console.WriteLine($"      Compiled {nativeBinary.Length} bytes of native code");
+
+            // Write temporary executable
+            string extension = (format == "pe") ? ".exe" : "";
+            string tempExecutable = Path.Combine(Path.GetTempPath(), $"crab_{Guid.NewGuid()}{extension}");
+            
+            File.WriteAllBytes(tempExecutable, nativeBinary);
+
+            // Make executable on Unix-like systems
+            if (Environment.OSVersion.Platform == PlatformID.Unix || 
+                Environment.OSVersion.Platform == PlatformID.MacOSX)
             {
-                "wasmtime" => $"{wasmFile} {moduleArgs}",
-                "wasmer" => $"run {wasmFile} {moduleArgs}",
-                "node" => $"--experimental-wasm-modules {wasmFile} {moduleArgs}",
-                _ => $"{wasmFile} {moduleArgs}"
-            };
+                try
+                {
+                    var chmodInfo = new ProcessStartInfo
+                    {
+                        FileName = "chmod",
+                        Arguments = $"+x {tempExecutable}",
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true
+                    };
+                    using var chmodProcess = Process.Start(chmodInfo);
+                    chmodProcess?.WaitForExit();
+                }
+                catch
+                {
+                    // Ignore chmod errors
+                }
+            }
+
+            if (verbose) System.Console.WriteLine($"      Wrote temporary executable: {tempExecutable}");
+
+            // Execute the native binary
+            if (verbose) System.Console.WriteLine("\n[3/3] Executing native program...");
+            if (verbose) System.Console.WriteLine(Separator);
 
             var startInfo = new ProcessStartInfo
             {
-                FileName = runtime,
-                Arguments = runtimeArgs,
+                FileName = tempExecutable,
+                Arguments = programArgs,
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -117,11 +174,11 @@ class Run : Command
             using var process = Process.Start(startInfo);
             if (process == null)
             {
-                System.Console.WriteLine($"Error: Failed to start runtime '{runtime}'.");
+                System.Console.WriteLine("Error: Failed to start executable.");
                 return;
             }
 
-            // Forward output
+            // Forward output in real-time
             process.OutputDataReceived += (sender, e) =>
             {
                 if (e.Data != null)
@@ -141,20 +198,37 @@ class Run : Command
 
             if (verbose)
             {
-                System.Console.WriteLine();
-                System.Console.WriteLine("=".PadRight(60, '='));
+                System.Console.WriteLine(Separator);
                 System.Console.WriteLine($"Process exited with code: {process.ExitCode}");
-                System.Console.WriteLine("=".PadRight(60, '='));
+                System.Console.WriteLine(Separator);
+            }
+
+            // Clean up temporary file
+            if (!keepTemp)
+            {
+                try
+                {
+                    File.Delete(tempExecutable);
+                    if (verbose) System.Console.WriteLine($"\nCleaned up temporary file: {tempExecutable}");
+                }
+                catch
+                {
+                    // Ignore cleanup errors
+                }
+            }
+            else if (verbose)
+            {
+                System.Console.WriteLine($"\nKept temporary file: {tempExecutable}");
             }
 
             if (process.ExitCode != 0)
             {
-                System.Console.WriteLine($"Warning: Process exited with non-zero code: {process.ExitCode}");
+                System.Console.WriteLine($"\nWarning: Program exited with code: {process.ExitCode}");
             }
         }
         catch (Exception ex)
         {
-            System.Console.WriteLine($"Error: Failed to run WebAssembly module - {ex.Message}");
+            System.Console.WriteLine($"Error: Failed to run program - {ex.Message}");
             if (verbose)
             {
                 System.Console.WriteLine("\nStack trace:");
@@ -163,29 +237,16 @@ class Run : Command
         }
     }
 
-    private bool IsRuntimeAvailable(string runtime)
+    private string GetArchitectureDisplayName(string architecture)
     {
-        try
+        return architecture.ToLower() switch
         {
-            var startInfo = new ProcessStartInfo
-            {
-                FileName = runtime,
-                Arguments = "--version",
-                UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
-            };
-
-            using var process = Process.Start(startInfo);
-            if (process == null)
-                return false;
-
-            process.WaitForExit();
-            return process.ExitCode == 0;
-        }
-        catch
-        {
-            return false;
-        }
+            "x86_64" => "x86-64",
+            "x86_32" => "x86-32",
+            "x86_16" => "x86-16",
+            "arm64" => "ARM64",
+            "arm32" => "ARM32",
+            _ => architecture.ToUpper()
+        };
     }
 }

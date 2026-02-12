@@ -112,9 +112,9 @@ Verified AST
       ↓
 WebAssembly Text (WAT)
       ↓
-[Optional: BADGER]
+[BADGER Assembly]
       ↓
-Native Assembly (x86, ARM, etc.)
+Native Executable (x86-64, ARM, etc.)
 ```
 
 ## Compilation Pipeline
