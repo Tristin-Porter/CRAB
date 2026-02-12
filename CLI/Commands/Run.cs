@@ -1,5 +1,6 @@
 using System.IO;
 using System.Diagnostics;
+using Badger;
 
 namespace CRAB;
 
@@ -45,11 +46,15 @@ class Run : Command
         }
         else if (Directory.Exists(inputPath))
         {
-            // Look for output.wasm in bin directory
-            watFile = Path.Combine(inputPath, "bin", "output.wasm");
+            // Look for output.wat or output.wasm in bin directory
+            watFile = Path.Combine(inputPath, "bin", "output.wat");
             if (!File.Exists(watFile))
             {
-                System.Console.WriteLine($"Error: No compiled output found at {watFile}");
+                watFile = Path.Combine(inputPath, "bin", "output.wasm");
+            }
+            if (!File.Exists(watFile))
+            {
+                System.Console.WriteLine($"Error: No compiled output found in bin directory");
                 System.Console.WriteLine("Hint: Run 'build' first to compile the project.");
                 return;
             }
@@ -104,7 +109,7 @@ class Run : Command
             byte[] nativeBinary;
             try
             {
-                nativeBinary = Badger.BadgerCompiler.Compile(watContent, architecture, format);
+                nativeBinary = BadgerCompiler.Compile(watContent, architecture, format);
             }
             catch (Exception badgerEx)
             {
@@ -121,9 +126,11 @@ class Run : Command
 
             // Write temporary executable
             string tempExecutable = Path.GetTempFileName();
-            if (format == "pe" || architecture.StartsWith("x86"))
+            
+            // Determine file extension based on format and OS
+            if (format == "pe" || (Environment.OSVersion.Platform == PlatformID.Win32NT))
             {
-                // Windows PE or x86 executable
+                // Windows PE executable
                 tempExecutable = Path.ChangeExtension(tempExecutable, ".exe");
             }
             

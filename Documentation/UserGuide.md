@@ -140,7 +140,7 @@ crab run Program.wat --arch x86_64
 ```
 
 Flags:
-- `--arch <name>` - Target architecture (x86_64, x86_32, arm64, arm32)
+- `--arch <name>` - Target architecture (x86_64, x86_32, x86_16, arm64, arm32)
 - `--format <fmt>` - Output format (native, pe)
 
 ### `crab help`
