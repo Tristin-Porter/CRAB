@@ -476,4 +476,4 @@ If you use CRAB in your research, please cite:
 
 **CRAB**: Write C#. Compile to WASM. Run anywhere. With mathematical safety guarantees.
 
-*Made with ❤️ by Tristin Porter*
+*Made by Tristin Porter*
