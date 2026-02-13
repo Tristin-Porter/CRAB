@@ -5,7 +5,7 @@ using CDTk;
 /// Defines the complete syntax tree structure for C# programs.
 /// Covers all C# language features including latest C# 13 additions.
 /// </summary>
-class Rules : RuleSet
+public class Rules : RuleSet
 {
     // ============================================================
     // COMPILATION UNIT - Top Level
