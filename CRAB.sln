@@ -1,9 +1,13 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36301.6 d17.14
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11312.210 d18.3
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CRAB", "CRAB.csproj", "{7479FA3A-EC7B-1F5D-752E-D5AF27F00F65}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CDTk", "Dependencies\CDTk\CDTk.csproj", "{0B8D63CF-D1D8-AEE9-0D34-CDD0B01D0697}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Badger", "Dependencies\BADGER\Badger.csproj", "{E46A5E4F-DE3E-7D60-8FC8-850040D6593C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +19,14 @@ Global
 		{7479FA3A-EC7B-1F5D-752E-D5AF27F00F65}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7479FA3A-EC7B-1F5D-752E-D5AF27F00F65}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7479FA3A-EC7B-1F5D-752E-D5AF27F00F65}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0B8D63CF-D1D8-AEE9-0D34-CDD0B01D0697}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0B8D63CF-D1D8-AEE9-0D34-CDD0B01D0697}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0B8D63CF-D1D8-AEE9-0D34-CDD0B01D0697}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0B8D63CF-D1D8-AEE9-0D34-CDD0B01D0697}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E46A5E4F-DE3E-7D60-8FC8-850040D6593C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E46A5E4F-DE3E-7D60-8FC8-850040D6593C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E46A5E4F-DE3E-7D60-8FC8-850040D6593C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E46A5E4F-DE3E-7D60-8FC8-850040D6593C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

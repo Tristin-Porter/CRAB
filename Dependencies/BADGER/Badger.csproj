@@ -15,4 +15,8 @@
       <Folder Include="Containers\" />
     </ItemGroup>
 
+    <ItemGroup>
+      <ProjectReference Include="..\CDTk\CDTk.csproj" />
+    </ItemGroup>
+
 </Project>
