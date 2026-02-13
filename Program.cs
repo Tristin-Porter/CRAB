@@ -43,6 +43,7 @@ class Program
             .Register(new Compile())
             .Register(new Build())
             .Register(new Run())
+            .Register(new Test())
             .Register(new Help());
 
         // If command-line arguments are provided, execute directly (non-interactive mode)
