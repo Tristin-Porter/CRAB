@@ -11,7 +11,9 @@
     <!-- Exclude test files from compilation -->
     <Compile Remove="Dependencies\**" />
     <Compile Remove="Testing/**/*.cs" />
+    <Compile Remove="TestDebug/**/*.cs" />
     <None Include="Testing/**/*.cs" />
+    <None Include="TestDebug/**/*.cs" />
   </ItemGroup>
 
   <ItemGroup>

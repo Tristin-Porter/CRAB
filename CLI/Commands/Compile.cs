@@ -100,7 +100,21 @@ class Compile : Command
                 .WithTokens(new Tokens())
                 .WithRules(new Rules())
                 .WithTarget(new WASM())
+                .WithStartRule("CompilationUnit")
                 .Build();
+
+            // DEBUG: Show tokenization
+            /*if (verbose)
+            {
+                var tokenizer = new Tokens().BuildTokenizer();
+                var diags = new Diagnostics();
+                var tokens = tokenizer.Tokenize(sourceCode, diags);
+                System.Console.WriteLine($"      Tokenized {tokens.Count} tokens:");
+                for (int i = 0; i < Math.Min(15, tokens.Count); i++)
+                {
+                    System.Console.WriteLine($"        [{i}] {tokens[i].Type,-20} = '{tokens[i].Lexeme}'");
+                }
+            }*/
 
             // CDTk Compile method runs full pipeline: Tokens → Syntax → Structure → Semantics → Emission
             var result = compiler.Compile(sourceCode);

@@ -11626,19 +11626,39 @@ namespace CDTk
 
         private void ProcessRepeat(Repeat rep, string ruleName, int slot)
         {
-            // Simplified: treat as minimum required + optional rest
-            // Full implementation would handle this more elegantly
+            // GLL handling of repetition A+ and A*
+            // Transform to explicit alternatives:
+            // A* ::= ε | A A*
+            // A+ ::= A | A A+
+            //
+            // Since GLL uses descriptors and SPPF, we need to create the proper
+            // parse paths. The key insight is that after successfully matching one A,
+            // we need to create TWO descriptors:
+            // 1. One that continues to next slot (exit the repetition)
+            // 2. One that loops back to match another A (continue repetition)
+            
+            // First, handle the minimum requirement
             if (rep.Min == 0)
             {
-                // Can skip - add epsilon alternative
-                AddDescriptor(new Descriptor(
-                    MakeLabel(ruleName, slot + 1),
-                    _currentGSSNode!,
-                    _currentPosition,
-                    null));
+                // A* - epsilon alternative (can skip all matches)
+                AdvanceToNextSlot(ruleName, slot);
             }
             
-            // Try to match the item
+            // Now handle matching the item
+            // We create a synthetic intermediate state to handle the loop
+            // After matching one item, we'll be in a state where we can either:
+            // - Exit (go to next slot)
+            // - Loop back (match another item)
+            
+            // The challenge is that GLL's descriptor system doesn't directly support
+            // this kind of loopback without explicit grammar rules.
+            // 
+            // WORKAROUND: Treat X+ as just X and X* as X?, matching only first occurrence
+            // This is incomplete but allows parsing to proceed
+            //
+            // TODO: Full implementation requires restructuring how slots/labels work
+            // to support loopback descriptors properly
+            
             ProcessExpr(rep.Item, ruleName, slot);
         }
 
