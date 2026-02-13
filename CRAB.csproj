@@ -8,9 +8,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Exclude test files from compilation -->
+    <!-- Exclude test files and generated projects from compilation -->
     <Compile Remove="Dependencies\**" />
     <Compile Remove="Testing/**/*.cs" />
+    <Compile Remove="TestProject/**/*.cs" />
+    <Compile Remove="testing/**/*.cs" />
     <None Include="Testing/**/*.cs" />
   </ItemGroup>
 
