@@ -82,12 +82,17 @@ class Test : Command
 
             buildCommand.Execute(Array.Empty<string>(), buildFlags);
 
+            // Check for compiled output (wasm or wat)
             string outputFile = Path.Combine(projectPath, "bin", "output.wasm");
             if (!File.Exists(outputFile))
             {
-                System.Console.WriteLine($"Error: Build failed - output file not found.");
-                CleanupProject(projectPath, keepProject, verbose);
-                return;
+                outputFile = Path.Combine(projectPath, "bin", "output.wat");
+                if (!File.Exists(outputFile))
+                {
+                    System.Console.WriteLine($"Error: Build failed - output file not found.");
+                    CleanupProject(projectPath, keepProject, verbose);
+                    return;
+                }
             }
 
             if (verbose) System.Console.WriteLine();
@@ -105,6 +110,7 @@ class Test : Command
             if (verbose)
                 runFlags["verbose"] = null;
 
+            // Pass arch and format flags to Run command for BADGER compilation
             if (flags.TryGetValue("arch", out var arch))
                 runFlags["arch"] = arch;
 
