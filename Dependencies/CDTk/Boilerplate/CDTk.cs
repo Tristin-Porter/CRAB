@@ -8569,7 +8569,7 @@ namespace CDTk
     /// </summary>
     public sealed class __Ast
     {
-        internal AstNode Root { get; }
+        public AstNode Root { get; }
         
         internal __Ast(AstNode root)
         {
