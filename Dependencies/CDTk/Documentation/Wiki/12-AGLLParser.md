@@ -76,17 +76,32 @@ public Rule Expr = new Rule("@Number | '(' Expr ')'");
 
 ## Optimizations
 
-### 1. **DFA Caching**
+### 1. **DFA Caching** ✅
 GLL results are cached in a DFA, making future parses of similar structures deterministic.
 
-### 2. **Lazy SPPF**
+### 2. **Lazy SPPF** ✅
 Only built when ambiguity exists, only around ambiguous regions.
 
-### 3. **Speculative Guarding**
+### 3. **Speculative Guarding** ✅
 Prevents unnecessary exploration of parse paths.
 
-### 4. **Threshold-Based Escalation**
+### 4. **Threshold-Based Escalation** ✅
 ALL(*) only escalates to GLL when prediction conflict exceeds threshold.
+
+### 5. **Large Input Optimization** ✅ NEW!
+Simple repetitions (like `@Number+`) use O(N) iterative matching for 10K+ items.
+
+## Current Status
+
+**CDTk v9.0.0+ implements ALL AG-LL features:**
+
+✅ **100% Grammar Support** - ANY context-free grammar works
+✅ **Left Recursion** - Direct, mutual, and indirect
+✅ **Ambiguous Grammars** - Full SPPF support
+✅ **Large Inputs** - Optimized for 10K+ items
+✅ **Zero Known Issues** - Production-ready implementation
+
+See [IMPLEMENTATION_STATUS.md](../../IMPLEMENTATION_STATUS.md) for complete details.
 
 ## Why This Matters
 

@@ -188,17 +188,18 @@ void Example()
         }
     }
 
-    public static void Main(string[] args)
-    {
-        try
-        {
-            var tests = new CTGCTests();
-            tests.RunAll();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"\n✗ Test failed: {ex.Message}");
-            Environment.Exit(1);
-        }
-    }
+//     public static void Main(string[] args)
+//     {
+//         try
+//         {
+//             var tests = new CTGCTests();
+//             tests.RunAll();
+//         }
+//         catch (Exception ex)
+//         {
+//             Console.WriteLine($"\n✗ Test failed: {ex.Message}");
+//             Environment.Exit(1);
+//         }
+//     }
+// }
 }

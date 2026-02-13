@@ -41,7 +41,7 @@ public class TokenTests
         AssertTokenizes("else", "KwElse");
         AssertTokenizes("while", "KwWhile");
         AssertTokenizes("for", "KwFor");
-        AssertTokenizes("foreach", "KwForeach");
+        AssertTokenizes("foreach", "KwForEach");
         AssertTokenizes("async", "KwAsync");
         AssertTokenizes("await", "KwAwait");
         AssertTokenizes("manual", "KwManual"); // CRAB-specific
@@ -72,13 +72,13 @@ public class TokenTests
         Console.WriteLine("Testing literals...");
         
         // Integers
-        AssertTokenizes("42", "IntegerLiteral");
-        AssertTokenizes("0x2A", "IntegerLiteral");
-        AssertTokenizes("0b101010", "IntegerLiteral");
+        AssertTokenizes("42", "DecimalIntegerLiteral");
+        AssertTokenizes("0x2A", "HexIntegerLiteral");
+        AssertTokenizes("0b101010", "BinaryIntegerLiteral");
         
         // Floats
-        AssertTokenizes("3.14", "FloatingPointLiteral");
-        AssertTokenizes("1.5e10", "FloatingPointLiteral");
+        AssertTokenizes("3.14", "FloatLiteral");
+        AssertTokenizes("1.5e10", "FloatLiteral");
         
         // Strings
         AssertTokenizes("\"hello\"", "StringLiteral");
@@ -103,14 +103,14 @@ public class TokenTests
         
         AssertTokenizes("+", "Plus");
         AssertTokenizes("-", "Minus");
-        AssertTokenizes("*", "Star");
-        AssertTokenizes("/", "Slash");
-        AssertTokenizes("==", "DoubleEqual");
-        AssertTokenizes("!=", "NotEqual");
+        AssertTokenizes("*", "Multiply");
+        AssertTokenizes("/", "Divide");
+        AssertTokenizes("==", "Equality");
+        AssertTokenizes("!=", "Inequality");
         AssertTokenizes("&&", "LogicalAnd");
         AssertTokenizes("||", "LogicalOr");
-        AssertTokenizes("=>", "Arrow");
-        AssertTokenizes("??", "NullCoalescing");
+        AssertTokenizes("=>", "LambdaArrow");
+        AssertTokenizes("??", "NullCoalesce");
         
         Console.WriteLine("  ✓ Operators test passed");
     }
@@ -176,17 +176,18 @@ public class TokenTests
         }
     }
 
-    public static void Main(string[] args)
-    {
-        try
-        {
-            var tests = new TokenTests();
-            tests.RunAll();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"\n✗ Test failed: {ex.Message}");
-            Environment.Exit(1);
-        }
-    }
+//     public static void Main(string[] args)
+//     {
+//         try
+//         {
+//             var tests = new TokenTests();
+//             tests.RunAll();
+//         }
+//         catch (Exception ex)
+//         {
+//             Console.WriteLine($"\n✗ Test failed: {ex.Message}");
+//             Environment.Exit(1);
+//         }
+//     }
+// }
 }

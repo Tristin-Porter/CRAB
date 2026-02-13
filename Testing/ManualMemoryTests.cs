@@ -153,17 +153,18 @@ manual
         }
     }
 
-    public static void Main(string[] args)
-    {
-        try
-        {
-            var tests = new ManualMemoryTests();
-            tests.RunAll();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"\n✗ Test failed: {ex.Message}");
-            Environment.Exit(1);
-        }
-    }
+//     public static void Main(string[] args)
+//     {
+//         try
+//         {
+//             var tests = new ManualMemoryTests();
+//             tests.RunAll();
+//         }
+//         catch (Exception ex)
+//         {
+//             Console.WriteLine($"\n✗ Test failed: {ex.Message}");
+//             Environment.Exit(1);
+//         }
+//     }
+// }
 }

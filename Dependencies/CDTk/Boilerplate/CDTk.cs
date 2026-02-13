@@ -12,8 +12,6 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 
-[assembly: InternalsVisibleTo("CRAB")]
-
 namespace CDTk
 {
     // ============================================================
@@ -4355,6 +4353,7 @@ namespace CDTk
         private Dictionary<string, RuleDef>? _rulesByName;
         private HashSet<string>? _ruleNames;
         private Dictionary<string, Expr>? _compiled;
+        private Dictionary<string, Expr>? _compiledOriginal;  // Original grammar before left-recursion transformation (for GLL)
         private Dictionary<string, bool>? _nullable;
         
         // Left recursion tracking
@@ -4660,6 +4659,11 @@ namespace CDTk
                 _nullable = GrammarAnalysis.ComputeNullable(_compiled, _ruleNames);
 
                 // AUTOMATIC LEFT RECURSION ELIMINATION
+                // Preserve original grammar for GLL (which handles left recursion and ambiguity natively)
+                // AG-LL spec: GLL supports ambiguity and left recursion via GSS and SPPF
+                // The transformation is only for ALL(*) predictive parsing optimization
+                _compiledOriginal = new Dictionary<string, Expr>(_compiled, StringComparer.Ordinal);
+                
                 // Transform left-recursive rules internally
                 _lrTransformations = LeftRecursionEliminator.EliminateLeftRecursion(
                     _compiled, _ruleNames, _nullable, _rulesByName);
@@ -4783,15 +4787,16 @@ namespace CDTk
                 var span = _rulesByName![cycle[0]].DefinitionSpan;
                 var cycleStr = string.Join(" -> ", cycle);
 
-                // Use automatic refactor suggestions
-                var ruleName = cycle[0];
-                var pattern = _rulesByName[ruleName].Pattern;
-                var refactorSuggestion = LeftRecursionRefactor.SuggestTransformation(ruleName, pattern);
-
-                diags.Add(Stage.SyntaxAnalysis, DiagnosticLevel.Error,
+                // AG-LL spec (ag-ll-spec.txt lines 43-49): GLL handles left recursion natively
+                // Direct left recursion is eliminated for ALL(*) performance, but GLL can handle it
+                // For mutual/indirect left recursion that wasn't eliminated, GLL will handle it at runtime
+                // Changed from Error to Info - this is informational, not a blocker
+                diags.Add(Stage.SyntaxAnalysis, DiagnosticLevel.Info,
                     $"Left recursion cycle detected: {cycleStr}\n" +
-                    $"  Problem: Left recursion causes infinite loops in recursive descent parsers.\n\n" +
-                    refactorSuggestion,
+                    $"  Note: This grammar uses left recursion which is fully supported by the AG-LL parser.\n" +
+                    $"  The GLL component will handle this pattern natively during parsing.\n" +
+                    $"  Direct left recursion is automatically eliminated for better ALL(*) performance,\n" +
+                    $"  but mutual/indirect left recursion is handled by GLL without transformation.",
                     span);
             }
         }
@@ -6391,6 +6396,11 @@ namespace CDTk
             var nullable = GrammarAnalysis.ComputeNullable(compiled, ruleNames);
 
             // AUTOMATIC LEFT RECURSION ELIMINATION
+            // Preserve original grammar for GLL (which can handle left recursion natively)
+            // AG-LL spec: GLL supports ambiguity and left recursion via GSS and SPPF
+            // The transformation is only for ALL(*) optimization
+            var compiledOriginal = new Dictionary<string, Expr>(compiled, StringComparer.Ordinal);
+            
             // Build temporary RuleDef map for transformation
             var tempRulesByName = rules.ToDictionary(r => r.Name, r => 
                 new RuleDef(r.Name, r.Pattern, r.DefinitionSpan), StringComparer.Ordinal);
@@ -6412,8 +6422,13 @@ namespace CDTk
                 if (cycle.Any(LeftRecursionEliminator.IsSyntheticRule))
                     continue;
 
-                diags.Add(Stage.SyntaxAnalysis, DiagnosticLevel.Error,
-                    $"Left recursion cycle detected: {string.Join(" -> ", cycle)}",
+                // AG-LL spec (ag-ll-spec.txt lines 43-49): GLL handles left recursion natively
+                // Direct left recursion is eliminated for ALL(*) performance, but GLL can handle it
+                // For mutual/indirect left recursion that wasn't eliminated, GLL will handle it at runtime
+                // Changed from Error to Info - this is informational, not a blocker
+                diags.Add(Stage.SyntaxAnalysis, DiagnosticLevel.Info,
+                    $"Left recursion cycle detected: {string.Join(" -> ", cycle)}\n" +
+                    $"  Note: This is fully supported by the AG-LL parser's GLL component.",
                     rules.First(r => r.Name == cycle[0]).DefinitionSpan);
             }
 
@@ -8137,9 +8152,11 @@ namespace CDTk
                     var f = fields[i];
                     if (f.FieldType == typeof(Token))
                     {
-                        var t = (Token?)f.GetValue(this);
+                        var t = f.GetValue(this) as Token;
                         if (t != null)
+                        {
                             Console.WriteLine($"  [{i}] {f.Name}: {t.Pattern}");
+                        }
                     }
                 }
             }
@@ -11318,7 +11335,25 @@ namespace CDTk
         /// Returns the root SPPF node if successful, null otherwise.
         /// </summary>
         // GLL parsing limits
-        private const int MAX_GLL_ITERATIONS = 1000;  // Maximum iterations to prevent infinite loops
+        // Note: Recursive patterns (e.g., @Number ('+' @Number)*) create O(N^2) descriptors
+        // where N is the input size. For large inputs with repeat patterns:
+        // - 100 items: ~5,000 descriptors
+        // - 1,000 items: ~50,000-200,000 descriptors
+        // - 10,000 items: millions of descriptors (not practical with current implementation)
+        // The limit should accommodate typical real-world use cases while preventing hangs.
+        // For very large inputs (>5000 items), consider chunking or simplifying the grammar.
+        private const int MAX_GLL_ITERATIONS = 500_000;  // Maximum iterations to prevent infinite loops/hangs
+
+        /// <summary>
+        /// Check if a rule name represents a synthetic repeat rule created by ProcessRepeat.
+        /// These rules have the form __ParentRule_rep_N.
+        /// </summary>
+        private static bool IsSyntheticRepeatRule(string ruleName)
+        {
+            return ruleName != null && 
+                   ruleName.StartsWith("__") && 
+                   ruleName.Contains("_rep_");
+        }
 
         public SPPFNode? Parse(string startRule)
         {
@@ -11367,10 +11402,19 @@ namespace CDTk
             // Debug: list all SPPF nodes if result is null
             if (result == null)
             {
-                var nodeList = string.Join(", ", _sppfNodes.Keys.Select(k => $"{k.Item1}[{k.Item2}..{k.Item3}]"));
+                var nodeList = string.Join(", ", _sppfNodes.Keys
+                    .OrderBy(k => k.Item1)
+                    .ThenBy(k => k.Item2)
+                    .Select(k => $"{k.Item1}[{k.Item2}..{k.Item3}]"));
+                var gssNodeList = string.Join(", ", _gssNodes.Keys
+                    .OrderBy(k => k.Item1)
+                    .ThenBy(k => k.Item2)
+                    .Select(k => $"{k.Item1}@{k.Item2}"));
                 _diagnostics.Add(Stage.SyntaxAnalysis, DiagnosticLevel.Info,
                     $"GLL: No SPPF node found for '{startRule}' spanning [0..{_tokens.Count}]. " +
-                    $"Available nodes: {nodeList}. Processed {iterationCount} descriptors.",
+                    $"Processed {iterationCount} descriptors.\n" +
+                    $"SPPF nodes: {nodeList}\n" +
+                    $"GSS nodes: {gssNodeList}",
                     SourceSpan.Unknown);
             }
             
@@ -11434,7 +11478,37 @@ namespace CDTk
                     }
                 }
                 
-                Pop(symbolNode);
+                // CRITICAL FIX: Pop from the entry GSS node (slot 0), not from the current GSS node.
+                // In GLL, when a rule completes at a non-entry slot (created as a return continuation),
+                // the current GSS node is a continuation point that was created by Process Nonterminal.
+                // These continuation nodes don't have outgoing edges - they are the TARGET of edges.
+                // We need to pop from the entry node (slot 0), which has the outgoing edges to continuations.
+                // 
+                // This applies to ALL rules when completing at non-entry slots, not just synthetic rules.
+                var entryLabel = MakeLabel(labelRule, 0);
+                var entryLabelStr = GetStringFromLabel(entryLabel);
+                var entryKey = (entryLabelStr, startExtent);
+                
+                if (_gssNodes.TryGetValue(entryKey, out var entryGSS))
+                {
+                    // Pop from the entry GSS node, which has the correct edges
+                    var savedGSS = _currentGSSNode;
+                    try
+                    {
+                        _currentGSSNode = entryGSS;
+                        Pop(symbolNode);
+                    }
+                    finally
+                    {
+                        _currentGSSNode = savedGSS;
+                    }
+                }
+                else
+                {
+                    // Fallback: pop from current GSS node
+                    // This handles cases where there is no entry node (e.g., start rule)
+                    Pop(symbolNode);
+                }
                 return;
             }
 
@@ -11475,7 +11549,8 @@ namespace CDTk
                     break;
 
                 case Repeat rep:
-                    ProcessRepeat(rep, ruleName, slot);
+                    // Optimization for large inputs: handle simple repetitions iteratively when possible
+                    ProcessRepeatOptimized(rep, ruleName, slot);
                     break;
 
                 default:
@@ -11505,7 +11580,9 @@ namespace CDTk
                 
                 // Advance to next grammar slot
                 _currentPosition++;
-                _currentSPPFNode = sppfNode;
+                
+                // Combine with previous SPPF node (for sequences)
+                _currentSPPFNode = CombineSPPFNodes(_currentSPPFNode, sppfNode);
                 
                 // Continue with next slot
                 AdvanceToNextSlot(ruleName, slot);
@@ -11520,19 +11597,29 @@ namespace CDTk
                 return;
             }
 
-            // Create new GSS node for return point
+            // AG-LL spec (.github/agents/ag-ll-spec.txt lines 43-49, 108-113):
+            // GLL handles recursion via GSS cycles, enabling efficient exploration of recursive patterns
+            // Create descriptor for nonterminal entry
+            var ntLabel = MakeLabel(ntName, 0);
+            var ntLabelStr = GetStringFromLabel(ntLabel);
+            var ntGSS = GetOrCreateGSSNode(ntLabelStr, _currentPosition);
+
+            // Create return continuation GSS node at parent's input position
+            // The returnGSS must use parent's InputPosition because when parent completes,
+            // it calculates SPPF startExtent from GSS.InputPosition. Wrong position = wrong extent.
+            // (ntGSS uses _currentPosition since that's where nonterminal parsing begins)
             var returnLabel = MakeLabel(ruleName, slot + 1);
             var returnLabelStr = GetStringFromLabel(returnLabel);
-            var returnGSS = GetOrCreateGSSNode(returnLabelStr, _currentPosition);
+            var returnGSS = GetOrCreateGSSNode(returnLabelStr, _currentGSSNode!.InputPosition);
 
-            // Check if we've already called this nonterminal from this GSS node
-            bool edgeExists = _currentGSSNode!.Edges.Any(e => 
+            // Add edge from nonterminal GSS to return GSS
+            bool edgeExists = ntGSS.Edges.Any(e => 
                 e.Target == returnGSS && e.SPPFNode == _currentSPPFNode);
 
             if (!edgeExists)
             {
-                // Add edge from current GSS to return GSS
-                _currentGSSNode.Edges.Add(new GSSEdge(returnGSS, _currentSPPFNode));
+                // Add edge: when ntName completes, continue at returnGSS
+                ntGSS.Edges.Add(new GSSEdge(returnGSS, _currentSPPFNode));
             }
 
             // Check for existing SPPF node for this nonterminal at this position
@@ -11544,10 +11631,7 @@ namespace CDTk
             }
             else
             {
-                // Create descriptor for nonterminal entry
-                var ntLabel = MakeLabel(ntName, 0);
-                var ntLabelStr = GetStringFromLabel(ntLabel);
-                var ntGSS = GetOrCreateGSSNode(ntLabelStr, _currentPosition);
+                // Start fresh parse of nonterminal
                 AddDescriptor(new Descriptor(ntLabel, ntGSS, _currentPosition, null));
             }
         }
@@ -11568,40 +11652,35 @@ namespace CDTk
 
         private void ProcessChoice(Choice choice, string ruleName, int slot)
         {
-            // PHASE 1 FIX: True parallel GLL exploration
-            // Spec reference: NewParser.txt, "GLL Summary & Takeaways" (line 63-64)
+            // AG-LL spec (.github/agents/ag-ll-spec.txt lines 43-49):
             // "GLL explores all viable alternatives in parallel using descriptors and a graph-structured stack"
-            // "Each descriptor represents a unique parsing state, and the worklist ensures 
-            //  that no state is processed more than once"
+            //
+            // For a choice, we need to explore each alternative starting from the current position.
+            // When an alternative completes, it should have consumed input and built an SPPF node.
+            // That SPPF node becomes the result of this choice, and we continue to the next slot.
+            //
+            // The key is that each alternative is explored independently via the descriptor worklist,
+            // and they all share the same continuation point (the next slot in the parent rule).
             
-            // For each alternative in the choice, we process it directly
-            // While true parallel exploration via descriptors is ideal, we need to ensure
-            // all alternatives are explored from the same starting state
-            // The key improvement over the old version is that we properly handle GSS sharing
-            
-            // Save starting state (all alternatives start from here)
-            var startPosition = _currentPosition;
-            var startGSS = _currentGSSNode;
-            var startSPPF = _currentSPPFNode;
-            
+            // For each alternative in the choice
             for (int altIndex = 0; altIndex < choice.Alternatives.Count; altIndex++)
             {
                 var alt = choice.Alternatives[altIndex];
                 
-                // Restore starting state for this alternative
-                _currentPosition = startPosition;
-                _currentGSSNode = startGSS;
-                _currentSPPFNode = startSPPF;
+                // Create a synthetic rule for this alternative so it has its own slot space
+                // This prevents slot conflicts when the alternative contains sequences
+                // Don't include position in the name - reuse the same synthetic rule across recursive calls
+                var altRuleName = $"__{ruleName}_choice{slot}_alt{altIndex}";
+                if (!_compiled.ContainsKey(altRuleName))
+                {
+                    _compiled[altRuleName] = alt;
+                    _ruleNames.Add(altRuleName);
+                }
                 
-                // Process this alternative
-                // Each alternative explores independently from the same starting state
-                // This maintains the shared GSS node (enabling prefix reuse across alternatives)
-                ProcessExpr(alt, ruleName, slot);
+                // Process this alternative as a nonterminal
+                // This ensures proper GSS/SPPF handling
+                ProcessNonTerminal(altRuleName, ruleName, slot);
             }
-            
-            // Note: All alternatives have been explored. The SPPF will contain
-            // packed nodes representing all viable parses (if multiple exist)
-            // The GSS is shared across alternatives, enabling efficient exploration
         }
 
         private void ProcessNamed(Named named, string ruleName, int slot)
@@ -11619,28 +11698,248 @@ namespace CDTk
                 MakeLabel(ruleName, slot + 1),
                 _currentGSSNode!,
                 _currentPosition,
-                null)); // Epsilon has no SPPF node
-
+                _currentSPPFNode)); // Preserve accumulated SPPF node
+            
             // Content alternative
-            ProcessExpr(opt.Item, ruleName, slot);
+            // OPTIMIZATION: If the optional content is a NonTerminal, process it directly
+            // instead of creating a synthetic rule. This ensures proper GSS edge setup.
+            if (opt.Item is NonTerminal nt)
+            {
+                // Directly process the nonterminal with the parent rule as the return target
+                // ProcessNonTerminal will create the appropriate GSS structure
+                ProcessNonTerminal(nt.Name, ruleName, slot);
+            }
+            else
+            {
+                // For other expressions, create a synthetic rule as before
+                var optRuleName = $"__{ruleName}_opt_{slot}";
+                if (!_compiled.ContainsKey(optRuleName))
+                {
+                    _compiled[optRuleName] = opt.Item;
+                    _ruleNames.Add(optRuleName);
+                }
+                
+                // Create descriptor for the synthetic rule
+                var optLabel = MakeLabel(optRuleName, 0);
+                var optGSS = GetOrCreateGSSNode(GetStringFromLabel(optLabel), _currentPosition);
+                
+                // Create return continuation GSS node
+                // This should point to the next slot in the parent rule
+                // But it should maintain the same GSS structure as the parent (same position as parent start)
+                var returnLabel = MakeLabel(ruleName, slot + 1);
+                var returnGSS = GetOrCreateGSSNode(GetStringFromLabel(returnLabel), _currentGSSNode!.InputPosition);
+                
+                // Add edge from optGSS to returnGSS
+                bool edgeExists = optGSS.Edges.Any(e => 
+                    e.Target == returnGSS && e.SPPFNode == _currentSPPFNode);
+                if (!edgeExists)
+                {
+                    optGSS.Edges.Add(new GSSEdge(returnGSS, _currentSPPFNode));
+                }
+                
+                // Add descriptor to parse the synthetic rule
+                AddDescriptor(new Descriptor(optLabel, optGSS, _currentPosition, null));
+            }
         }
 
         private void ProcessRepeat(Repeat rep, string ruleName, int slot)
         {
-            // Simplified: treat as minimum required + optional rest
-            // Full implementation would handle this more elegantly
+            // AG-LL spec (.github/agents/ag-ll-spec.txt lines 43-49):
+            // GLL handles repetition (* and +) via recursive structures
+            // Create a synthetic rule for the repeat content
+            var repRuleName = $"__{ruleName}_rep_{slot}";
+            if (!_compiled.ContainsKey(repRuleName))
+            {
+                // For repeat, we need to handle the recursive structure
+                // Create: repRule ::= item repRule?
+                
+                // CRITICAL FIX: Flatten nested sequences to prevent slot navigation conflicts
+                // Slots track position within a rule. When an inner Sequence item calls AdvanceToNextSlot,
+                // it advances the OUTER rule's slot (same ruleName), skipping remaining inner items.
+                // Example: Pattern ('+' @Number)* creates Sequence(['+', @Number]) as rep.Item
+                // Without flattening: Sequence([Sequence(['+', @Number]), Optional(__rep)])
+                // With flattening:    Sequence(['+', @Number, Optional(__rep)])
+                // Flattening puts all items in same slot namespace, preventing skip-ahead bugs.
+                Expr recursiveExpr;
+                if (rep.Item is Sequence itemSeq)
+                {
+                    var items = new List<Expr>(itemSeq.Items);
+                    items.Add(new Optional(new NonTerminal(repRuleName)));
+                    recursiveExpr = new Sequence(items);
+                }
+                else
+                {
+                    // Not a sequence: standard recursive rule
+                    recursiveExpr = new Sequence(new[] { rep.Item, new Optional(new NonTerminal(repRuleName)) });
+                }
+                
+                _compiled[repRuleName] = recursiveExpr;
+                _ruleNames.Add(repRuleName);
+            }
+            
             if (rep.Min == 0)
             {
-                // Can skip - add epsilon alternative
+                // * allows zero occurrences - add epsilon alternative
                 AddDescriptor(new Descriptor(
                     MakeLabel(ruleName, slot + 1),
                     _currentGSSNode!,
                     _currentPosition,
-                    null));
+                    _currentSPPFNode));
             }
             
-            // Try to match the item
-            ProcessExpr(rep.Item, ruleName, slot);
+            // Content alternative: parse the synthetic recursive rule
+            var repLabel = MakeLabel(repRuleName, 0);
+            var repGSS = GetOrCreateGSSNode(GetStringFromLabel(repLabel), _currentPosition);
+            
+            // Create return continuation GSS node at parent's input position
+            // returnGSS uses parent's InputPosition for correct extent calculation (same as ProcessNonTerminal)
+            var returnLabel = MakeLabel(ruleName, slot + 1);
+            var returnGSS = GetOrCreateGSSNode(GetStringFromLabel(returnLabel), _currentGSSNode!.InputPosition);
+            
+            // Add edge from repGSS to returnGSS
+            bool edgeExists = repGSS.Edges.Any(e => 
+                e.Target == returnGSS && e.SPPFNode == _currentSPPFNode);
+            if (!edgeExists)
+            {
+                repGSS.Edges.Add(new GSSEdge(returnGSS, _currentSPPFNode));
+            }
+            
+            // Add descriptor to parse the synthetic rule
+            AddDescriptor(new Descriptor(repLabel, repGSS, _currentPosition, null));
+        }
+        
+        /// <summary>
+        /// Optimized repetition handler for simple patterns. Falls back to ProcessRepeat for complex cases.
+        /// For simple terminal or nonterminal repetitions, uses an iterative approach to avoid
+        /// O(N²) descriptor generation for N repetitions.
+        /// </summary>
+        private void ProcessRepeatOptimized(Repeat rep, string ruleName, int slot)
+        {
+            // Check if this is a simple pattern we can optimize
+            // Simple patterns: single terminal, single nonterminal, or simple sequence
+            bool isSimple = IsSimpleRepeatPattern(rep.Item);
+            
+            // Only use optimization for larger inputs (>100 tokens remaining)
+            // For small inputs or complex patterns, use regular recursive approach
+            int tokensRemaining = _tokens.Count - _currentPosition;
+            if (!isSimple || tokensRemaining < 100)
+            {
+                // Complex pattern or small input - use regular recursive approach
+                ProcessRepeat(rep, ruleName, slot);
+                return;
+            }
+            
+            // For simple patterns with many items, use optimized iterative matching
+            // This reduces O(N²) to O(N) for simple repetitions
+            var matches = new List<SPPFNode>();
+            int pos = _currentPosition;
+            int minMatches = rep.Min;
+            
+            // Match as many repetitions as possible
+            while (pos < _tokens.Count)
+            {
+                var savedPos = _currentPosition;
+                var savedSPPF = _currentSPPFNode;
+                _currentPosition = pos;
+                _currentSPPFNode = null;
+                
+                bool matched = TryMatchSimplePattern(rep.Item, out var matchNode);
+                
+                if (matched && matchNode != null)
+                {
+                    matches.Add(matchNode);
+                    pos = _currentPosition;
+                }
+                else
+                {
+                    _currentPosition = savedPos;
+                    _currentSPPFNode = savedSPPF;
+                    break;
+                }
+            }
+            
+            // Check if we matched enough
+            if (matches.Count < minMatches)
+            {
+                // Not enough matches - fail silently (no descriptor added)
+                return;
+            }
+            
+            // Build combined SPPF node for all matches
+            SPPFNode? combinedSPPF = null;
+            if (matches.Count > 0)
+            {
+                // Combine all matched nodes into a sequence-like structure
+                combinedSPPF = matches[0];
+                for (int i = 1; i < matches.Count; i++)
+                {
+                    combinedSPPF = CombineSPPFNodes(combinedSPPF, matches[i]);
+                }
+            }
+            
+            // Update position and SPPF, then continue to next slot
+            _currentPosition = pos;
+            _currentSPPFNode = combinedSPPF;
+            AdvanceToNextSlot(ruleName, slot);
+        }
+        
+        /// <summary>
+        /// Check if a pattern is simple enough for optimized iteration.
+        /// Simple patterns: single terminal type, single literal, or single nonterminal.
+        /// </summary>
+        private bool IsSimpleRepeatPattern(Expr expr)
+        {
+            return expr is TerminalType || expr is TerminalLiteral || expr is NonTerminal;
+        }
+        
+        /// <summary>
+        /// Try to match a simple pattern at the current position.
+        /// Returns true and sets matchNode if successful.
+        /// </summary>
+        private bool TryMatchSimplePattern(Expr expr, out SPPFNode? matchNode)
+        {
+            matchNode = null;
+            
+            if (_currentPosition >= _tokens.Count)
+                return false;
+            
+            switch (expr)
+            {
+                case TerminalType tt:
+                    var token = _tokens[_currentPosition];
+                    if (token.Type == tt.Type)
+                    {
+                        matchNode = GetOrCreateSPPFTerminal(token, _currentPosition);
+                        _currentPosition++;
+                        return true;
+                    }
+                    return false;
+                    
+                case TerminalLiteral tl:
+                    var tok = _tokens[_currentPosition];
+                    if (tok.Lexeme == tl.Literal)
+                    {
+                        matchNode = GetOrCreateSPPFTerminal(tok, _currentPosition);
+                        _currentPosition++;
+                        return true;
+                    }
+                    return false;
+                    
+                case NonTerminal nt:
+                    // For nonterminals, check if we have a cached result
+                    var existing = FindSPPFNode(nt.Name, _currentPosition, -1);
+                    if (existing != null)
+                    {
+                        matchNode = existing;
+                        _currentPosition = existing.RightExtent;
+                        return true;
+                    }
+                    // For uncached nonterminals, fall back to regular processing
+                    return false;
+                    
+                default:
+                    return false;
+            }
         }
 
         private void AdvanceToNextSlot(string ruleName, int currentSlot)
@@ -11961,9 +12260,9 @@ namespace CDTk
 
         // Lookahead buffer for adaptive prediction
         private int _currentPosition;
-#pragma warning disable CS0414 // Field assigned but never used - reserved for future adaptive lookahead limit
+        #pragma warning disable CS0414 // Field is assigned but never used - reserved for future adaptive lookahead limiting
         private int _maxLookahead;
-#pragma warning restore CS0414
+        #pragma warning restore CS0414
         private readonly List<TokenInstance> _lookaheadBuffer;
         
         // PHASE 1: Track last lookahead depth used for metrics
@@ -13007,8 +13306,132 @@ namespace CDTk
                     SourceSpan.Unknown);
             }
 
-            // Use first alternative
-            return Convert(symbol.Alternatives[0]);
+            // Check if this is a rule-level symbol
+            if (_rulesByName.TryGetValue(symbol.Symbol, out var rule))
+            {
+                // This is a rule symbol - create AST node with proper type
+                var contentNode = Convert(symbol.Alternatives[0]);
+                
+                // Determine the AST node type based on the rule's Returns
+                string nodeType = symbol.Symbol;
+                if (rule.Returns.Count > 0)
+                {
+                    // If the rule has Returns, use the first return type as the node type
+                    nodeType = rule.Returns[0].NodeType;
+                }
+                
+                // Create AST node for this rule
+                var astNode = _arena != null
+                    ? _arena.Allocate(nodeType)
+                    : new AstNode(nodeType);
+                
+                astNode.Span = new SourceSpan(
+                    symbol.LeftExtent,
+                    symbol.RightExtent - symbol.LeftExtent,
+                    0, 0
+                );
+                
+                // Extract fields from the content based on rule's Returns
+                if (contentNode != null)
+                {
+                    ExtractFields(astNode, contentNode, rule);
+                }
+                
+                return astNode;
+            }
+            else
+            {
+                // Internal symbol (like "_seq") - just convert the alternatives
+                return Convert(symbol.Alternatives[0]);
+            }
+        }
+        
+        private void ExtractFields(AstNode target, AstNode source, RuleDef rule)
+        {
+            // Flatten the sequence into a list of nodes
+            var items = FlattenSequence(source);
+            
+            // If the rule has Returns specifications, map children to named fields
+            if (rule.Returns.Count > 0)
+            {
+                // Extract field names from Returns
+                var fieldNames = new List<string>();
+                foreach (var ret in rule.Returns)
+                {
+                    foreach (var part in ret.Parts)
+                    {
+                        if (!string.IsNullOrEmpty(part))
+                        {
+                            fieldNames.Add(part);
+                        }
+                    }
+                }
+                
+                // Map items to fields
+                // For now, use a simple strategy: assign non-literal terminals to fields in order
+                var fieldIndex = 0;
+                foreach (var item in items)
+                {
+                    if (fieldIndex >= fieldNames.Count) break;
+                    
+                    // Skip literal terminals (they don't get assigned to fields)
+                    // Literals have lexeme that matches common operators
+                    var isLiteralOperator = item.Type == "Plus" || item.Type == "Minus" || 
+                                           item.Type == "Multiply" || item.Type == "Divide";
+                    var hasOperatorLexeme = item.Fields.TryGetValue("lexeme", out var lex) && 
+                                           (lex?.ToString() == "+" || lex?.ToString() == "-" || 
+                                            lex?.ToString() == "*" || lex?.ToString() == "/" ||
+                                            lex?.ToString() == "(" || lex?.ToString() == ")" ||
+                                            lex?.ToString() == "{" || lex?.ToString() == "}" ||
+                                            lex?.ToString() == "[" || lex?.ToString() == "]");
+                    
+                    if (isLiteralOperator || hasOperatorLexeme)
+                    {
+                        continue;
+                    }
+                    
+                    target.Fields[fieldNames[fieldIndex]] = item;
+                    fieldIndex++;
+                }
+            }
+            else
+            {
+                // No Returns - just copy fields if they exist
+                foreach (var field in source.Fields)
+                {
+                    target.Fields[field.Key] = field.Value;
+                }
+            }
+        }
+        
+        private List<AstNode> FlattenSequence(AstNode node)
+        {
+            var result = new List<AstNode>();
+            var stack = new Stack<AstNode>();
+            stack.Push(node);
+            
+            while (stack.Count > 0)
+            {
+                var current = stack.Pop();
+                
+                if (current.Type != "Sequence")
+                {
+                    result.Add(current);
+                    continue;
+                }
+                
+                // Process sequence children (right first so left is processed first)
+                if (current.Fields.TryGetValue("right", out var right) && right is AstNode rightNode)
+                {
+                    stack.Push(rightNode);
+                }
+                if (current.Fields.TryGetValue("left", out var left) && left is AstNode leftNode)
+                {
+                    stack.Push(leftNode);
+                }
+            }
+            
+            return result;
         }
 
         private AstNode? ConvertPacked(SPPFPackedNode packed)
@@ -13083,6 +13506,10 @@ namespace CDTk
             var compiled = syntaxAnalysis.GetType()
                 .GetField("_compiled", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
                 ?.GetValue(syntaxAnalysis) as Dictionary<string, Expr>;
+            
+            var compiledOriginal = syntaxAnalysis.GetType()
+                .GetField("_compiledOriginal", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+                ?.GetValue(syntaxAnalysis) as Dictionary<string, Expr>;
 
             var ruleNames = syntaxAnalysis.GetType()
                 .GetField("_ruleNames", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
@@ -13129,7 +13556,10 @@ namespace CDTk
             }
 
             // Create AG-LL engines
-            var gllEngine = new GLLEngine(compiled, ruleNames, tokens, diags);
+            // GLL uses the original untransformed grammar for full generality (ambiguity, left recursion)
+            // ALL(*) uses the transformed grammar for predictive optimization
+            var gllGrammar = compiledOriginal ?? compiled;  // Fall back to transformed if original not available
+            var gllEngine = new GLLEngine(gllGrammar, ruleNames, tokens, diags);
             var allEngine = new ALLPredictiveEngine(
                 compiled, ruleNames, nullable, firstSets, followSets, tokens, diags);
             
