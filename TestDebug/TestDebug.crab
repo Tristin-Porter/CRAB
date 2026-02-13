@@ -1,0 +1,6 @@
+{
+  "name": "TestDebug",
+  "type": "console",
+  "output": "bin",
+  "sources": ["*.cs"]
+}
