@@ -8137,8 +8137,9 @@ namespace CDTk
                     var f = fields[i];
                     if (f.FieldType == typeof(Token))
                     {
-                        var t = (Token)f.GetValue(this);
-                        Console.WriteLine($"  [{i}] {f.Name}: {t.Pattern}");
+                        var t = (Token?)f.GetValue(this);
+                        if (t != null)
+                            Console.WriteLine($"  [{i}] {f.Name}: {t.Pattern}");
                     }
                 }
             }
@@ -11960,7 +11961,9 @@ namespace CDTk
 
         // Lookahead buffer for adaptive prediction
         private int _currentPosition;
+#pragma warning disable CS0414 // Field assigned but never used - reserved for future adaptive lookahead limit
         private int _maxLookahead;
+#pragma warning restore CS0414
         private readonly List<TokenInstance> _lookaheadBuffer;
         
         // PHASE 1: Track last lookahead depth used for metrics

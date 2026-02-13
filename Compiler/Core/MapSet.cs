@@ -13,7 +13,7 @@ using CDTk;
 /// Each public Map field corresponds to an AST node type from the RuleSet.
 /// Placeholders like {name} are replaced with actual AST field values.
 /// </summary>
-class WASM : MapSet
+public class WASM : MapSet
 {
     // ============================================================
     // SEMANTIC ANALYSIS MODELS

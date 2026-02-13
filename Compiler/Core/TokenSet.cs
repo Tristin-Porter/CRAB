@@ -5,7 +5,7 @@ using CDTk;
 /// Tokens are defined in priority order - earlier tokens match first.
 /// Field declaration order is CRITICAL for correct tokenization.
 /// </summary>
-class Tokens : TokenSet
+public class Tokens : TokenSet
 {
     // ============================================================
     // WHITESPACE & COMMENTS (Ignored Tokens)
