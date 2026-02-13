@@ -95,7 +95,7 @@ Running test project (stub output)...
 
 To fully fix the parser, one of these approaches is needed:
 
-1. **Complete GLL Implementation**: Implement proper loopback descriptors and SPPF list nodes for repetition
+1. **Complete GLL Implementation**: Implement proper loop-back descriptors and SPPF list nodes for repetition
 2. **Full Grammar Refactoring**: Convert all `+` and `*` operators to explicit recursive rules
 3. **Alternative Parser**: Wait for/implement the LL parser that was mentioned in CDTk comments
 4. **Use Different Parser Generator**: Replace CDTk with a more mature parser framework

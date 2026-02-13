@@ -11,15 +11,14 @@ class Rules : RuleSet
     // COMPILATION UNIT - Top Level
     // ============================================================
 
-    // Temporary workaround: Support up to 50 compilation unit items without recursion
-    // This avoids GLL limitations with repetition operators
-    public Rule CompilationUnit = new Rule(
-        "item1:CompilationUnitItem " +
-        "item2:CompilationUnitItem? " +
-        "item3:CompilationUnitItem? " +
-        "item4:CompilationUnitItem? " +
-        "item5:CompilationUnitItem?")
-        .Returns("item1", "item2", "item3", "item4", "item5");
+    // Refactored to avoid + operator - use explicit recursion
+    // CompilationUnit must have at least one item
+    public Rule CompilationUnit = "items:CompilationUnitItems";
+    
+    public Rule CompilationUnitItems = "items:CompilationUnitItemsRecursive | items:CompilationUnitItem";
+    
+    public Rule CompilationUnitItemsRecursive = new Rule("first:CompilationUnitItem rest:CompilationUnitItems")
+        .Returns("first", "rest");
 
     public Rule CompilationUnitItem = "item:ExternAliasDirective | item:UsingDirective | item:GlobalAttributeSection | item:NamespaceMemberDeclaration";
 
