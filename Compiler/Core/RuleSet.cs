@@ -11,7 +11,6 @@ class Rules : RuleSet
     // COMPILATION UNIT - Top Level
     // ============================================================
 
-    // Fixed: Simplified to ensure at least one component exists
     public Rule CompilationUnit = new Rule("items:CompilationUnitItem+")
         .Returns("items");
 
@@ -266,8 +265,10 @@ class Rules : RuleSet
         .Returns("attrs", "mods", "name", "body");
 
     // INTERFACE MEMBER DECLARATIONS
-    public Rule InterfaceMethodDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? returnType:Type name:@Identifier typeParams:TypeParameterList? @OpenParen parameters:FormalParameterList? @CloseParen constraints:TypeParameterConstraintsClauses? body:(@Semicolon | Block | ExpressionBody)")
+    public Rule InterfaceMethodDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? returnType:Type name:@Identifier typeParams:TypeParameterList? @OpenParen parameters:FormalParameterList? @CloseParen constraints:TypeParameterConstraintsClauses? body:InterfaceMethodBody")
         .Returns("attrs", "mods", "returnType", "name", "typeParams", "parameters", "constraints", "body");
+
+    public Rule InterfaceMethodBody = "body:@Semicolon | body:Block | body:ExpressionBody";
 
     public Rule InterfacePropertyDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? type:Type name:@Identifier accessors:AccessorDeclarations")
         .Returns("attrs", "mods", "type", "name", "accessors");
@@ -282,8 +283,10 @@ class Rules : RuleSet
     // FORMAL PARAMETERS
     // ============================================================
 
-    public Rule FormalParameterList = new Rule("fixed:FixedParameters? @Comma? paramArray:ParameterArray?")
-        .Returns("fixed", "paramArray");
+    public Rule FormalParameterList = new Rule("params:FormalParameterListContent?")
+        .Returns("params");
+
+    public Rule FormalParameterListContent = "params:FixedParameters @Comma paramArray:ParameterArray | params:FixedParameters | params:ParameterArray";
 
     public Rule FixedParameters = new Rule("first:FixedParameter rest:(@Comma FixedParameter)*")
         .Returns("first", "rest");
@@ -322,8 +325,7 @@ class Rules : RuleSet
     public Rule AttributeArguments = new Rule("@OpenParen args:AttributeArgumentList? @CloseParen")
         .Returns("args");
 
-    public Rule AttributeArgumentList = new Rule("positional:PositionalArgumentList? @Comma? named:NamedArgumentList?")
-        .Returns("positional", "named");
+    public Rule AttributeArgumentList = "positional:PositionalArgumentList @Comma named:NamedArgumentList | positional:PositionalArgumentList | named:NamedArgumentList";
 
     public Rule PositionalArgumentList = new Rule("first:Expression rest:(@Comma Expression)*")
         .Returns("first", "rest");
@@ -338,21 +340,28 @@ class Rules : RuleSet
     // TYPES - Fixed left recursion
     // ============================================================
 
-    // Fixed: Removed left recursion by separating base types from type modifiers
-    public Rule Type = "type:NonArrayType suffixes:TypeSuffixes?";
+    public Rule Type = new Rule("base:NonArrayType suffixes:TypeSuffixes?")
+        .Returns("base", "suffixes");
 
     public Rule NonArrayType = "type:PrimitiveType | type:NamedType | type:TupleType | type:FunctionPointerType";
 
     public Rule TypeSuffixes = "suffixes:TypeSuffix+";
 
-    public Rule TypeSuffix = "suffix:ArrayRankSpecifier | suffix:@Asterisk | suffix:@Question";
+    public Rule TypeSuffix = "suffix:ArrayRankSpecifier | suffix:PointerSuffix | suffix:NullableSuffix";
+
+    public Rule PointerSuffix = "@Asterisk";
+
+    public Rule NullableSuffix = "@Question";
 
     public Rule PrimitiveType = "type:@KwDynamic | type:@KwObject | type:@KwString | type:@KwBool | type:@KwChar | type:@KwDecimal | type:IntegralType | type:FloatingPointType";
 
-    public Rule NamedType = "type:QualifiedName typeArgs:TypeArgumentList?";
+    public Rule NamedType = new Rule("name:QualifiedName typeArgs:TypeArgumentList?")
+        .Returns("name", "typeArgs");
 
-    public Rule ArrayRankSpecifier = new Rule("@OpenBracket dims:(@Comma)* @CloseBracket")
+    public Rule ArrayRankSpecifier = new Rule("@OpenBracket dims:ArrayDimensions? @CloseBracket")
         .Returns("dims");
+
+    public Rule ArrayDimensions = "dims:@Comma+";
 
     // C# 7 Tuples
     public Rule TupleType = new Rule("@OpenParen elements:TupleElements @CloseParen")
@@ -368,10 +377,10 @@ class Rules : RuleSet
     public Rule FunctionPointerType = new Rule("@KwDelegate @Asterisk signature:FunctionPointerSignature")
         .Returns("signature");
 
-    public Rule FunctionPointerSignature = new Rule("@LessThan returnType:Type @Comma? parameters:FunctionPointerParameterList? @GreaterThan")
+    public Rule FunctionPointerSignature = new Rule("@LessThan returnType:Type parameters:FunctionPointerParameters? @GreaterThan")
         .Returns("returnType", "parameters");
 
-    public Rule FunctionPointerParameterList = new Rule("first:Type rest:(@Comma Type)*")
+    public Rule FunctionPointerParameters = new Rule("@Comma first:Type rest:(@Comma Type)*")
         .Returns("first", "rest");
 
     public Rule IntegralType = "type:@KwSbyte | type:@KwByte | type:@KwShort | type:@KwUshort | type:@KwInt | type:@KwUint | type:@KwLong | type:@KwUlong | type:@KwNint | type:@KwNuint";
@@ -388,14 +397,21 @@ class Rules : RuleSet
     // QUALIFIED NAMES
     // ============================================================
 
-    public Rule QualifiedName = new Rule("global:(@KwGlobal @DoubleColon)? segments:NameSegments")
+    public Rule QualifiedName = new Rule("global:GlobalPrefix? segments:NameSegments")
         .Returns("global", "segments");
 
-    public Rule NameSegments = new Rule("first:NameSegment rest:(@Dot NameSegment)*")
+    public Rule GlobalPrefix = "@KwGlobal @DoubleColon";
+
+    public Rule NameSegments = new Rule("first:NameSegment rest:NameSegmentRest*")
         .Returns("first", "rest");
 
-    public Rule NameSegment = new Rule("name:(@Identifier | @VerbatimIdentifier) typeArgs:TypeArgumentList?")
+    public Rule NameSegmentRest = new Rule("@Dot segment:NameSegment")
+        .Returns("segment");
+
+    public Rule NameSegment = new Rule("name:IdentifierName typeArgs:TypeArgumentList?")
         .Returns("name", "typeArgs");
+
+    public Rule IdentifierName = "name:@Identifier | name:@VerbatimIdentifier";
 
     // ============================================================
     // STATEMENTS
@@ -415,13 +431,20 @@ class Rules : RuleSet
     public Rule LabeledStatement = new Rule("label:@Identifier @Colon stmt:Statement")
         .Returns("label", "stmt");
 
-    public Rule DeclarationStatement = new Rule("decl:LocalVariableDeclaration @Semicolon | decl:LocalConstantDeclaration @Semicolon")
+    public Rule DeclarationStatement = new Rule("decl:LocalDeclaration @Semicolon")
         .Returns("decl");
 
-    public Rule LocalVariableDeclaration = new Rule("modifier:(@KwRef | @KwScoped | @KwUsing)? type:LocalVariableType declarators:LocalVariableDeclarators")
+    public Rule LocalDeclaration = "decl:LocalVariableDeclaration | decl:LocalConstantDeclaration";
+
+    public Rule LocalVariableDeclaration = new Rule("modifier:LocalVariableModifier? type:LocalVariableType declarators:LocalVariableDeclarators")
         .Returns("modifier", "type", "declarators");
 
-    public Rule LocalVariableType = "type:@KwVar | type:@KwRef type:Type | type:Type";
+    public Rule LocalVariableModifier = "mod:@KwRef | mod:@KwScoped | mod:@KwUsing";
+
+    public Rule LocalVariableType = "type:@KwVar | type:RefType | type:Type";
+
+    public Rule RefType = new Rule("@KwRef type:Type")
+        .Returns("type");
 
     public Rule LocalVariableDeclarators = new Rule("first:LocalVariableDeclarator rest:(@Comma LocalVariableDeclarator)*")
         .Returns("first", "rest");
@@ -446,8 +469,11 @@ class Rules : RuleSet
     // SELECTION STATEMENTS
     public Rule SelectionStatement = "stmt:IfStatement | stmt:SwitchStatement";
 
-    public Rule IfStatement = new Rule("@KwIf @OpenParen condition:Expression @CloseParen thenStmt:Statement elseClause:(@KwElse Statement)?")
+    public Rule IfStatement = new Rule("@KwIf @OpenParen condition:Expression @CloseParen thenStmt:Statement elseClause:ElseClause?")
         .Returns("condition", "thenStmt", "elseClause");
+
+    public Rule ElseClause = new Rule("@KwElse stmt:Statement")
+        .Returns("stmt");
 
     public Rule SwitchStatement = new Rule("@KwSwitch @OpenParen expr:Expression @CloseParen @OpenBrace sections:SwitchSections? @CloseBrace")
         .Returns("expr", "sections");
@@ -459,7 +485,12 @@ class Rules : RuleSet
 
     public Rule SwitchLabels = "labels:SwitchLabel+";
 
-    public Rule SwitchLabel = "@KwCase pattern:Pattern guard:WhenClause? @Colon | @KwDefault @Colon";
+    public Rule SwitchLabel = "label:CaseLabel | label:DefaultLabel";
+
+    public Rule CaseLabel = new Rule("@KwCase pattern:Pattern guard:WhenClause? @Colon")
+        .Returns("pattern", "guard");
+
+    public Rule DefaultLabel = "@KwDefault @Colon";
 
     // ITERATION STATEMENTS
     public Rule IterationStatement = "stmt:WhileStatement | stmt:DoStatement | stmt:ForStatement | stmt:ForEachStatement";
@@ -480,8 +511,10 @@ class Rules : RuleSet
     public Rule ExpressionList = new Rule("first:Expression rest:(@Comma Expression)*")
         .Returns("first", "rest");
 
-    public Rule ForEachStatement = new Rule("@KwForEach @OpenParen modifier:(@KwRef | @KwScoped)? type:LocalVariableType name:@Identifier @KwIn collection:Expression @CloseParen body:Statement")
+    public Rule ForEachStatement = new Rule("@KwForEach @OpenParen modifier:ForEachModifier? type:LocalVariableType name:@Identifier @KwIn collection:Expression @CloseParen body:Statement")
         .Returns("modifier", "type", "name", "collection", "body");
+
+    public Rule ForEachModifier = "mod:@KwRef | mod:@KwScoped";
 
     // JUMP STATEMENTS
     public Rule JumpStatement = "stmt:BreakStatement | stmt:ContinueStatement | stmt:GotoStatement | stmt:ReturnStatement | stmt:ThrowStatement";
@@ -490,8 +523,15 @@ class Rules : RuleSet
 
     public Rule ContinueStatement = "@KwContinue @Semicolon";
 
-    public Rule GotoStatement = new Rule("@KwGoto target:(@Identifier | @KwCase Expression | @KwDefault) @Semicolon")
+    public Rule GotoStatement = new Rule("@KwGoto target:GotoTarget @Semicolon")
         .Returns("target");
+
+    public Rule GotoTarget = "target:@Identifier | target:GotoCaseTarget | target:GotoDefaultTarget";
+
+    public Rule GotoCaseTarget = new Rule("@KwCase expr:Expression")
+        .Returns("expr");
+
+    public Rule GotoDefaultTarget = "@KwDefault";
 
     public Rule ReturnStatement = new Rule("@KwReturn expr:Expression? @Semicolon")
         .Returns("expr");
@@ -535,8 +575,15 @@ class Rules : RuleSet
     public Rule ResourceAcquisition = "resource:LocalVariableDeclaration | resource:Expression";
 
     // YIELD STATEMENT
-    public Rule YieldStatement = new Rule("@KwYield kind:(@KwReturn Expression | @KwBreak) @Semicolon")
+    public Rule YieldStatement = new Rule("@KwYield kind:YieldKind @Semicolon")
         .Returns("kind");
+
+    public Rule YieldKind = "kind:YieldReturn | kind:YieldBreak";
+
+    public Rule YieldReturn = new Rule("@KwReturn expr:Expression")
+        .Returns("expr");
+
+    public Rule YieldBreak = "@KwBreak";
 
     // LOCAL FUNCTION STATEMENT (C# 7)
     public Rule LocalFunctionStatement = new Rule("attrs:AttributeSections? mods:LocalFunctionModifiers? returnType:Type name:@Identifier typeParams:TypeParameterList? @OpenParen parameters:FormalParameterList? @CloseParen constraints:TypeParameterConstraintsClauses? body:MethodBody")
@@ -556,7 +603,7 @@ class Rules : RuleSet
     public Rule AssignmentExpression = new Rule("left:UnaryExpressionBase op:AssignmentOperator right:Expression")
         .Returns("left", "op", "right");
 
-    public Rule AssignmentOperator = "op:@Assign | op:@PlusAssign | op:@MinusAssign | op:@MultiplyAssign | op:@DivideAssign | op:@ModuloAssign | op:@BitwiseAndAssign | op:@BitwiseOrAssign | op:@BitwiseXorAssign | op:@LeftShiftAssign | op:@RightShiftAssign | op:@UnsignedRightShiftAssign | op:@NullCoalesceAssign";
+    public Rule AssignmentOperator = "op:@NullCoalesceAssign | op:@UnsignedRightShiftAssign | op:@RightShiftAssign | op:@LeftShiftAssign | op:@PlusAssign | op:@MinusAssign | op:@MultiplyAssign | op:@DivideAssign | op:@ModuloAssign | op:@BitwiseAndAssign | op:@BitwiseOrAssign | op:@BitwiseXorAssign | op:@Assign";
 
     public Rule NonAssignmentExpression = "expr:ConditionalExpression";
 
@@ -582,29 +629,38 @@ class Rules : RuleSet
     public Rule BitwiseAndExpression = "left:EqualityExpression @BitwiseAnd right:BitwiseAndExpression | expr:EqualityExpression";
 
     // EQUALITY EXPRESSION
-    public Rule EqualityExpression = "left:RelationalExpression op:(@Equality | @Inequality) right:RelationalExpression | expr:RelationalExpression";
+    public Rule EqualityExpression = "left:RelationalExpression op:EqualityOperator right:EqualityExpression | expr:RelationalExpression";
+
+    public Rule EqualityOperator = "op:@Equality | op:@Inequality";
 
     // RELATIONAL EXPRESSION
     public Rule RelationalExpression = "left:ShiftExpression op:RelationalOperator right:RelationalExpression | expr:ShiftExpression";
 
-    public Rule RelationalOperator = "op:@LessThan | op:@GreaterThan | op:@LessThanOrEqual | op:@GreaterThanOrEqual";
+    public Rule RelationalOperator = "op:@LessThanOrEqual | op:@GreaterThanOrEqual | op:@LessThan | op:@GreaterThan";
 
     // SHIFT EXPRESSION
     public Rule ShiftExpression = "left:AdditiveExpression op:ShiftOperator right:ShiftExpression | expr:AdditiveExpression";
 
-    public Rule ShiftOperator = "op:@LeftShift | op:@RightShift | op:@UnsignedRightShift";
+    public Rule ShiftOperator = "op:@UnsignedRightShift | op:@LeftShift | op:@RightShift";
 
     // ADDITIVE EXPRESSION
-    public Rule AdditiveExpression = "left:MultiplicativeExpression op:(@Plus | @Minus) right:AdditiveExpression | expr:MultiplicativeExpression";
+    public Rule AdditiveExpression = "left:MultiplicativeExpression op:AdditiveOperator right:AdditiveExpression | expr:MultiplicativeExpression";
+
+    public Rule AdditiveOperator = "op:@Plus | op:@Minus";
 
     // MULTIPLICATIVE EXPRESSION
-    public Rule MultiplicativeExpression = "left:SwitchExpression op:(@Multiply | @Divide | @Modulo) right:MultiplicativeExpression | expr:SwitchExpression";
+    public Rule MultiplicativeExpression = "left:SwitchExpression op:MultiplicativeOperator right:MultiplicativeExpression | expr:SwitchExpression";
+
+    public Rule MultiplicativeOperator = "op:@Multiply | op:@Divide | op:@Modulo";
 
     // SWITCH EXPRESSION (C# 8)
     public Rule SwitchExpression = "input:RangeExpression @KwSwitch @OpenBrace arms:SwitchExpressionArms @CloseBrace | expr:RangeExpression";
 
-    public Rule SwitchExpressionArms = new Rule("first:SwitchExpressionArm rest:(@Comma SwitchExpressionArm)* @Comma?")
+    public Rule SwitchExpressionArms = new Rule("first:SwitchExpressionArm rest:SwitchExpressionArmRest* @Comma?")
         .Returns("first", "rest");
+
+    public Rule SwitchExpressionArmRest = new Rule("@Comma arm:SwitchExpressionArm")
+        .Returns("arm");
 
     public Rule SwitchExpressionArm = new Rule("pattern:Pattern guard:WhenClause? @LambdaArrow expr:Expression")
         .Returns("pattern", "guard", "expr");
@@ -613,7 +669,8 @@ class Rules : RuleSet
     public Rule RangeExpression = "start:UnaryExpression @RangeOperator end:UnaryExpression | @RangeOperator end:UnaryExpression | start:UnaryExpression @RangeOperator | expr:UnaryExpression";
 
     // UNARY EXPRESSION - Fixed to use suffix pattern
-    public Rule UnaryExpression = "expr:UnaryExpressionBase suffixes:UnaryExpressionSuffixes?";
+    public Rule UnaryExpression = new Rule("expr:UnaryExpressionBase suffixes:UnaryExpressionSuffixes?")
+        .Returns("expr", "suffixes");
 
     public Rule UnaryExpressionBase = "expr:UnaryOperatorExpression | expr:CastExpression | expr:AwaitExpression | expr:DefaultExpression | expr:NameofExpression | expr:SizeofExpression | expr:CheckedExpression | expr:UncheckedExpression | expr:PrimaryExpressionCore";
 
@@ -621,8 +678,10 @@ class Rules : RuleSet
 
     public Rule UnaryExpressionSuffix = "suffix:MemberAccessSuffix | suffix:InvocationSuffix | suffix:ElementAccessSuffix | suffix:PostIncrementSuffix | suffix:PostDecrementSuffix | suffix:WithExpressionSuffix | suffix:IsPatternSuffix | suffix:AsTypeSuffix";
 
-    public Rule MemberAccessSuffix = new Rule("accessor:(@Dot | @NullConditional) member:@Identifier typeArgs:TypeArgumentList?")
+    public Rule MemberAccessSuffix = new Rule("accessor:MemberAccessor member:@Identifier typeArgs:TypeArgumentList?")
         .Returns("accessor", "member", "typeArgs");
+
+    public Rule MemberAccessor = "op:@Dot | op:@NullConditional";
 
     public Rule InvocationSuffix = new Rule("@OpenParen args:ArgumentList? @CloseParen")
         .Returns("args");
@@ -646,7 +705,7 @@ class Rules : RuleSet
     public Rule UnaryOperatorExpression = new Rule("op:UnaryOperator operand:UnaryExpression")
         .Returns("op", "operand");
 
-    public Rule UnaryOperator = "op:@Plus | op:@Minus | op:@LogicalNot | op:@BitwiseNot | op:@Increment | op:@Decrement | op:@Asterisk | op:@Ampersand | op:@KwRef";
+    public Rule UnaryOperator = "op:@Increment | op:@Decrement | op:@Plus | op:@Minus | op:@LogicalNot | op:@BitwiseNot | op:@Asterisk | op:@Ampersand | op:@KwRef";
 
     public Rule CastExpression = new Rule("@OpenParen type:Type @CloseParen expr:UnaryExpression")
         .Returns("type", "expr");
@@ -679,8 +738,11 @@ class Rules : RuleSet
     public Rule ParenthesizedExpression = new Rule("@OpenParen expr:Expression @CloseParen")
         .Returns("expr");
 
-    public Rule ArgumentList = new Rule("first:Argument rest:(@Comma Argument)*")
+    public Rule ArgumentList = new Rule("first:Argument rest:ArgumentRest*")
         .Returns("first", "rest");
+
+    public Rule ArgumentRest = new Rule("@Comma arg:Argument")
+        .Returns("arg");
 
     public Rule Argument = "modifier:ArgumentModifier? value:Expression | name:@Identifier @Colon value:Expression";
 
@@ -696,8 +758,11 @@ class Rules : RuleSet
     public Rule ObjectInitializer = new Rule("@OpenBrace initializers:MemberInitializerList? @Comma? @CloseBrace")
         .Returns("initializers");
 
-    public Rule MemberInitializerList = new Rule("first:MemberInitializer rest:(@Comma MemberInitializer)*")
+    public Rule MemberInitializerList = new Rule("first:MemberInitializer rest:MemberInitializerRest*")
         .Returns("first", "rest");
+
+    public Rule MemberInitializerRest = new Rule("@Comma init:MemberInitializer")
+        .Returns("init");
 
     public Rule MemberInitializer = "name:@Identifier @Assign value:Expression | name:@Identifier @Assign init:ObjectInitializer";
 
@@ -712,14 +777,17 @@ class Rules : RuleSet
 
     public Rule ArrayRankSpecifiers = "ranks:ArrayRankSpecifier+";
 
-    public Rule ImplicitArrayCreationExpression = new Rule("@KwNew @OpenBracket @Comma* @CloseBracket initializer:ArrayInitializer")
-        .Returns("initializer");
+    public Rule ImplicitArrayCreationExpression = new Rule("@KwNew @OpenBracket commas:ArrayDimensions? @CloseBracket initializer:ArrayInitializer")
+        .Returns("commas", "initializer");
 
     public Rule ArrayInitializer = new Rule("@OpenBrace inits:VariableInitializerList? @Comma? @CloseBrace")
         .Returns("inits");
 
-    public Rule VariableInitializerList = new Rule("first:VariableInitializer rest:(@Comma VariableInitializer)*")
+    public Rule VariableInitializerList = new Rule("first:VariableInitializer rest:VariableInitializerRest*")
         .Returns("first", "rest");
+
+    public Rule VariableInitializerRest = new Rule("@Comma init:VariableInitializer")
+        .Returns("init");
 
     public Rule TypeofExpression = new Rule("@KwTypeof @OpenParen type:Type @CloseParen")
         .Returns("type");
@@ -727,13 +795,13 @@ class Rules : RuleSet
     // LAMBDA EXPRESSIONS
     public Rule LambdaExpression = "lambda:AnonymousMethodExpression | lambda:SimpleLambdaExpression | lambda:ParenthesizedLambdaExpression";
 
-    public Rule AnonymousMethodExpression = new Rule("async:@KwAsync? @KwDelegate @OpenParen parameters:FormalParameterList? @CloseParen body:Block")
+    public Rule AnonymousMethodExpression = new Rule("async:@KwAsync? @KwDelegate @OpenParen parameters:FormalParameterList @CloseParen body:Block")
         .Returns("async", "parameters", "body");
 
     public Rule SimpleLambdaExpression = new Rule("async:@KwAsync? parameter:@Identifier @LambdaArrow body:LambdaBody")
         .Returns("async", "parameter", "body");
 
-    public Rule ParenthesizedLambdaExpression = new Rule("async:@KwAsync? @OpenParen parameters:FormalParameterList? @CloseParen @LambdaArrow body:LambdaBody")
+    public Rule ParenthesizedLambdaExpression = new Rule("async:@KwAsync? @OpenParen parameters:FormalParameterList @CloseParen @LambdaArrow body:LambdaBody")
         .Returns("async", "parameters", "body");
 
     public Rule LambdaBody = "body:Expression | body:Block";
@@ -767,11 +835,16 @@ class Rules : RuleSet
     public Rule OrderbyClause = new Rule("@KwOrderby orderings:Orderings")
         .Returns("orderings");
 
-    public Rule Orderings = new Rule("first:Ordering rest:(@Comma Ordering)*")
+    public Rule Orderings = new Rule("first:Ordering rest:OrderingRest*")
         .Returns("first", "rest");
 
-    public Rule Ordering = new Rule("expr:Expression direction:(@KwAscending | @KwDescending)?")
+    public Rule OrderingRest = new Rule("@Comma ordering:Ordering")
+        .Returns("ordering");
+
+    public Rule Ordering = new Rule("expr:Expression direction:OrderingDirection?")
         .Returns("expr", "direction");
+
+    public Rule OrderingDirection = "dir:@KwAscending | dir:@KwDescending";
 
     public Rule SelectOrGroupClause = "clause:SelectClause | clause:GroupClause";
 
@@ -795,8 +868,11 @@ class Rules : RuleSet
     public Rule TupleExpression = new Rule("@OpenParen elements:TupleExpressionElements @CloseParen")
         .Returns("elements");
 
-    public Rule TupleExpressionElements = new Rule("first:TupleExpressionElement @Comma second:TupleExpressionElement rest:(@Comma TupleExpressionElement)*")
+    public Rule TupleExpressionElements = new Rule("first:TupleExpressionElement @Comma second:TupleExpressionElement rest:TupleExpressionElementRest*")
         .Returns("first", "second", "rest");
+
+    public Rule TupleExpressionElementRest = new Rule("@Comma element:TupleExpressionElement")
+        .Returns("element");
 
     public Rule TupleExpressionElement = "name:@Identifier @Colon expr:Expression | expr:Expression";
 
@@ -804,8 +880,11 @@ class Rules : RuleSet
     public Rule CollectionExpression = new Rule("@OpenBracket elements:CollectionElementList? @CloseBracket")
         .Returns("elements");
 
-    public Rule CollectionElementList = new Rule("first:CollectionElement rest:(@Comma CollectionElement)* @Comma?")
+    public Rule CollectionElementList = new Rule("first:CollectionElement rest:CollectionElementRest* @Comma?")
         .Returns("first", "rest");
+
+    public Rule CollectionElementRest = new Rule("@Comma element:CollectionElement")
+        .Returns("element");
 
     public Rule CollectionElement = "@RangeOperator expr:Expression | expr:Expression";
 
@@ -813,12 +892,14 @@ class Rules : RuleSet
     // PATTERNS (C# 7-13) - Fixed left recursion
     // ============================================================
 
-    public Rule Pattern = "pattern:LogicalAndPattern rest:PatternOrSuffix*";
+    public Rule Pattern = new Rule("pattern:LogicalAndPattern rest:PatternOrSuffix*")
+        .Returns("pattern", "rest");
 
     public Rule PatternOrSuffix = new Rule("@KwOr pattern:LogicalAndPattern")
         .Returns("pattern");
 
-    public Rule LogicalAndPattern = "pattern:NotPattern rest:PatternAndSuffix*";
+    public Rule LogicalAndPattern = new Rule("pattern:NotPattern rest:PatternAndSuffix*")
+        .Returns("pattern", "rest");
 
     public Rule PatternAndSuffix = new Rule("@KwAnd pattern:NotPattern")
         .Returns("pattern");
@@ -840,8 +921,11 @@ class Rules : RuleSet
     public Rule ParenthesizedDesignation = new Rule("@OpenParen designations:DesignationList @CloseParen")
         .Returns("designations");
 
-    public Rule DesignationList = new Rule("first:Designation rest:(@Comma Designation)*")
+    public Rule DesignationList = new Rule("first:Designation rest:DesignationRest*")
         .Returns("first", "rest");
+
+    public Rule DesignationRest = new Rule("@Comma designation:Designation")
+        .Returns("designation");
 
     public Rule ConstantPattern = "pattern:Literal";
 
@@ -854,8 +938,11 @@ class Rules : RuleSet
     public Rule PropertyPattern = new Rule("@OpenBrace subpatterns:SubpatternList? @CloseBrace")
         .Returns("subpatterns");
 
-    public Rule SubpatternList = new Rule("first:Subpattern rest:(@Comma Subpattern)* @Comma?")
+    public Rule SubpatternList = new Rule("first:Subpattern rest:SubpatternRest* @Comma?")
         .Returns("first", "rest");
+
+    public Rule SubpatternRest = new Rule("@Comma subpattern:Subpattern")
+        .Returns("subpattern");
 
     public Rule Subpattern = new Rule("name:@Identifier @Colon pattern:Pattern")
         .Returns("name", "pattern");
@@ -876,8 +963,14 @@ class Rules : RuleSet
     public Rule ListPattern = new Rule("@OpenBracket patterns:ListPatternElements? @CloseBracket designation:Designation?")
         .Returns("patterns", "designation");
 
-    public Rule ListPatternElements = new Rule("first:Pattern rest:(@Comma Pattern)* slice:(@Comma SlicePattern)?")
+    public Rule ListPatternElements = new Rule("first:Pattern rest:ListPatternElementRest* slice:ListPatternSlice?")
         .Returns("first", "rest", "slice");
+
+    public Rule ListPatternElementRest = new Rule("@Comma pattern:Pattern")
+        .Returns("pattern");
+
+    public Rule ListPatternSlice = new Rule("@Comma slice:SlicePattern")
+        .Returns("slice");
 
     public Rule SlicePattern = new Rule("@RangeOperator pattern:Pattern?")
         .Returns("pattern");
