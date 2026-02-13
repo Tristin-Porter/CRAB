@@ -11626,40 +11626,40 @@ namespace CDTk
 
         private void ProcessRepeat(Repeat rep, string ruleName, int slot)
         {
-            // GLL handling of repetition A+ and A*
-            // Transform to explicit alternatives:
-            // A* ::= ε | A A*
-            // A+ ::= A | A A+
+            // PRAGMATIC WORKAROUND for GLL repetition
+            // Full GLL repetition requires complex loopback descriptor management.
+            // For now, implement simplified version:
+            // - A* matches 0 or 1 times (treat as optional)
+            // - A+ matches exactly 1 time (treat as required)
             //
-            // Since GLL uses descriptors and SPPF, we need to create the proper
-            // parse paths. The key insight is that after successfully matching one A,
-            // we need to create TWO descriptors:
-            // 1. One that continues to next slot (exit the repetition)
-            // 2. One that loops back to match another A (continue repetition)
+            // This allows basic parsing to work while avoiding the complexity
+            // of proper GLL repetition with loop-back descriptors and SPPF list nodes.
+            //
+            // NOTE: This means constructs like "item1 item2 item3..." will parse as just "item1"
+            // For proper support, grammar rules should be refactored to use explicit recursion
+            // instead of * and + operators.
             
-            // First, handle the minimum requirement
             if (rep.Min == 0)
             {
-                // A* - epsilon alternative (can skip all matches)
-                AdvanceToNextSlot(ruleName, slot);
+                // A* - treat as A? (optional, match 0 or 1 times)
+                // Epsilon alternative - skip entirely
+                AddDescriptor(new Descriptor(
+                    MakeLabel(ruleName, slot + 1),
+                    _currentGSSNode!,
+                    _currentPosition,
+                    null));
+                
+                // Content alternative - match once
+                ProcessExpr(rep.Item, ruleName, slot);
+            }
+            else
+            {
+                // A+ - treat as A (required, match exactly once)
+                ProcessExpr(rep.Item, ruleName, slot);
             }
             
-            // Now handle matching the item
-            // We create a synthetic intermediate state to handle the loop
-            // After matching one item, we'll be in a state where we can either:
-            // - Exit (go to next slot)
-            // - Loop back (match another item)
-            
-            // The challenge is that GLL's descriptor system doesn't directly support
-            // this kind of loopback without explicit grammar rules.
-            // 
-            // WORKAROUND: Treat X+ as just X and X* as X?, matching only first occurrence
-            // This is incomplete but allows parsing to proceed
-            //
-            // TODO: Full implementation requires restructuring how slots/labels work
-            // to support loopback descriptors properly
-            
-            ProcessExpr(rep.Item, ruleName, slot);
+            // After matching (if any), advance to next slot
+            // The ProcessExpr above will handle creating appropriate descriptors
         }
 
         private void AdvanceToNextSlot(string ruleName, int currentSlot)
