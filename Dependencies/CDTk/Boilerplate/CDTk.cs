@@ -11444,7 +11444,16 @@ namespace CDTk
                 // The start extent should be where we started parsing this rule
                 // which is the GSS node's input position
                 var startExtent = _currentGSSNode.InputPosition;
-                var endExtent = _currentPosition;
+                
+                // CRITICAL FIX for expression parsing bug:
+                // When a rule completes, the end extent should be based on the actual content parsed,
+                // not just the current position. If we have a currentSPPFNode (content was parsed),
+                // use its RightExtent. Otherwise use current position.
+                // This fixes the bug where optional elements matching epsilon caused empty [9..9] nodes
+                // instead of proper [9..10] nodes that include the actual parsed content.
+                var endExtent = _currentSPPFNode != null 
+                    ? _currentSPPFNode.RightExtent 
+                    : _currentPosition;
                 
                 // Create or get symbol node for this rule completion
                 var symbolNode = GetOrCreateSPPFNode(labelRule, startExtent, endExtent);

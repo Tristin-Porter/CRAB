@@ -38,9 +38,3 @@ nop
 ;; This node type requires explicit WASM mapping implementation
 ;; Falling back to nop instruction to maintain valid WASM output
 nop
-{stmts}
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
