@@ -324,8 +324,12 @@ public class WASM : MapSet
     /// <summary>Goto statement</summary>
     public Map GotoStatement = "(br ${target})";
     
-    /// <summary>Return statement</summary>
-    public Map ReturnStatement = "(return {expr})";
+    /// <summary>
+    /// Return statement
+    /// NOTE: Expression support is simplified - outputs (return) for both `return;` and `return expr;`
+    /// Full expression lowering needs to be implemented separately for proper `(return {expr})` support
+    /// </summary>
+    public Map ReturnStatement = "(return)";
     
     /// <summary>Throw statement</summary>
     public Map ThrowStatement = @";; throw {expr}

@@ -503,7 +503,8 @@ public class Rules : RuleSet
         .Returns("expr");
 
     // SELECTION STATEMENTS
-    public Rule SelectionStatement = "stmt:IfStatement | stmt:SwitchStatement";
+    public Rule SelectionStatement = new Rule("stmt:IfStatement | stmt:SwitchStatement")
+        .Returns("stmt");
 
     public Rule IfStatement = new Rule("@KwIf @OpenParen condition:Expression @CloseParen thenStmt:Statement elseClause:ElseClause?")
         .Returns("condition", "thenStmt", "elseClause");
@@ -529,7 +530,8 @@ public class Rules : RuleSet
     public Rule DefaultLabel = "@KwDefault @Colon";
 
     // ITERATION STATEMENTS
-    public Rule IterationStatement = "stmt:WhileStatement | stmt:DoStatement | stmt:ForStatement | stmt:ForEachStatement";
+    public Rule IterationStatement = new Rule("stmt:WhileStatement | stmt:DoStatement | stmt:ForStatement | stmt:ForEachStatement")
+        .Returns("stmt");
 
     public Rule WhileStatement = new Rule("@KwWhile @OpenParen condition:Expression @CloseParen body:Statement")
         .Returns("condition", "body");
@@ -553,7 +555,8 @@ public class Rules : RuleSet
     public Rule ForEachModifier = "mod:@KwRef | mod:@KwScoped";
 
     // JUMP STATEMENTS
-    public Rule JumpStatement = "stmt:BreakStatement | stmt:ContinueStatement | stmt:GotoStatement | stmt:ReturnStatement | stmt:ThrowStatement";
+    public Rule JumpStatement = new Rule("stmt:BreakStatement | stmt:ContinueStatement | stmt:GotoStatement | stmt:ReturnStatement | stmt:ThrowStatement")
+        .Returns("stmt");
 
     public Rule BreakStatement = "@KwBreak @Semicolon";
 

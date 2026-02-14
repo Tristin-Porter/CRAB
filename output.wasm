@@ -3,14 +3,23 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class Test
-(type $Test (struct
-(func $First
+;; class Calculator
+(type $Calculator (struct
+(func $Add
   ;; TODO: Parameters lost due to CDTk field shifting bug - fix when CDTk is updated
   (result i32)
   ;; Method body with CTGC-inserted deallocations
 (block
-{stmt}
+(return)
+  ;; Deallocation instructions inserted here based on AutomaticModel analysis
+)
+)
+(func $Subtract
+  ;; TODO: Parameters lost due to CDTk field shifting bug - fix when CDTk is updated
+  (result i32)
+  ;; Method body with CTGC-inserted deallocations
+(block
+(return)
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )
 )
