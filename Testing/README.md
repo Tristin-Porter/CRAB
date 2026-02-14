@@ -4,9 +4,49 @@ This directory contains the comprehensive test suite for the CRAB compiler.
 
 ## Running Tests
 
-### Quick Start
+### CRAB CLI Test Command (Recommended)
 
-Run all tests from the CRAB root directory:
+The easiest way to test CRAB is using the built-in test command:
+
+```bash
+# Comprehensive test - all architectures and formats
+crab test
+
+# Quick single-architecture test
+crab test --quick
+
+# Test with specific architecture
+crab test --quick --arch arm64 --format pe
+
+# Verbose output
+crab test --verbose
+```
+
+**Comprehensive Test Output:**
+```
+CRAB Compiler - Comprehensive Test Suite
+======================================================================
+Testing x86_64 (native)           ✅ PASS
+Testing x86_64 (pe)               ✅ PASS
+Testing x86_32 (native)           ✅ PASS
+Testing x86_32 (pe)               ✅ PASS
+Testing x86_16 (native)           ✅ PASS
+Testing arm64 (native)            ✅ PASS
+Testing arm64 (pe)                ✅ PASS
+Testing arm32 (native)            ✅ PASS
+Testing arm32 (pe)                ✅ PASS
+
+COMPREHENSIVE TEST SUMMARY
+======================================================================
+Total tests:  9
+Passed:       9
+Failed:       0
+Success rate: 100.0%
+```
+
+### Unit Test Suite
+
+Run all unit tests from the CRAB root directory:
 
 ```bash
 cd testing

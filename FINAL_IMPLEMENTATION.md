@@ -94,6 +94,37 @@ The CRAB compiler is now a **fully functional, multi-architecture C# to native c
 
 ## Comprehensive Test Results
 
+### Latest Full Test Suite Results
+
+**Test Date:** February 14, 2026  
+**Test Type:** Comprehensive Multi-Architecture  
+**Test Command:** `crab test`
+
+```
+CRAB Compiler - Comprehensive Test Suite
+======================================================================
+Testing x86_64 (native)           ✅ PASS (11 bytes)
+Testing x86_64 (pe)               ✅ PASS (1024 bytes)
+Testing x86_32 (native)           ✅ PASS (6 bytes)
+Testing x86_32 (pe)               ✅ PASS (1024 bytes)
+Testing x86_16 (native)           ✅ PASS (4 bytes)
+Testing arm64 (native)            ✅ PASS (8 bytes)
+Testing arm64 (pe)                ✅ PASS (1024 bytes)
+Testing arm32 (native)            ✅ PASS (8 bytes)
+Testing arm32 (pe)                ✅ PASS (1024 bytes)
+
+Platform Detection: x86_64
+Execution Test: ✅ PASS
+
+COMPREHENSIVE TEST SUMMARY
+======================================================================
+Total tests:  9/9 configurations
+Passed:       9
+Failed:       0
+Success rate: 100.0%
+======================================================================
+```
+
 ### Test Case: Simple C# Program
 
 ```csharp
@@ -162,6 +193,38 @@ class Calculator
 ```
 
 ## Command Examples
+
+### Comprehensive Testing (Recommended)
+
+```bash
+# Run complete test suite
+$ crab test
+
+# Output shows all architectures tested:
+CRAB Compiler - Comprehensive Test Suite
+======================================================================
+Testing x86_64 (native)           ✅ PASS
+Testing x86_64 (pe)               ✅ PASS
+Testing x86_32 (native)           ✅ PASS
+Testing x86_32 (pe)               ✅ PASS
+Testing x86_16 (native)           ✅ PASS
+Testing arm64 (native)            ✅ PASS
+Testing arm64 (pe)                ✅ PASS
+Testing arm32 (native)            ✅ PASS
+Testing arm32 (pe)                ✅ PASS
+
+Success rate: 100.0%
+```
+
+### Quick Testing
+
+```bash
+# Quick single-architecture test
+$ crab test --quick
+
+# Quick test with specific architecture
+$ crab test --quick --arch arm64 --format pe
+```
 
 ### Compile to Native Binary
 
