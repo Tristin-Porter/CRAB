@@ -141,7 +141,11 @@ public class WASM : MapSet
     
     /// <summary>
     /// Class declaration - WORKAROUND for CDTk parser bug with optional fields.
-    /// Bug causes field shifting: mods contains name, name contains body.
+    /// Bug causes field shifting: when 'attrs' is absent, subsequent fields shift:
+    /// - 'mods' field receives the class name (e.g., "Calculator")
+    /// - 'name' field receives the ClassBody AST node
+    /// - 'body' field is absent
+    /// Therefore: use {mods} to get class name, {name} to get class body.
     /// This will be fixed when CDTk parser is updated.
     /// </summary>
     public Map ClassDeclaration = @";; class {mods}
@@ -150,9 +154,11 @@ public class WASM : MapSet
 ))";
     
     /// <summary>
-    /// Class body - testing with empty output
+    /// Class body - empty due to CDTk parser bug preventing member generation.
+    /// When parser bug is fixed, this should be "{members}" to generate class members.
+    /// For now, empty to avoid outputting literal "{members}" placeholder.
     /// </summary>
-    public Map ClassBody = "";  // Temporarily empty to test
+    public Map ClassBody = "";
     
     /// <summary>Class member declarations</summary>
     public Map ClassMemberDeclarations = "{members}";
