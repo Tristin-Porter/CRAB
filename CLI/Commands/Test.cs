@@ -16,6 +16,7 @@ class Test : Command
         
         SupportedFlags["name"] = "Name of the test project (default: TestProject).";
         SupportedFlags["keep"] = "Keep the generated test project after execution.";
+        SupportedFlags["save"] = "Save all compiled outputs (WAT and binaries from all architectures/containers).";
         SupportedFlags["verbose"] = "Enable verbose output.";
         SupportedFlags["quick"] = "Run quick test (single architecture only).";
         SupportedFlags["arch"] = "Single architecture to test (x86_64, x86_32, x86_16, arm64, arm32). Use with --quick.";
@@ -32,6 +33,7 @@ class Test : Command
             projectName = args[0];
 
         bool keepProject = flags.ContainsKey("keep");
+        bool saveOutputs = flags.ContainsKey("save");
         bool verbose = flags.ContainsKey("verbose");
         bool quickMode = flags.ContainsKey("quick");
 
@@ -46,6 +48,7 @@ class Test : Command
             System.Console.WriteLine($"Project:    {projectName}");
             System.Console.WriteLine($"Mode:       {(quickMode ? "Quick (single architecture)" : "Comprehensive (all architectures)")}");
             System.Console.WriteLine($"Keep:       {keepProject}");
+            System.Console.WriteLine($"Save:       {saveOutputs}");
             System.Console.WriteLine("=".PadRight(70, '='));
             System.Console.WriteLine();
         }
@@ -102,14 +105,29 @@ class Test : Command
 
             if (verbose) System.Console.WriteLine();
 
+            // Save WAT file if requested
+            string? saveDir = null;
+            if (saveOutputs)
+            {
+                saveDir = Path.Combine(currentDir, $"{projectName}_outputs");
+                Directory.CreateDirectory(saveDir);
+                
+                // Copy WAT/WASM file to save directory
+                string watDest = Path.Combine(saveDir, Path.GetFileName(outputFile));
+                File.Copy(outputFile, watDest, overwrite: true);
+                
+                if (verbose)
+                    System.Console.WriteLine($"Saved {Path.GetFileName(outputFile)} to {saveDir}");
+            }
+
             // Step 3: Compile to native/PE for all architectures (or single if quick mode)
             if (quickMode)
             {
-                RunQuickTest(outputFile, flags, verbose);
+                RunQuickTest(outputFile, flags, verbose, saveDir);
             }
             else
             {
-                RunComprehensiveTest(outputFile, verbose);
+                RunComprehensiveTest(outputFile, verbose, saveDir);
             }
 
             // Step 4: Cleanup if requested
@@ -132,7 +150,7 @@ class Test : Command
         }
     }
 
-    private void RunQuickTest(string outputFile, Dictionary<string, string?> flags, bool verbose)
+    private void RunQuickTest(string outputFile, Dictionary<string, string?> flags, bool verbose, string? saveDir)
     {
         if (verbose) System.Console.WriteLine("[3/3] Running quick test...");
         else System.Console.WriteLine($"Running test project...");
@@ -158,9 +176,22 @@ class Test : Command
             runFlags["format"] = "native"; // default
 
         runCommand.Execute(Array.Empty<string>(), runFlags);
+        
+        // Save output if requested
+        if (saveDir != null)
+        {
+            string outputBin = $"output.bin";
+            if (File.Exists(outputBin))
+            {
+                string destName = $"{runFlags["arch"]}_{runFlags["format"]}.bin";
+                File.Copy(outputBin, Path.Combine(saveDir, destName), overwrite: true);
+                if (verbose)
+                    System.Console.WriteLine($"Saved {destName} to {saveDir}");
+            }
+        }
     }
 
-    private void RunComprehensiveTest(string outputFile, bool verbose)
+    private void RunComprehensiveTest(string outputFile, bool verbose, string? saveDir)
     {
         System.Console.WriteLine("[3/3] Running comprehensive test suite...");
         System.Console.WriteLine();
@@ -188,12 +219,13 @@ class Test : Command
                 try
                 {
                     var compileCommand = new Compile();
+                    string outputFileName = $"test_output_{arch}_{format}.bin";
                     var compileFlags = new Dictionary<string, string?>
                     {
                         ["to-asm"] = null,
                         ["arch"] = arch,
                         ["format"] = format,
-                        ["output"] = $"test_output_{arch}_{format}.bin"
+                        ["output"] = outputFileName
                     };
 
                     // Suppress output during compilation
@@ -209,6 +241,13 @@ class Test : Command
                         System.Console.WriteLine("✅ PASS");
                         passed++;
                         results.Add((arch, format, true, "Success"));
+                        
+                        // Save output if requested
+                        if (saveDir != null && File.Exists(outputFileName))
+                        {
+                            string destPath = Path.Combine(saveDir, $"{arch}_{format}.bin");
+                            File.Copy(outputFileName, destPath, overwrite: true);
+                        }
                     }
                     catch
                     {
@@ -224,15 +263,25 @@ class Test : Command
                         System.Console.WriteLine($"    Error: {ex.Message}");
                 }
 
-                // Clean up test output
+                // Clean up test output (unless saving)
                 try
                 {
                     string testOutput = $"test_output_{arch}_{format}.bin";
-                    if (File.Exists(testOutput))
+                    bool shouldDeleteTestOutput = saveDir == null;
+                    if (File.Exists(testOutput) && shouldDeleteTestOutput)
                         File.Delete(testOutput);
                 }
                 catch { }
             }
+        }
+        
+        // Report saved outputs
+        if (saveDir != null)
+        {
+            System.Console.WriteLine();
+            System.Console.WriteLine($"Saved outputs to: {saveDir}");
+            System.Console.WriteLine($"  - WAT/WASM file: {Path.GetFileName(outputFile)}");
+            System.Console.WriteLine($"  - {passed} architecture/container binaries");
         }
 
         // Try to run on the appropriate architecture for the current platform

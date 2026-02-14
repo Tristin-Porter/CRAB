@@ -936,6 +936,750 @@ public class WASM : MapSet
 )";
     
     // ============================================================
+    // ACCESSORS AND PROPERTIES (Extended)
+    // ============================================================
+    
+    /// <summary>Property or indexer accessor (get/set/init)</summary>
+    public Map Accessor = @"(func ${name}_{kind}
+  (param {params})
+  (result {result})
+{body}
+)";
+    
+    /// <summary>Accessor body</summary>
+    public Map AccessorBody = "{body}";
+    
+    /// <summary>List of accessors</summary>
+    public Map AccessorDeclarations = "{accessors}";
+    
+    /// <summary>Accessor kind (get, set, init, add, remove)</summary>
+    public Map AccessorKind = "{kind}";
+    
+    /// <summary>Accessor list</summary>
+    public Map AccessorList = "{accessors}";
+    
+    /// <summary>Member accessor in member access expression</summary>
+    public Map MemberAccessor = "{member}";
+    
+    /// <summary>Event declaration with accessors</summary>
+    public Map EventDeclarationWithAccessors = @";; event {type} {name}
+(field ${name}_event {type})
+{accessors}";
+    
+    /// <summary>Property pattern for pattern matching</summary>
+    public Map PropertyPattern = ";; property pattern {name} = {pattern}";
+    
+    // ============================================================
+    // ATTRIBUTES
+    // ============================================================
+    
+    /// <summary>Single attribute</summary>
+    public Map Attribute = ";; [{name}({args})]";
+    
+    /// <summary>Attribute argument list</summary>
+    public Map AttributeArgumentList = "{args}";
+    
+    /// <summary>Attribute arguments</summary>
+    public Map AttributeArguments = "{args}";
+    
+    /// <summary>Attribute list</summary>
+    public Map AttributeList = "{attributes}";
+    
+    /// <summary>Attribute section</summary>
+    public Map AttributeSection = ";; {attributes}";
+    
+    /// <summary>Attribute target (assembly, module, etc.)</summary>
+    public Map AttributeTarget = "{target}";
+    
+    /// <summary>Attribute target specifier</summary>
+    public Map AttributeTargetSpecifier = "{target}:";
+    
+    /// <summary>Global attribute section</summary>
+    public Map GlobalAttributeSection = ";; global {attributes}";
+    
+    /// <summary>Global attribute target</summary>
+    public Map GlobalAttributeTarget = "{target}";
+    
+    // ============================================================
+    // ARRAYS (Extended)
+    // ============================================================
+    
+    /// <summary>Array dimensions specification</summary>
+    public Map ArrayDimensions = "[{dims}]";
+    
+    /// <summary>Array initializer expression</summary>
+    public Map ArrayInitializer = "{elements}";
+    
+    /// <summary>Array rank specifier (e.g., [])</summary>
+    public Map ArrayRankSpecifier = "[{commas}]";
+    
+    /// <summary>Multiple array rank specifiers</summary>
+    public Map ArrayRankSpecifiers = "{ranks}";
+    
+    /// <summary>Non-array type</summary>
+    public Map NonArrayType = "{type}";
+    
+    /// <summary>Parameter array (params)</summary>
+    public Map ParameterArray = "(param ${name} (ref $Array_{type}))";
+    
+    // ============================================================
+    // EXCEPTION HANDLING (Extended)
+    // ============================================================
+    
+    /// <summary>Single catch clause</summary>
+    public Map CatchClause = @"(block $catch_{type}
+  ;; catch {type} {name}
+{handler}
+)";
+    
+    /// <summary>List of catch clauses</summary>
+    public Map CatchClauses = "{clauses}";
+    
+    /// <summary>Catch filter (when clause)</summary>
+    public Map CatchFilter = @"(if {condition}
+  (then
+    ;; execute catch handler
+  )
+)";
+    
+    /// <summary>Finally clause</summary>
+    public Map FinallyClause = @"(block $finally
+  ;; finally
+{body}
+)";
+    
+    // ============================================================
+    // GENERICS AND CONSTRAINTS
+    // ============================================================
+    
+    /// <summary>Allows constraint (C# 13+)</summary>
+    public Map AllowsConstraint = ";; allows {constraint}";
+    
+    /// <summary>Constructor constraint (new())</summary>
+    public Map ConstructorConstraint = ";; where T : new()";
+    
+    /// <summary>Primary constraint (class, struct, unmanaged, notnull)</summary>
+    public Map PrimaryConstraint = ";; where T : {constraint}";
+    
+    /// <summary>Secondary constraint (interface, base class)</summary>
+    public Map SecondaryConstraint = ";; where T : {type}";
+    
+    /// <summary>Type parameter constraint</summary>
+    public Map TypeParameterConstraint = ";; {constraint}";
+    
+    /// <summary>Type parameter constraints</summary>
+    public Map TypeParameterConstraints = "{constraints}";
+    
+    /// <summary>Type parameter constraints clause</summary>
+    public Map TypeParameterConstraintsClause = ";; where {typeParam} : {constraints}";
+    
+    /// <summary>Type parameter constraints clauses</summary>
+    public Map TypeParameterConstraintsClauses = "{clauses}";
+    
+    /// <summary>Type parameter</summary>
+    public Map TypeParameter = "{name}";
+    
+    /// <summary>Type parameter list</summary>
+    public Map TypeParameterList = "{parameters}";
+    
+    /// <summary>Type parameters</summary>
+    public Map TypeParameters = "{parameters}";
+    
+    /// <summary>Variance annotation (in, out)</summary>
+    public Map VarianceAnnotation = "{variance}";
+    
+    // ============================================================
+    // PATTERNS (Extended)
+    // ============================================================
+    
+    /// <summary>Variable designation</summary>
+    public Map Designation = "{name}";
+    
+    /// <summary>Designation list</summary>
+    public Map DesignationList = "{designations}";
+    
+    /// <summary>Designation rest (additional designations)</summary>
+    public Map DesignationRest = "{rest}";
+    
+    /// <summary>Discard designation (_)</summary>
+    public Map DiscardDesignation = ";; discard _";
+    
+    /// <summary>Discard pattern (_)</summary>
+    public Map DiscardPattern = ";; discard pattern _";
+    
+    /// <summary>Is pattern suffix in expression</summary>
+    public Map IsPatternSuffix = " is {pattern}";
+    
+    /// <summary>List pattern [...]</summary>
+    public Map ListPattern = ";; list pattern [{elements}]";
+    
+    /// <summary>List pattern element rest</summary>
+    public Map ListPatternElementRest = "{rest}";
+    
+    /// <summary>List pattern elements</summary>
+    public Map ListPatternElements = "{elements}";
+    
+    /// <summary>List pattern slice (..)</summary>
+    public Map ListPatternSlice = "..{pattern}";
+    
+    /// <summary>Logical AND pattern (pattern1 and pattern2)</summary>
+    public Map LogicalAndPattern = ";; {left} and {right}";
+    
+    /// <summary>NOT pattern (not pattern)</summary>
+    public Map NotPattern = ";; not {pattern}";
+    
+    /// <summary>Parenthesized designation</summary>
+    public Map ParenthesizedDesignation = "({designations})";
+    
+    /// <summary>Parenthesized pattern</summary>
+    public Map ParenthesizedPattern = "({pattern})";
+    
+    /// <summary>Pattern AND suffix</summary>
+    public Map PatternAndSuffix = " and {pattern}";
+    
+    /// <summary>Pattern OR suffix</summary>
+    public Map PatternOrSuffix = " or {pattern}";
+    
+    /// <summary>Positional pattern Type(...)</summary>
+    public Map PositionalPattern = ";; {type}({subpatterns})";
+    
+    /// <summary>Primary pattern</summary>
+    public Map PrimaryPattern = "{pattern}";
+    
+    /// <summary>Recursive pattern Type { ... }</summary>
+    public Map RecursivePattern = ";; {type} {{ {properties} }}";
+    
+    /// <summary>Relational pattern (< > <= >=)</summary>
+    public Map RelationalPattern = ";; {op} {value}";
+    
+    /// <summary>Slice pattern ..</summary>
+    public Map SlicePattern = "..";
+    
+    /// <summary>Subpattern in positional/property pattern</summary>
+    public Map Subpattern = "{pattern}";
+    
+    /// <summary>Subpattern list</summary>
+    public Map SubpatternList = "{subpatterns}";
+    
+    /// <summary>Subpattern rest</summary>
+    public Map SubpatternRest = "{rest}";
+    
+    /// <summary>Var pattern (var x)</summary>
+    public Map VarPattern = ";; var {designation}";
+    
+    /// <summary>When clause in pattern matching</summary>
+    public Map WhenClause = " when {condition}";
+    
+    // ============================================================
+    // OPERATORS (Extended)
+    // ============================================================
+    
+    /// <summary>Additive operator (+ or -)</summary>
+    public Map AdditiveOperator = "{op}";
+    
+    /// <summary>Conversion operator declaration</summary>
+    public Map ConversionOperatorDeclaration = @"(func $op_{kind}_{type}
+  (param $value {sourceType})
+  (result {targetType})
+{body}
+)";
+    
+    /// <summary>Equality operator (== or !=)</summary>
+    public Map EqualityOperator = "{op}";
+    
+    /// <summary>Multiplicative operator (*, /, %)</summary>
+    public Map MultiplicativeOperator = "{op}";
+    
+    /// <summary>Operator declaration</summary>
+    public Map OperatorDeclaration = @"(func $op_{operator}
+  (param {parameters})
+  (result {returnType})
+{body}
+)";
+    
+    /// <summary>Overloadable operator</summary>
+    public Map OverloadableOperator = "{operator}";
+    
+    // ============================================================
+    // ARGUMENTS AND PARAMETERS (Extended)
+    // ============================================================
+    
+    /// <summary>Single argument</summary>
+    public Map Argument = "{expr}";
+    
+    /// <summary>Argument modifier (ref, out, in)</summary>
+    public Map ArgumentModifier = "{modifier}";
+    
+    /// <summary>Argument rest (additional arguments)</summary>
+    public Map ArgumentRest = "{rest}";
+    
+    /// <summary>Named argument list</summary>
+    public Map NamedArgumentList = "{args}";
+    
+    /// <summary>Positional argument list</summary>
+    public Map PositionalArgumentList = "{args}";
+    
+    /// <summary>Parameter modifier (ref, out, in, this, params)</summary>
+    public Map ParameterModifier = "{modifier}";
+    
+    /// <summary>Formal parameter</summary>
+    public Map FormalParameter = "(param ${name} {type})";
+    
+    /// <summary>Formal parameter list content</summary>
+    public Map FormalParameterListContent = "{parameters}";
+    
+    /// <summary>Fixed parameters list</summary>
+    public Map FixedParameters = "{parameters}";
+    
+    // ============================================================
+    // STATEMENTS (Extended)
+    // ============================================================
+    
+    /// <summary>Checked statement block</summary>
+    public Map CheckedStatement = @"(block $checked
+  ;; checked
+{body}
+)";
+    
+    /// <summary>Unchecked statement block</summary>
+    public Map UncheckedStatement = @"(block $unchecked
+  ;; unchecked
+{body}
+)";
+    
+    /// <summary>Case label in switch</summary>
+    public Map CaseLabel = "(br_table $case_{value})";
+    
+    /// <summary>Default label in switch</summary>
+    public Map DefaultLabel = "(br $default)";
+    
+    /// <summary>Switch label</summary>
+    public Map SwitchLabel = "{label}";
+    
+    /// <summary>Switch labels</summary>
+    public Map SwitchLabels = "{labels}";
+    
+    /// <summary>Switch section</summary>
+    public Map SwitchSection = @"{labels}
+{statements}";
+    
+    /// <summary>Switch sections</summary>
+    public Map SwitchSections = "{sections}";
+    
+    /// <summary>Switch expression arm</summary>
+    public Map SwitchExpressionArm = "{pattern} => {expression}";
+    
+    /// <summary>Switch expression arm rest</summary>
+    public Map SwitchExpressionArmRest = "{rest}";
+    
+    /// <summary>Switch expression arms</summary>
+    public Map SwitchExpressionArms = "{arms}";
+    
+    /// <summary>Goto case target</summary>
+    public Map GotoCaseTarget = "(br $case_{value})";
+    
+    /// <summary>Goto default target</summary>
+    public Map GotoDefaultTarget = "(br $default)";
+    
+    /// <summary>Goto target</summary>
+    public Map GotoTarget = "(br ${label})";
+    
+    /// <summary>Else clause in if statement</summary>
+    public Map ElseClause = @"
+  (else
+{stmt}
+  )";
+    
+    /// <summary>Yield statement</summary>
+    public Map YieldStatement = @";; yield {kind} {expr}
+{expr}";
+    
+    /// <summary>Yield return</summary>
+    public Map YieldReturn = "(return {expr})";
+    
+    /// <summary>Yield break</summary>
+    public Map YieldBreak = "(br $yield_break)";
+    
+    /// <summary>Yield kind (return or break)</summary>
+    public Map YieldKind = "{kind}";
+    
+    /// <summary>Local function statement</summary>
+    public Map LocalFunctionStatement = @"(func ${name}
+  (param {parameters})
+  (result {returnType})
+{body}
+)";
+    
+    /// <summary>Local function modifier</summary>
+    public Map LocalFunctionModifier = "{modifier}";
+    
+    /// <summary>Local function modifiers</summary>
+    public Map LocalFunctionModifiers = "{modifiers}";
+    
+    /// <summary>Constructor initializer (this or base)</summary>
+    public Map ConstructorInitializer = @";; {kind}({args})
+(call ${kind}_ctor {args})";
+    
+    /// <summary>Destructor declaration</summary>
+    public Map DestructorDeclaration = @"(func $finalize
+{body}
+)";
+    
+    // ============================================================
+    // VARIABLE DECLARATIONS (Extended)
+    // ============================================================
+    
+    /// <summary>Local declaration statement</summary>
+    public Map LocalDeclaration = "{type} {declarators}";
+    
+    /// <summary>Local variable declarator</summary>
+    public Map LocalVariableDeclarator = "(local ${name} {type} {init})";
+    
+    /// <summary>Local variable declarators</summary>
+    public Map LocalVariableDeclarators = "{declarators}";
+    
+    /// <summary>Local variable initializer</summary>
+    public Map LocalVariableInitializer = "{expr}";
+    
+    /// <summary>Local variable modifier (const, ref, etc.)</summary>
+    public Map LocalVariableModifier = "{modifier}";
+    
+    /// <summary>Local variable type</summary>
+    public Map LocalVariableType = "{type}";
+    
+    /// <summary>Constant declarator</summary>
+    public Map ConstantDeclarator = "(global ${name} {type} {value})";
+    
+    /// <summary>Constant declarators</summary>
+    public Map ConstantDeclarators = "{declarators}";
+    
+    /// <summary>Variable declarator</summary>
+    public Map VariableDeclarator = "{name} = {init}";
+    
+    /// <summary>Variable declarators</summary>
+    public Map VariableDeclarators = "{declarators}";
+    
+    /// <summary>Variable initializer</summary>
+    public Map VariableInitializer = "{expr}";
+    
+    /// <summary>Variable initializer list</summary>
+    public Map VariableInitializerList = "{initializers}";
+    
+    /// <summary>Variable initializer rest</summary>
+    public Map VariableInitializerRest = "{rest}";
+    
+    // ============================================================
+    // EXPRESSIONS (Extended)
+    // ============================================================
+    
+    /// <summary>Expression body (=> expr)</summary>
+    public Map ExpressionBody = @"(return
+{expr}
+)";
+    
+    /// <summary>Method body</summary>
+    public Map MethodBody = "{body}";
+    
+    /// <summary>Primary expression core</summary>
+    public Map PrimaryExpressionCore = "{expr}";
+    
+    /// <summary>Unary expression base</summary>
+    public Map UnaryExpressionBase = "{expr}";
+    
+    /// <summary>Unary expression suffix</summary>
+    public Map UnaryExpressionSuffix = "{suffix}";
+    
+    /// <summary>Unary expression suffixes</summary>
+    public Map UnaryExpressionSuffixes = "{suffixes}";
+    
+    /// <summary>Member access suffix (.member)</summary>
+    public Map MemberAccessSuffix = ".{member}";
+    
+    /// <summary>Element access suffix ([index])</summary>
+    public Map ElementAccessSuffix = "[{indices}]";
+    
+    /// <summary>Invocation suffix (method call)</summary>
+    public Map InvocationSuffix = "({args})";
+    
+    /// <summary>Post-increment suffix (++)</summary>
+    public Map PostIncrementSuffix = "++";
+    
+    /// <summary>Post-decrement suffix (--)</summary>
+    public Map PostDecrementSuffix = "--";
+    
+    /// <summary>As type suffix (as Type)</summary>
+    public Map AsTypeSuffix = " as {type}";
+    
+    /// <summary>With expression suffix (with {...})</summary>
+    public Map WithExpressionSuffix = " with {initializer}";
+    
+    /// <summary>Member initializer</summary>
+    public Map MemberInitializer = "{member} = {expr}";
+    
+    /// <summary>Member initializer list</summary>
+    public Map MemberInitializerList = "{initializers}";
+    
+    /// <summary>Member initializer rest</summary>
+    public Map MemberInitializerRest = "{rest}";
+    
+    /// <summary>Object initializer {...}</summary>
+    public Map ObjectInitializer = "{initializers}";
+    
+    /// <summary>Collection element in collection expression</summary>
+    public Map CollectionElement = "{element}";
+    
+    /// <summary>Collection element list</summary>
+    public Map CollectionElementList = "{elements}";
+    
+    /// <summary>Collection element rest</summary>
+    public Map CollectionElementRest = "{rest}";
+    
+    /// <summary>Stackalloc initializer</summary>
+    public Map StackallocInitializer = "{elements}";
+    
+    // ============================================================
+    // TYPES (Extended)
+    // ============================================================
+    
+    /// <summary>Primitive type dispatcher</summary>
+    public Map PrimitiveType = "{type}";
+    
+    /// <summary>Integral type (int, long, etc.)</summary>
+    public Map IntegralType = "{type}";
+    
+    /// <summary>Floating point type (float, double, decimal)</summary>
+    public Map FloatingPointType = "{type}";
+    
+    /// <summary>Named type (user-defined type)</summary>
+    public Map NamedType = "{name}";
+    
+    /// <summary>Ref type (ref T)</summary>
+    public Map RefType = "(ref {type})";
+    
+    /// <summary>Nullable suffix (?)</summary>
+    public Map NullableSuffix = "?";
+    
+    /// <summary>Pointer suffix (*)</summary>
+    public Map PointerSuffix = "*";
+    
+    /// <summary>Type suffix</summary>
+    public Map TypeSuffix = "{suffix}";
+    
+    /// <summary>Type suffixes</summary>
+    public Map TypeSuffixes = "{suffixes}";
+    
+    /// <summary>Type argument list</summary>
+    public Map TypeArgumentList = "<{arguments}>";
+    
+    /// <summary>Type arguments</summary>
+    public Map TypeArguments = "{arguments}";
+    
+    /// <summary>Function pointer type (C# 9+)</summary>
+    public Map FunctionPointerType = "i32 ;; function pointer";
+    
+    /// <summary>Function pointer signature</summary>
+    public Map FunctionPointerSignature = "{returnType}({parameters})";
+    
+    /// <summary>Function pointer parameters</summary>
+    public Map FunctionPointerParameters = "{parameters}";
+    
+    // ============================================================
+    // TUPLES (Extended)
+    // ============================================================
+    
+    /// <summary>Tuple element</summary>
+    public Map TupleElement = "{type} {name}";
+    
+    /// <summary>Tuple elements</summary>
+    public Map TupleElements = "{elements}";
+    
+    /// <summary>Tuple expression element</summary>
+    public Map TupleExpressionElement = "{expr}";
+    
+    /// <summary>Tuple expression element rest</summary>
+    public Map TupleExpressionElementRest = "{rest}";
+    
+    /// <summary>Tuple expression elements</summary>
+    public Map TupleExpressionElements = "{elements}";
+    
+    // ============================================================
+    // NAMES AND NAMESPACES (Extended)
+    // ============================================================
+    
+    /// <summary>Name segment</summary>
+    public Map NameSegment = "{segment}";
+    
+    /// <summary>Name segment rest</summary>
+    public Map NameSegmentRest = "{rest}";
+    
+    /// <summary>Name segments</summary>
+    public Map NameSegments = "{segments}";
+    
+    /// <summary>Compilation unit item (using, namespace, type)</summary>
+    public Map CompilationUnitItem = "{item}";
+    
+    /// <summary>Namespace body item</summary>
+    public Map NamespaceBodyItem = "{item}";
+    
+    /// <summary>File-scoped namespace declaration (C# 10+)</summary>
+    public Map FileScopedNamespaceDeclaration = @";; namespace {name};
+{body}";
+    
+    /// <summary>Global prefix (::)</summary>
+    public Map GlobalPrefix = "::";
+    
+    /// <summary>Extern alias directive</summary>
+    public Map ExternAliasDirective = ";; extern alias {name};";
+    
+    /// <summary>Using directive</summary>
+    public Map UsingDirective = ";; using {name};";
+    
+    /// <summary>Using namespace directive</summary>
+    public Map UsingNamespaceDirective = ";; using {namespace};";
+    
+    /// <summary>Using alias directive</summary>
+    public Map UsingAliasDirective = ";; using {alias} = {target};";
+    
+    /// <summary>Using static directive</summary>
+    public Map UsingStaticDirective = ";; using static {type};";
+    
+    // ============================================================
+    // INTERFACE MEMBERS (Extended)
+    // ============================================================
+    
+    /// <summary>Interface member declaration</summary>
+    public Map InterfaceMemberDeclaration = "{member}";
+    
+    /// <summary>Interface member declarations</summary>
+    public Map InterfaceMemberDeclarations = "{members}";
+    
+    /// <summary>Interface method declaration</summary>
+    public Map InterfaceMethodDeclaration = @"(func ${name}
+  (param {parameters})
+  (result {returnType})
+)";
+    
+    /// <summary>Interface method body (C# 8+)</summary>
+    public Map InterfaceMethodBody = "{body}";
+    
+    /// <summary>Interface property declaration</summary>
+    public Map InterfacePropertyDeclaration = @";; property {type} {name}
+{accessors}";
+    
+    /// <summary>Interface event declaration</summary>
+    public Map InterfaceEventDeclaration = ";; event {type} {name};";
+    
+    /// <summary>Interface indexer declaration</summary>
+    public Map InterfaceIndexerDeclaration = @";; {type} this[{parameters}]
+{accessors}";
+    
+    // ============================================================
+    // RECORDS (Extended)
+    // ============================================================
+    
+    /// <summary>Record body</summary>
+    public Map RecordBody = "{members}";
+    
+    /// <summary>Record parameter list</summary>
+    public Map RecordParameterList = "{parameters}";
+    
+    // ============================================================
+    // CLASS/TYPE MEMBERS (Extended)
+    // ============================================================
+    
+    /// <summary>Base list (inheritance)</summary>
+    public Map BaseList = ": {types}";
+    
+    /// <summary>Base type</summary>
+    public Map BaseType = "{type}";
+    
+    /// <summary>Base types</summary>
+    public Map BaseTypes = "{types}";
+    
+    /// <summary>Enum base type</summary>
+    public Map EnumBase = ": {type}";
+    
+    /// <summary>Enum member declarations</summary>
+    public Map EnumMemberDeclarations = "{members}";
+    
+    // ============================================================
+    // LINQ QUERY EXPRESSIONS (Extended)
+    // ============================================================
+    
+    /// <summary>Query body clause</summary>
+    public Map QueryBodyClause = "{clause}";
+    
+    /// <summary>Query body clauses</summary>
+    public Map QueryBodyClauses = "{clauses}";
+    
+    /// <summary>Query continuation (into)</summary>
+    public Map QueryContinuation = @";; into {name}
+{body}";
+    
+    /// <summary>Select clause</summary>
+    public Map SelectClause = @";; select {expr}";
+    
+    /// <summary>Group clause</summary>
+    public Map GroupClause = @";; group {element} by {key}";
+    
+    /// <summary>Select or group clause</summary>
+    public Map SelectOrGroupClause = "{clause}";
+    
+    /// <summary>Where clause</summary>
+    public Map WhereClause = @";; where {condition}";
+    
+    /// <summary>Let clause</summary>
+    public Map LetClause = @";; let {name} = {expr}";
+    
+    /// <summary>Join clause</summary>
+    public Map JoinClause = @";; join {name} in {source} on {left} equals {right}";
+    
+    /// <summary>Join into clause</summary>
+    public Map JoinIntoClause = @" into {name}";
+    
+    /// <summary>Orderby clause</summary>
+    public Map OrderbyClause = @";; orderby {orderings}";
+    
+    /// <summary>Ordering</summary>
+    public Map Ordering = "{expr} {direction}";
+    
+    /// <summary>Ordering direction (ascending, descending)</summary>
+    public Map OrderingDirection = "{direction}";
+    
+    /// <summary>Ordering rest</summary>
+    public Map OrderingRest = "{rest}";
+    
+    /// <summary>Orderings</summary>
+    public Map Orderings = "{orderings}";
+    
+    // ============================================================
+    // FOREACH AND FOR LOOPS (Extended)
+    // ============================================================
+    
+    /// <summary>Foreach modifier (await)</summary>
+    public Map ForEachModifier = "{modifier}";
+    
+    /// <summary>For initializer</summary>
+    public Map ForInitializer = "{init}";
+    
+    /// <summary>For iterator</summary>
+    public Map ForIterator = "{iterator}";
+    
+    // ============================================================
+    // LAMBDA EXPRESSIONS (Extended)
+    // ============================================================
+    
+    /// <summary>Lambda body (expression or block)</summary>
+    public Map LambdaBody = "{body}";
+    
+    // ============================================================
+    // RESOURCE MANAGEMENT
+    // ============================================================
+    
+    /// <summary>Resource acquisition in using statement</summary>
+    public Map ResourceAcquisition = "{resource}";
+    
+    // ============================================================
     // FALLBACK
     // ============================================================
     
