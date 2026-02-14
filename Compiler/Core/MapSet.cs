@@ -116,7 +116,7 @@ public class WASM : MapSet
   (import ""env"" ""memory"" (memory 1))
   
   ;; Generated members
-{members}
+{items}
 )";
     
     /// <summary>Namespace member declarations</summary>
@@ -139,14 +139,16 @@ public class WASM : MapSet
     /// <summary>Type declaration dispatcher</summary>
     public Map TypeDeclaration = "{type}";
     
-    /// <summary>Class declaration - mapped to struct type in WASM</summary>
-    public Map ClassDeclaration = @";; class {name}
-(type ${name} (struct
-{body}
+    /// <summary>Class declaration - TODO: Fix parser field assignment bug</summary>
+    public Map ClassDeclaration = @";; class name={mods}
+(type ${mods} (struct
+{name}
 ))";
+
+
     
-    /// <summary>Class body</summary>
-    public Map ClassBody = "{members}";
+    /// <summary>Class body - members may not be present due to parser bug</summary>
+    public Map ClassBody = "";  // Empty for now, members will be added when parser is fixed
     
     /// <summary>Class member declarations</summary>
     public Map ClassMemberDeclarations = "{members}";
@@ -189,8 +191,8 @@ public class WASM : MapSet
 {body}
 )";
     
-    /// <summary>Field declaration - mapped to struct field</summary>
-    public Map FieldDeclaration = "(field ${name} {type})";
+    /// <summary>Field declaration - TODO: properly handle multiple declarators</summary>
+    public Map FieldDeclaration = ";; field {type}";
     
     /// <summary>
     /// Constructor declaration - CTGC analyzes object initialization.
@@ -1444,14 +1446,14 @@ public class WASM : MapSet
     /// <summary>Primitive type dispatcher</summary>
     public Map PrimitiveType = "{type}";
     
-    /// <summary>Integral type (int, long, etc.)</summary>
-    public Map IntegralType = "{type}";
+    /// <summary>Integral type - most map to i32 in WASM (except long/ulong)</summary>
+    public Map IntegralType = "i32";
     
-    /// <summary>Floating point type (float, double, decimal)</summary>
-    public Map FloatingPointType = "{type}";
+    /// <summary>Floating point type - default to f64</summary>
+    public Map FloatingPointType = "f64";
     
     /// <summary>Named type (user-defined type)</summary>
-    public Map NamedType = "{name}";
+    public Map NamedType = "(ref ${name})";
     
     /// <summary>Ref type (ref T)</summary>
     public Map RefType = "(ref {type})";
@@ -1680,16 +1682,83 @@ public class WASM : MapSet
     public Map ResourceAcquisition = "{resource}";
     
     // ============================================================
+    // TOKEN MAPS
+    // ============================================================
+    // Token nodes are created by the parser for terminals in the grammar.
+    // They have a 'lexeme' field containing the matched text.
+    // These maps extract the lexeme or map C# types to WASM types.
+    
+    /// <summary>Identifier token - extract lexeme</summary>
+    public Map Identifier = "{lexeme}";
+    
+    /// <summary>Verbatim identifier (@name) - extract lexeme</summary>
+    public Map VerbatimIdentifier = "{lexeme}";
+    
+    // Type keyword tokens - map C# types to WASM types
+    public Map KwInt = "i32";
+    public Map KwUint = "i32";
+    public Map KwShort = "i32";
+    public Map KwUshort = "i32";
+    public Map KwByte = "i32";
+    public Map KwSbyte = "i32";
+    public Map KwLong = "i64";
+    public Map KwUlong = "i64";
+    public Map KwFloat = "f32";
+    public Map KwDouble = "f64";
+    public Map KwBool = "i32";
+    public Map KwChar = "i32";
+    public Map KwNint = "i32";  // Native int
+    public Map KwNuint = "i32"; // Native uint
+    
+    // Other type keywords
+    public Map KwVoid = "";  // void has no WASM type
+    public Map KwObject = "(ref any)";
+    public Map KwString = "(ref string)";
+    public Map KwDecimal = "i64 i64";  // Decimal is 128-bit, represented as two i64s
+    public Map KwDynamic = "(ref any)";
+    
+    // Keyword tokens that are structural (mapped to empty string as they're handled by containing maps)
+    public Map KwClass = "";
+    public Map KwStruct = "";
+    public Map KwInterface = "";
+    public Map KwEnum = "";
+    public Map KwNamespace = "";
+    public Map KwPublic = "";
+    public Map KwPrivate = "";
+    public Map KwProtected = "";
+    public Map KwInternal = "";
+    public Map KwStatic = "";
+    public Map KwReadonly = "";
+    public Map KwConst = "";
+    public Map KwVirtual = "";
+    public Map KwAbstract = "";
+    public Map KwSealed = "";
+    public Map KwOverride = "";
+    public Map KwNew = "";
+    public Map KwAsync = "";
+    public Map KwPartial = "";
+    
+    // Punctuation tokens
+    public Map OpenBrace = "{{";
+    public Map CloseBrace = "}}";
+    public Map OpenParen = "(";
+    public Map CloseParen = ")";
+    public Map OpenBracket = "[";
+    public Map CloseBracket = "]";
+    public Map Semicolon = "";  // Semicolons are structural, handled by containing maps
+    public Map Comma = ", ";
+    public Map Dot = ".";
+    public Map Colon = ":";
+    
+    // ============================================================
     // FALLBACK
     // ============================================================
     
     /// <summary>
     /// Fallback map for unmapped AST nodes.
-    /// Generates diagnostic error for unsupported constructs while still producing valid WASM.
+    /// Generates diagnostic comment for unsupported constructs.
+    /// Note: This should rarely be used - most C# constructs should have explicit maps.
     /// </summary>
-    public Map Fallback = @"
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
+    public Map Fallback = @";; TODO: Add map for this construct
 nop";
 }

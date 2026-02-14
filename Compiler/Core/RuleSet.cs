@@ -14,7 +14,8 @@ public class Rules : RuleSet
     public Rule CompilationUnit = new Rule("items:CompilationUnitItem+")
         .Returns("items");
 
-    public Rule CompilationUnitItem = "item:ExternAliasDirective | item:UsingDirective | item:GlobalAttributeSection | item:NamespaceMemberDeclaration";
+    public Rule CompilationUnitItem = new Rule("item:ExternAliasDirective | item:UsingDirective | item:GlobalAttributeSection | item:NamespaceMemberDeclaration")
+        .Returns("item");
 
     // ============================================================
     // EXTERN ALIAS DIRECTIVES
@@ -51,7 +52,8 @@ public class Rules : RuleSet
     // NAMESPACE DECLARATIONS
     // ============================================================
 
-    public Rule NamespaceMemberDeclaration = "member:NamespaceDeclaration | member:FileScopedNamespaceDeclaration | member:TypeDeclaration";
+    public Rule NamespaceMemberDeclaration = new Rule("member:NamespaceDeclaration | member:FileScopedNamespaceDeclaration | member:TypeDeclaration")
+        .Returns("member");
 
     public Rule NamespaceDeclaration = new Rule("@KwNamespace name:QualifiedName body:NamespaceBody @Semicolon?")
         .Returns("name", "body");
@@ -71,7 +73,8 @@ public class Rules : RuleSet
     // TYPE DECLARATIONS
     // ============================================================
 
-    public Rule TypeDeclaration = "type:ClassDeclaration | type:StructDeclaration | type:InterfaceDeclaration | type:EnumDeclaration | type:DelegateDeclaration | type:RecordDeclaration";
+    public Rule TypeDeclaration = new Rule("type:ClassDeclaration | type:StructDeclaration | type:InterfaceDeclaration | type:EnumDeclaration | type:DelegateDeclaration | type:RecordDeclaration")
+        .Returns("type");
 
     // CLASS DECLARATION
     public Rule ClassDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwClass name:@Identifier typeParams:TypeParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:ClassBody @Semicolon?")
@@ -82,7 +85,8 @@ public class Rules : RuleSet
 
     public Rule ClassMemberDeclarations = "members:ClassMemberDeclaration+";
 
-    public Rule ClassMemberDeclaration = "member:FieldDeclaration | member:MethodDeclaration | member:PropertyDeclaration | member:EventDeclaration | member:EventDeclarationWithAccessors | member:IndexerDeclaration | member:OperatorDeclaration | member:ConversionOperatorDeclaration | member:ConstructorDeclaration | member:DestructorDeclaration | member:TypeDeclaration";
+    public Rule ClassMemberDeclaration = new Rule("member:FieldDeclaration | member:MethodDeclaration | member:PropertyDeclaration | member:EventDeclaration | member:EventDeclarationWithAccessors | member:IndexerDeclaration | member:OperatorDeclaration | member:ConversionOperatorDeclaration | member:ConstructorDeclaration | member:DestructorDeclaration | member:TypeDeclaration")
+        .Returns("member");
 
     // STRUCT DECLARATION
     public Rule StructDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwStruct name:@Identifier typeParams:TypeParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:StructBody @Semicolon?")
@@ -343,7 +347,8 @@ public class Rules : RuleSet
     public Rule Type = new Rule("base:NonArrayType suffixes:TypeSuffixes?")
         .Returns("base", "suffixes");
 
-    public Rule NonArrayType = "type:PrimitiveType | type:NamedType | type:TupleType | type:FunctionPointerType";
+    public Rule NonArrayType = new Rule("type:PrimitiveType | type:NamedType | type:TupleType | type:FunctionPointerType")
+        .Returns("type");
 
     public Rule TypeSuffixes = "suffixes:TypeSuffix+";
 
@@ -353,7 +358,8 @@ public class Rules : RuleSet
 
     public Rule NullableSuffix = "@Question";
 
-    public Rule PrimitiveType = "type:@KwVoid | type:@KwDynamic | type:@KwObject | type:@KwString | type:@KwBool | type:@KwChar | type:@KwDecimal | type:IntegralType | type:FloatingPointType";
+    public Rule PrimitiveType = new Rule("type:@KwVoid | type:@KwDynamic | type:@KwObject | type:@KwString | type:@KwBool | type:@KwChar | type:@KwDecimal | type:IntegralType | type:FloatingPointType")
+        .Returns("type");
 
     public Rule NamedType = new Rule("name:QualifiedName typeArgs:TypeArgumentList?")
         .Returns("name", "typeArgs");
@@ -383,7 +389,8 @@ public class Rules : RuleSet
     public Rule FunctionPointerParameters = new Rule("@Comma first:Type rest:(@Comma Type)*")
         .Returns("first", "rest");
 
-    public Rule IntegralType = "type:@KwSbyte | type:@KwByte | type:@KwShort | type:@KwUshort | type:@KwInt | type:@KwUint | type:@KwLong | type:@KwUlong | type:@KwNint | type:@KwNuint";
+    public Rule IntegralType = new Rule("type:@KwSbyte | type:@KwByte | type:@KwShort | type:@KwUshort | type:@KwInt | type:@KwUint | type:@KwLong | type:@KwUlong | type:@KwNint | type:@KwNuint")
+        .Returns("type");
 
     public Rule FloatingPointType = "type:@KwFloat | type:@KwDouble";
 
