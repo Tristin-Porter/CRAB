@@ -188,21 +188,11 @@ public class WASM : MapSet
     /// <summary>
     /// Method declaration - primary compilation target.
     /// WORKAROUND for CDTk parser bug with optional fields.
-    /// Bug causes field shifting when attrs/mods are absent:
-    /// - 'attrs' field receives the return type
-    /// - 'mods' field receives the method name
-    /// - 'name' field receives the method body
-    /// Parameters are currently lost due to field shifting - need further investigation.
-    /// AutomaticModel.Build() analyzes the entire method body to:
-    /// 1. Track all allocations in the method
-    /// 2. Infer lifetimes of all values
-    /// 3. Compute optimal deallocation points
-    /// 4. Insert deallocation instructions in the generated WASM
+    /// Field shifting based on parameters presence - use {name} which works for both cases
+    /// but requires MethodBody Map to handle the shifting internally
     /// </summary>
     public Map MethodDeclaration = @"(func ${mods}
-  ;; TODO: Parameters lost due to CDTk field shifting bug - fix when CDTk is updated
   (result {attrs})
-  ;; Method body with CTGC-inserted deallocations
 {name}
 )";
     
