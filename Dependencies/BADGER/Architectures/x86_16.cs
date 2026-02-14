@@ -1042,6 +1042,41 @@ _start:
     /// but is used to inject dynamic code generation during lowering
     /// </summary>
     public Map DynamicCode = "{code}";
+    
+    // ========================================================================
+    // TEMPLATE EXPANSION METHODS
+    // ========================================================================
+    
+    /// <summary>
+    /// Template expansion for {push} - currently returns empty for simplification
+    /// In full implementation, would generate x86-16 stack push code
+    /// </summary>
+    public static string ExpandPush()
+    {
+        // Simplified: return empty string
+        // Full implementation would use StackPush() helper
+        return "";
+    }
+    
+    /// <summary>
+    /// Template expansion for {pop} - currently returns empty for simplification
+    /// </summary>
+    public static string ExpandPop(string dest = "ax")
+    {
+        // Simplified: return empty string
+        // Full implementation would use StackPop() helper
+        return "";
+    }
+    
+    /// <summary>
+    /// Template expansion for {pop2} - pops two values from stack
+    /// </summary>
+    public static string ExpandPop2()
+    {
+        // Simplified: return empty string
+        // Full implementation would use StackPop2() helper
+        return "";
+    }
 }
 public static class Assembler
 {
@@ -1057,7 +1092,7 @@ public static class Assembler
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith(";"))
+            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith(";") || IsDirectiveOrComment(trimmed))
                 continue;
                 
             if (trimmed.EndsWith(":"))
@@ -1075,13 +1110,23 @@ public static class Assembler
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith(";") || trimmed.EndsWith(":"))
+            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith(";") || trimmed.EndsWith(":") || IsDirectiveOrComment(trimmed))
                 continue;
                 
             EncodeInstruction(trimmed, code, labels);
         }
         
         return code.ToArray();
+    }
+    
+    private static bool IsDirectiveOrComment(string line)
+    {
+        var trimmed = line.Trim();
+        return trimmed.StartsWith(";") || 
+               trimmed.StartsWith(".") || 
+               trimmed.StartsWith("section") || 
+               trimmed.StartsWith("global") ||
+               trimmed.StartsWith("@");
     }
     
     private static int GetCurrentAddress(List<byte> code)
