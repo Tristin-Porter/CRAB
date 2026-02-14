@@ -3,6 +3,7 @@ bin/
 obj/
 TestProject/
 testing/
+tests/
 *_outputs/
 *.bin
 *.wasm
