@@ -154,11 +154,11 @@ public class WASM : MapSet
 ))";
     
     /// <summary>
-    /// Class body - empty due to CDTk parser bug preventing member generation.
-    /// When parser bug is fixed, this should be "{members}" to generate class members.
-    /// For now, empty to avoid outputting literal "{members}" placeholder.
+    /// Class body - generates class members.
+    /// Due to CDTk parser bug with field shifting, this Map is referenced via {name} in ClassDeclaration.
+    /// Returns the members field from the ClassBody AST node.
     /// </summary>
-    public Map ClassBody = "";
+    public Map ClassBody = "{members}";
     
     /// <summary>Class member declarations</summary>
     public Map ClassMemberDeclarations = "{members}";
@@ -187,18 +187,41 @@ public class WASM : MapSet
     
     /// <summary>
     /// Method declaration - primary compilation target.
+    /// WORKAROUND for CDTk parser bug with optional fields.
+    /// Bug causes field shifting when attrs/mods are absent:
+    /// - 'attrs' field receives the return type
+    /// - 'mods' field receives the method name  
+    /// - 'returnType' field receives unknown (possibly typeParams or null)
+    /// - 'name' field receives unknown (testing...)
+    /// - 'typeParams' field receives unknown
+    /// - 'parameters' field receives unknown
+    /// - 'constraints' field receives the method body
+    /// Empirical testing needed to map parameters field.
     /// AutomaticModel.Build() analyzes the entire method body to:
     /// 1. Track all allocations in the method
     /// 2. Infer lifetimes of all values
     /// 3. Compute optimal deallocation points
     /// 4. Insert deallocation instructions in the generated WASM
-    /// The {body} will include both the original logic and inserted deallocations.
     /// </summary>
-    public Map MethodDeclaration = @"(func ${name}
-  (param {parameters})
-  (result {returnType})
+    /// <summary>
+    /// Method declaration - primary compilation target.
+    /// WORKAROUND for CDTk parser bug with optional fields.
+    /// Bug causes field shifting when attrs/mods are absent:
+    /// - 'attrs' field receives the return type
+    /// - 'mods' field receives the method name
+    /// - 'name' field receives the method body
+    /// Parameters are currently lost due to field shifting - need further investigation.
+    /// AutomaticModel.Build() analyzes the entire method body to:
+    /// 1. Track all allocations in the method
+    /// 2. Infer lifetimes of all values
+    /// 3. Compute optimal deallocation points
+    /// 4. Insert deallocation instructions in the generated WASM
+    /// </summary>
+    public Map MethodDeclaration = @"(func ${mods}
+  ;; TODO: Parameters lost due to CDTk field shifting bug - fix when CDTk is updated
+  (result {attrs})
   ;; Method body with CTGC-inserted deallocations
-{body}
+{name}
 )";
     
     /// <summary>Field declaration - TODO: properly handle multiple declarators</summary>
@@ -605,7 +628,7 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Type dispatcher</summary>
-    public Map Type = "{type}";
+    public Map Type = "{base}";
     
     /// <summary>Primitive type - signed byte</summary>
     public Map SByteType = "i32";
@@ -710,7 +733,7 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Formal parameter list</summary>
-    public Map FormalParameterList = "{parameters}";
+    public Map FormalParameterList = "{params}";
     
     /// <summary>Fixed parameter</summary>
     public Map FixedParameter = "(param ${name} {type})";
@@ -1238,10 +1261,10 @@ public class WASM : MapSet
     public Map FormalParameter = "(param ${name} {type})";
     
     /// <summary>Formal parameter list content</summary>
-    public Map FormalParameterListContent = "{parameters}";
+    public Map FormalParameterListContent = "{params}";
     
     /// <summary>Fixed parameters list</summary>
-    public Map FixedParameters = "{parameters}";
+    public Map FixedParameters = "{first}{rest}";
     
     // ============================================================
     // STATEMENTS (Extended)

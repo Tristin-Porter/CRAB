@@ -3,8 +3,17 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class name=Calculator
-(type $Calculator (struct
-
+;; class TestParams
+(type $TestParams (struct
+;; ClassBody evaluated
+(func $Add
+  (param {typeParams})
+  (result i32)
+  ;; Method body with CTGC-inserted deallocations
+(block
+{stmt}
+  ;; Deallocation instructions inserted here based on AutomaticModel analysis
+)
+)
 ))
 )
