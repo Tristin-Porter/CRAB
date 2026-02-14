@@ -267,7 +267,8 @@ class Test : Command
                 try
                 {
                     string testOutput = $"test_output_{arch}_{format}.bin";
-                    if (File.Exists(testOutput) && saveDir == null)
+                    bool shouldDeleteTestOutput = saveDir == null;
+                    if (File.Exists(testOutput) && shouldDeleteTestOutput)
                         File.Delete(testOutput);
                 }
                 catch { }
