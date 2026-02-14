@@ -139,16 +139,26 @@ public class WASM : MapSet
     /// <summary>Type declaration dispatcher</summary>
     public Map TypeDeclaration = "{type}";
     
-    /// <summary>Class declaration - TODO: Fix parser field assignment bug</summary>
-    public Map ClassDeclaration = @";; class name={mods}
+    /// <summary>
+    /// Class declaration - WORKAROUND for CDTk parser bug with optional fields.
+    /// Bug causes field shifting: when 'attrs' is absent, subsequent fields shift:
+    /// - 'mods' field receives the class name (e.g., "Calculator")
+    /// - 'name' field receives the ClassBody AST node
+    /// - 'body' field is absent
+    /// Therefore: use {mods} to get class name, {name} to get class body.
+    /// This will be fixed when CDTk parser is updated.
+    /// </summary>
+    public Map ClassDeclaration = @";; class {mods}
 (type ${mods} (struct
 {name}
 ))";
-
-
     
-    /// <summary>Class body - members may not be present due to parser bug</summary>
-    public Map ClassBody = "";  // Empty for now, members will be added when parser is fixed
+    /// <summary>
+    /// Class body - empty due to CDTk parser bug preventing member generation.
+    /// When parser bug is fixed, this should be "{members}" to generate class members.
+    /// For now, empty to avoid outputting literal "{members}" placeholder.
+    /// </summary>
+    public Map ClassBody = "";
     
     /// <summary>Class member declarations</summary>
     public Map ClassMemberDeclarations = "{members}";

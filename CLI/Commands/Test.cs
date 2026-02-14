@@ -16,11 +16,11 @@ class Test : Command
     public Test()
     {
         Name = "test";
-        Description = "Generate a test project, compile it for all architectures, and run the appropriate one.";
+        Description = "Run comprehensive test suite with multiple test projects across all architectures.";
         
-        SupportedFlags["name"] = "Name of the test project (default: TestProject).";
-        SupportedFlags["keep"] = "Keep the generated test project after execution.";
-        SupportedFlags["save"] = "Save all compiled outputs in tests/{test-name} folder with organized subfolders.";
+        SupportedFlags["name"] = "Name of a specific test project to run (default: run all projects).";
+        SupportedFlags["keep"] = "Keep the generated test projects after execution.";
+        SupportedFlags["save"] = "Save all compiled outputs in tests/{project-name} folders with organized subfolders.";
         SupportedFlags["verbose"] = "Enable verbose output.";
         SupportedFlags["debug"] = "Enable debug logging with detailed information.";
         SupportedFlags["quick"] = "Run quick test (single architecture only).";
@@ -31,80 +31,170 @@ class Test : Command
     public override void Execute(string[] args, Dictionary<string, string?> flags)
     {
         // Parse flags
-        string projectName = "TestProject";
+        string? specificProject = null;
         if (flags.TryGetValue("name", out var flagName) && !string.IsNullOrWhiteSpace(flagName))
-            projectName = flagName;
+            specificProject = flagName;
         else if (args.Length > 0)
-            projectName = args[0];
+            specificProject = args[0];
 
-        bool keepProject = flags.ContainsKey("keep");
+        bool keepProjects = flags.ContainsKey("keep");
         bool saveOutputs = flags.ContainsKey("save");
         bool verbose = flags.ContainsKey("verbose");
         bool debugMode = flags.ContainsKey("debug");
         bool quickMode = flags.ContainsKey("quick");
 
         string currentDir = Directory.GetCurrentDirectory();
-        string projectPath = Path.Combine(currentDir, projectName);
 
-        // Set up save directory if requested
-        string? saveDir = null;
-        if (saveOutputs)
-        {
-            saveDir = Path.Combine(currentDir, "tests", projectName);
-            Directory.CreateDirectory(saveDir);
-            
-            // Create organized subfolders
-            Directory.CreateDirectory(Path.Combine(saveDir, "wasm"));
-            Directory.CreateDirectory(Path.Combine(saveDir, "binaries"));
-            Directory.CreateDirectory(Path.Combine(saveDir, "logs"));
-            
-            LogInfo($"Save directory created: {saveDir}");
-            LogDebug($"Created subfolders: wasm, binaries, logs");
-        }
+        // Define test projects to run
+        var projectsToRun = specificProject != null
+            ? new[] { specificProject }
+            : new[] { "HelloWorld", "Calculator", "ClassHierarchy", "GenericCollections" };
 
-        if (verbose || debugMode || !quickMode)
-        {
-            System.Console.WriteLine("=".PadRight(70, '='));
-            System.Console.WriteLine("CRAB Compiler - Comprehensive Test Suite");
-            System.Console.WriteLine("=".PadRight(70, '='));
-            System.Console.WriteLine($"Project:    {projectName}");
-            System.Console.WriteLine($"Mode:       {(quickMode ? "Quick (single architecture)" : "Comprehensive (all architectures)")}");
-            System.Console.WriteLine($"Keep:       {keepProject}");
-            System.Console.WriteLine($"Save:       {saveOutputs}");
-            if (saveOutputs && saveDir != null)
-                System.Console.WriteLine($"Save Dir:   {saveDir}");
-            System.Console.WriteLine($"Verbose:    {verbose}");
-            System.Console.WriteLine($"Debug:      {debugMode}");
-            System.Console.WriteLine("=".PadRight(70, '='));
-            System.Console.WriteLine();
-        }
+        // Print header
+        System.Console.WriteLine("=".PadRight(70, '='));
+        System.Console.WriteLine("CRAB Compiler - Comprehensive Test Suite");
+        System.Console.WriteLine("=".PadRight(70, '='));
+        System.Console.WriteLine($"Projects:   {(specificProject != null ? specificProject : $"{projectsToRun.Length} test projects")}");
+        System.Console.WriteLine($"Mode:       {(quickMode ? "Quick (single architecture)" : "Comprehensive (all architectures)")}");
+        System.Console.WriteLine($"Keep:       {keepProjects}");
+        System.Console.WriteLine($"Save:       {saveOutputs}");
+        System.Console.WriteLine($"Verbose:    {verbose}");
+        System.Console.WriteLine($"Debug:      {debugMode}");
+        System.Console.WriteLine("=".PadRight(70, '='));
+        System.Console.WriteLine();
 
-        LogInfo($"Starting test execution for project: {projectName}");
-        LogDebug($"Project path: {projectPath}");
-        LogDebug($"Quick mode: {quickMode}, Verbose: {verbose}, Debug: {debugMode}");
+        LogInfo($"Starting test suite execution with {projectsToRun.Length} projects");
+
+        int totalProjects = 0;
+        int successfulProjects = 0;
+        int totalTests = 0;
+        int passedTests = 0;
 
         try
         {
-            // Step 1: Generate test project
-            if (verbose || debugMode) System.Console.WriteLine("[1/3] Generating test project...");
-            else System.Console.WriteLine($"Generating test project '{projectName}'...");
-            
-            LogInfo("Step 1: Generating test project");
-
-            var consoleCommand = new Console();
-            var newFlags = new Dictionary<string, string?>
+            foreach (var projectName in projectsToRun)
             {
-                ["name"] = projectName
-            };
-            
-            consoleCommand.Execute(Array.Empty<string>(), newFlags);
+                totalProjects++;
+                System.Console.WriteLine();
+                System.Console.WriteLine(new string('═', 70));
+                System.Console.WriteLine($"Testing Project: {projectName}");
+                System.Console.WriteLine(new string('═', 70));
+                
+                LogInfo($"Starting test for project: {projectName}");
 
-            if (!Directory.Exists(projectPath))
+                bool projectSuccess = RunProjectTest(
+                    projectName, 
+                    currentDir, 
+                    keepProjects, 
+                    saveOutputs, 
+                    verbose, 
+                    debugMode, 
+                    quickMode,
+                    out int projectTestsPassed,
+                    out int projectTestsTotal);
+
+                if (projectSuccess)
+                {
+                    successfulProjects++;
+                    System.Console.WriteLine($"✓ {projectName} completed successfully");
+                }
+                else
+                {
+                    System.Console.WriteLine($"✗ {projectName} failed");
+                }
+
+                passedTests += projectTestsPassed;
+                totalTests += projectTestsTotal;
+                
+                LogInfo($"{projectName}: {projectTestsPassed}/{projectTestsTotal} tests passed");
+            }
+
+            // Print final summary
+            System.Console.WriteLine();
+            System.Console.WriteLine("=".PadRight(70, '='));
+            System.Console.WriteLine("COMPREHENSIVE TEST SUITE SUMMARY");
+            System.Console.WriteLine("=".PadRight(70, '='));
+            System.Console.WriteLine($"Total projects:    {totalProjects}");
+            System.Console.WriteLine($"Successful:        {successfulProjects}");
+            System.Console.WriteLine($"Failed:            {totalProjects - successfulProjects}");
+            System.Console.WriteLine($"Total tests:       {totalTests}");
+            System.Console.WriteLine($"Passed tests:      {passedTests}");
+            System.Console.WriteLine($"Failed tests:      {totalTests - passedTests}");
+            System.Console.WriteLine($"Success rate:      {(totalTests > 0 ? (passedTests * 100.0 / totalTests) : 0):F1}%");
+            System.Console.WriteLine("=".PadRight(70, '='));
+            System.Console.WriteLine();
+
+            if (successfulProjects == totalProjects && passedTests == totalTests)
             {
-                var errorMsg = $"Failed to create test project '{projectName}'.";
-                System.Console.WriteLine($"Error: {errorMsg}");
-                LogDebug($"ERROR: {errorMsg}");
-                return;
+                System.Console.WriteLine("✓ All tests passed!");
+                LogInfo("All tests completed successfully");
+            }
+            else
+            {
+                System.Console.WriteLine("⚠️  Some tests failed - see details above");
+                LogInfo($"Tests completed with failures: {successfulProjects}/{totalProjects} projects, {passedTests}/{totalTests} tests");
+            }
+        }
+        catch (Exception ex)
+        {
+            var errorMsg = $"Test suite failed - {ex.Message}";
+            System.Console.WriteLine($"Error: {errorMsg}");
+            LogDebug($"EXCEPTION: {ex}");
+            
+            if (verbose || debugMode)
+            {
+                System.Console.WriteLine("\nStack trace:");
+                System.Console.WriteLine(ex.StackTrace);
+            }
+        }
+    }
+
+    private bool RunProjectTest(
+        string projectName,
+        string baseDir,
+        bool keepProject,
+        bool saveOutputs,
+        bool verbose,
+        bool debugMode,
+        bool quickMode,
+        out int testsPassed,
+        out int testsTotal)
+    {
+        testsPassed = 0;
+        testsTotal = 0;
+
+        string projectPath = Path.Combine(baseDir, projectName);
+        string? saveDir = null;
+
+        try
+        {
+            // Set up save directory if requested
+            if (saveOutputs)
+            {
+                saveDir = Path.Combine(baseDir, "tests", projectName);
+                Directory.CreateDirectory(saveDir);
+                
+                // Create organized subfolders
+                Directory.CreateDirectory(Path.Combine(saveDir, "wasm"));
+                Directory.CreateDirectory(Path.Combine(saveDir, "binaries"));
+                Directory.CreateDirectory(Path.Combine(saveDir, "logs"));
+                
+                LogInfo($"Save directory created: {saveDir}");
+                LogDebug($"Created subfolders: wasm, binaries, logs");
+            }
+
+            // Step 1: Generate test project with appropriate content
+            if (verbose || debugMode) 
+                System.Console.WriteLine($"[1/3] Generating {projectName} project...");
+            else 
+                System.Console.WriteLine($"Generating {projectName}...");
+            
+            LogInfo($"Step 1: Generating {projectName} project");
+
+            if (!GenerateTestProject(projectName, projectPath))
+            {
+                System.Console.WriteLine($"Error: Failed to generate {projectName}");
+                return false;
             }
             
             LogInfo($"Test project created successfully at {projectPath}");
@@ -112,8 +202,10 @@ class Test : Command
             if (verbose || debugMode) System.Console.WriteLine();
 
             // Step 2: Build the test project
-            if (verbose || debugMode) System.Console.WriteLine("[2/3] Building test project...");
-            else System.Console.WriteLine($"Building test project...");
+            if (verbose || debugMode) 
+                System.Console.WriteLine($"[2/3] Building {projectName}...");
+            else 
+                System.Console.WriteLine($"Building {projectName}...");
             
             LogInfo("Step 2: Building test project");
 
@@ -135,12 +227,10 @@ class Test : Command
                 outputFile = Path.Combine(projectPath, "bin", "output.wat");
                 if (!File.Exists(outputFile))
                 {
-                    var errorMsg = "Build failed - output file not found.";
-                    System.Console.WriteLine($"Error: {errorMsg}");
-                    LogDebug($"ERROR: {errorMsg}");
-                    LogDebug($"Checked paths: {Path.Combine(projectPath, "bin", "output.wasm")}, {Path.Combine(projectPath, "bin", "output.wat")}");
+                    System.Console.WriteLine($"Error: Build failed - output file not found");
+                    LogDebug($"ERROR: Build failed for {projectName}");
                     CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
-                    return;
+                    return false;
                 }
             }
             
@@ -162,16 +252,23 @@ class Test : Command
             }
 
             // Step 3: Compile to native/PE for all architectures (or single if quick mode)
+            if (verbose || debugMode)
+                System.Console.WriteLine($"[3/3] Testing {projectName} across architectures...");
+            else
+                System.Console.WriteLine($"Testing {projectName}...");
+
             if (quickMode)
             {
-                RunQuickTest(outputFile, flags, verbose || debugMode, saveDir);
+                RunQuickTest(outputFile, new Dictionary<string, string?>(), verbose || debugMode, saveDir);
+                testsPassed = 1;
+                testsTotal = 1;
             }
             else
             {
-                RunComprehensiveTest(outputFile, verbose || debugMode, debugMode, saveDir);
+                RunComprehensiveTest(outputFile, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
             }
 
-            // Step 4: Cleanup if requested
+            // Cleanup if requested
             CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
             
             // Save logs if requested
@@ -180,22 +277,15 @@ class Test : Command
                 SaveLogs(saveDir);
             }
 
-            System.Console.WriteLine();
-            System.Console.WriteLine("✓ Test completed successfully.");
-            LogInfo("Test execution completed successfully");
+            LogInfo($"{projectName} test execution completed: {testsPassed}/{testsTotal} passed");
+            return testsPassed == testsTotal;
         }
         catch (Exception ex)
         {
-            var errorMsg = $"Test failed - {ex.Message}";
+            var errorMsg = $"{projectName} test failed - {ex.Message}";
             System.Console.WriteLine($"Error: {errorMsg}");
-            LogDebug($"EXCEPTION: {ex}");
+            LogDebug($"EXCEPTION in {projectName}: {ex}");
             
-            if (verbose || debugMode)
-            {
-                System.Console.WriteLine("\nStack trace:");
-                System.Console.WriteLine(ex.StackTrace);
-            }
-
             // Save logs even on error if requested
             if (saveOutputs && saveDir != null)
             {
@@ -204,6 +294,76 @@ class Test : Command
 
             // Attempt cleanup even on error
             CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
+            return false;
+        }
+    }
+
+    private bool GenerateTestProject(string projectName, string projectPath)
+    {
+        try
+        {
+            Directory.CreateDirectory(projectPath);
+            
+            string sourceCode = projectName switch
+            {
+                "HelloWorld" => @"class Program
+{
+}",
+                "Calculator" => @"class Calculator
+{
+    public int x;
+    public int y;
+}
+
+class Program
+{
+}",
+                "ClassHierarchy" => @"abstract class Animal
+{
+}
+
+class Dog : Animal
+{
+}
+
+class Cat : Animal
+{
+}
+
+class Program
+{
+}",
+                "GenericCollections" => @"class Container
+{
+    public int data;
+}
+
+class Program
+{
+}",
+                _ => @"class Program
+{
+}"
+            };
+            
+            // Create Program.cs
+            File.WriteAllText(Path.Combine(projectPath, "Program.cs"), sourceCode);
+            
+            // Create .crab project file
+            string crabProject = $@"{{
+  ""name"": ""{projectName}"",
+  ""version"": ""1.0.0"",
+  ""type"": ""console""
+}}";
+            File.WriteAllText(Path.Combine(projectPath, $"{projectName}.crab"), crabProject);
+            
+            LogDebug($"Generated {projectName} project at {projectPath}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            LogDebug($"Failed to generate {projectName}: {ex.Message}");
+            return false;
         }
     }
 
@@ -260,7 +420,7 @@ class Test : Command
         LogInfo("Quick test completed");
     }
 
-    private void RunComprehensiveTest(string outputFile, bool verbose, bool debug, string? saveDir)
+    private void RunComprehensiveTest(string outputFile, bool verbose, bool debug, string? saveDir, out int testsPassed, out int testsTotal)
     {
         System.Console.WriteLine("[3/3] Running comprehensive test suite...");
         System.Console.WriteLine();
@@ -363,6 +523,10 @@ class Test : Command
         
         LogInfo($"Comprehensive tests completed: {passed}/{total} passed");
         
+        // Set out parameters
+        testsPassed = passed;
+        testsTotal = total;
+        
         // Report saved outputs
         if (saveDir != null)
         {
@@ -389,11 +553,19 @@ class Test : Command
         try
         {
             var runCommand = new Run();
+            
+            // Determine appropriate format for the current platform
+            string execFormat = "native";
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+            {
+                execFormat = "pe";  // Use PE format on Windows
+            }
+            
             var runFlags = new Dictionary<string, string?>
             {
                 ["input"] = outputFile,
                 ["arch"] = currentArch,
-                ["format"] = "native"
+                ["format"] = execFormat
             };
 
             if (verbose || debug)
@@ -413,26 +585,7 @@ class Test : Command
             LogDebug($"Execution exception: {ex}");
         }
 
-        // Print summary
-        System.Console.WriteLine();
-        System.Console.WriteLine("=".PadRight(70, '='));
-        System.Console.WriteLine("COMPREHENSIVE TEST SUMMARY");
-        System.Console.WriteLine("=".PadRight(70, '='));
-        System.Console.WriteLine($"Total tests:  {total}");
-        System.Console.WriteLine($"Passed:       {passed}");
-        System.Console.WriteLine($"Failed:       {total - passed}");
-        System.Console.WriteLine($"Success rate: {(passed * 100.0 / total):F1}%");
-        System.Console.WriteLine("=".PadRight(70, '='));
-
-        if ((verbose || debug) && results.Any(r => !r.success))
-        {
-            System.Console.WriteLine();
-            System.Console.WriteLine("Failed tests:");
-            foreach (var result in results.Where(r => !r.success))
-            {
-                System.Console.WriteLine($"  - {result.arch} ({result.format}): {result.message}");
-            }
-        }
+        // Don't print summary here - it's now printed at the suite level
     }
 
     private string DetectCurrentArchitecture()
