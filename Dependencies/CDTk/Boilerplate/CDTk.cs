@@ -13425,12 +13425,12 @@ namespace CDTk
                 }
                 
                 // Map items to fields
-                // For now, use a simple strategy: assign non-literal terminals to fields in order
-                var fieldIndex = 0;
+                // Strategy: assign non-literal terminals to fields in order
+                // If there are more items than fields, collect remaining items into the last field as a list (for repetitions)
+                var nonLiteralItems = new List<AstNode>();
+                
                 foreach (var item in items)
                 {
-                    if (fieldIndex >= fieldNames.Count) break;
-                    
                     // Skip literal terminals (they don't get assigned to fields)
                     // Literals have lexeme that matches common operators
                     var isLiteralOperator = item.Type == "Plus" || item.Type == "Minus" || 
@@ -13447,8 +13447,35 @@ namespace CDTk
                         continue;
                     }
                     
-                    target.Fields[fieldNames[fieldIndex]] = item;
-                    fieldIndex++;
+                    nonLiteralItems.Add(item);
+                }
+                
+                // Now assign non-literal items to fields
+                // Heuristic: If we have exactly one field name, treat it as a potential repetition pattern
+                // This handles rules like "members:ClassMemberDeclaration+" which should always produce a list
+                if (fieldNames.Count == 1)
+                {
+                    // Single field - could be repetition or single item
+                    // Always use a list for consistency so template substitution works uniformly
+                    if (nonLiteralItems.Count > 1)
+                    {
+                        // Multiple items - definitely a repetition, assign as list
+                        target.Fields[fieldNames[0]] = nonLiteralItems;
+                    }
+                    else if (nonLiteralItems.Count == 1)
+                    {
+                        // Single item - assign directly (not as list) to avoid breaking single-item rules
+                        target.Fields[fieldNames[0]] = nonLiteralItems[0];
+                    }
+                    // If Count == 0, field remains unset (optional pattern matched nothing)
+                }
+                else
+                {
+                    // Multiple field names - non-repetition case: assign items one-to-one
+                    for (int i = 0; i < nonLiteralItems.Count && i < fieldNames.Count; i++)
+                    {
+                        target.Fields[fieldNames[i]] = nonLiteralItems[i];
+                    }
                 }
             }
             else
