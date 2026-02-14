@@ -1,129 +1,148 @@
-# CRAB Compiler: Statement Parsing Investigation - Final Report
+# Statement Parsing Bug - Root Cause and Fix
 
-## Executive Summary
+## Problem Statement
 
-✅ **Investigation Complete**: I've identified the exact root cause preventing statement parsing
-❌ **Fix Not Possible**: The issue is a fundamental bug in the CDTk parser framework
-📝 **Full Documentation**: Complete analysis provided in `STATEMENT_PARSING_INVESTIGATION.md`
+Despite expression parsing being "fixed" with correct SPPF node extents (`Expression[9..10]` instead of `Expression[9..9]`), statement parsing still failed completely:
 
-## Question 1: What is the specific grammar rule or token issue?
+- ✅ Expression nodes created with correct extents
+- ❌ NO statement nodes created (no `ReturnStatement`, `Block`, `Statement`, etc.)
+- ❌ Error: "GLL: No SPPF node found for 'CompilationUnit'"
 
-**Answer**: The issue is NOT a missing token or grammar rule. All grammar rules and tokens are correctly defined.
+## Root Cause
 
-The problem is in the **`UnaryExpression`** rule and how it interacts with CDTk's parser:
+**The CDTk GLL parser didn't update the input position after nonterminal completion.**
 
+### Detailed Explanation
+
+When parsing `return 5;` (tokens at positions [8, 9, 10]):
+
+1. `ReturnStatement` rule: `@KwReturn expr:Expression? @Semicolon`
+2. Parser at position 8 matches `@KwReturn` → advances to position 9 ✓
+3. Parser calls `Expression` nonterminal at position 9
+4. `Expression` matches literal "5", creates `Expression[9..10]` ✓
+5. `Expression` completes, calls `Pop(Expression[9..10])`
+6. **BUG**: `Pop()` creates continuation descriptor with `_currentPosition = 9` (unchanged!)
+7. Continuation tries to match `@Semicolon` at position 9
+8. Position 9 contains the literal "5", not the semicolon → **FAIL**
+
+### Why Terminals Worked but Nonterminals Didn't
+
+**Terminals** updated `_currentPosition` after matching:
 ```csharp
-public Rule UnaryExpression = new Rule("expr:UnaryExpressionBase suffixes:UnaryExpressionSuffixes?")
-    .Returns("expr", "suffixes");
+_currentPosition++;  // Advances after consuming token
 ```
 
-When this rule is referenced from string-based rules like:
-
+**Nonterminals** did NOT update position before creating continuations:
 ```csharp
-public Rule RangeExpression = "... | expr:UnaryExpression";
+AddDescriptor(new Descriptor(..., _currentPosition, ...));  // Still at start position!
 ```
 
-CDTk's GLL parser creates **empty SPPF nodes** instead of properly delegating to the child rule.
+### Why the Previous Fix Wasn't Enough
 
-## Question 2: Is there a missing keyword or grammar alternative like we had with `void`?
+Commit 1f1fdc4 fixed SPPF node **extents**:
+```csharp
+var endExtent = _currentSPPFNode != null 
+    ? _currentSPPFNode.RightExtent  // Correct extent
+    : _currentPosition;
+```
 
-**Answer**: No. This is NOT like the `void` keyword issue (which I've kept fixed in the code).
+This made `Expression[9..10]` have the right extent, but didn't fix **parser position tracking**. The parser still thought it was at position 9 after the expression, not position 10.
 
-The `void` issue was a simple missing alternative in the grammar. This issue is completely different - it's a **CDTk parser framework bug** in how it handles:
+## The Fix
 
-1. Rules defined with `new Rule(...)` containing optional elements
-2. String-based rules that reference those wrapper rules  
-3. The delegation pattern used throughout the expression grammar
+**File**: `Dependencies/CDTk/Boilerplate/CDTk.cs`  
+**Function**: `Pop(SPPFNode? sppfNode)`  
+**Change**: Update continuation position to nonterminal's `RightExtent`
 
-## Question 3: What's the minimal fix to get basic statements working?
+### Code
 
-**Answer**: **There is no minimal fix possible** without either:
+```csharp
+private void Pop(SPPFNode? sppfNode)
+{
+    if (_currentGSSNode == null) return;
 
-### Option A: Fix CDTk Parser (Required, but outside CRAB's control)
-- Report bug to CDTk maintainer
-- Wait for fix
-- Timeline: Unknown
+    int continuationPosition = _currentPosition;  // Start with current
+    
+    if (sppfNode != null && sppfNode is SPPFSymbolNode symbolNode)
+    {
+        // ... store SPPF node ...
+        
+        // THE FIX: Update position to where nonterminal ended
+        continuationPosition = endPosition;
+    }
 
-### Option B: Replace Parser Framework
-- Switch from CDTk to Roslyn or another C# parser
-- Major architectural change
-- Would work, but requires significant effort
+    foreach (var edge in _currentGSSNode.Edges)
+    {
+        AddDescriptor(new Descriptor(
+            GetLabelFromString(edge.Target.Label),
+            edge.Target,
+            continuationPosition,  // ← Use the updated position!
+            combinedSPPF));
+    }
+}
+```
 
-### Option C: Massive Grammar Restructuring  
-- Convert ALL ~20 expression rules from string-based to `new Rule(...)` syntax
-- May or may not work (untested if it avoids the bug)
-- High risk, high effort
+### How It Works
 
-## What I Discovered
+After the fix:
 
-Through systematic testing, I found:
+1. Parser at position 8 matches `@KwReturn` → advances to 9
+2. Calls `Expression` nonterminal at position 9  
+3. `Expression` matches literal, creates `Expression[9..10]`
+4. `Expression` completes, calls `Pop(Expression[9..10])`
+5. **FIX**: `continuationPosition = 10` (from `RightExtent`)
+6. Continuation descriptor created at position 10
+7. Matches `@Semicolon` at position 10 → **SUCCESS!**
+8. `ReturnStatement[8..11]` created, parse succeeds
 
-**✅ Successfully Parsed:**
-- `Literal[9..10]` - The number `5`
-- `PrimaryExpressionCore[9..10]` - Contains the literal
-- `UnaryExpressionBase[9..10]` - Base expression
+## Verification
 
-**❌ EMPTY (should contain the literal):**
-- `UnaryExpression[9..9]` - First failure point
-- `RangeExpression[9..9]`
-- `SwitchExpression[9..9]`
-- `MultiplicativeExpression[9..9]`
-- ... ALL expression rules up to...
-- `Expression[9..9]`
-
-Every single expression delegation alternative produces an **empty `[9..9]` match** instead of using the child rule's `[9..10]` span.
-
-## Test Results
+All test cases now pass:
 
 ```bash
-# These work:
-class A { void Test() { } }                  # ✅ Empty body
-class A { void Test(); }                     # ✅ Semicolon body  
-class A { void Test() { return; } }          # ✅ Return without expression
-
-# These fail:
-class A { int Get() { return 5; } }          # ❌ Return with expression
-class A { int Get() => 5; }                  # ❌ Expression body
-class A { void Main() { Console.WriteLine("x"); } } # ❌ Method call
+✅ return 5;              # Return statement with expression
+✅ int x = 5;             # Variable declaration with initializer
+✅ int field = 42;        # Field with initializer
+✅ 5;                     # Expression statement
+✅ Multiple statements    # Complex blocks
 ```
 
-## What I Attempted
+Before the fix, ALL of these failed.
 
-I tried 6 different approaches:
+## Summary
 
-1. ❌ Split `UnaryExpression` into explicit alternatives
-2. ❌ Remove `.Returns()` clause  
-3. ❌ Change labels (`expr:` → `base:`)
-4. ❌ Use `new Rule()` wrapper
-5. ❌ Remove labels entirely
-6. ❌ Bypass `UnaryExpression` in parent rules
+**Question 1: Why weren't statement nodes being created when expression parsing is fixed?**
 
-**All failed** because the core issue is how CDTk handles string-based rule alternations with delegation.
+Expression parsing created SPPF nodes with correct **extents**, but the parser's **position tracking** was broken. After parsing an expression, the parser didn't advance its position, so subsequent terminals (like semicolons) tried to match at the wrong position and failed.
 
-## Code Changes
+**Question 2: Are terminals matching?**
 
-**Only one intentional change made**:
-- ✅ Kept the `@KwVoid` fix in `PrimitiveType` (from previous session)
-- ✅ Reverted all test changes to `UnaryExpression`
+Yes, terminals match fine when they're at the correct position. The bug prevented the parser from reaching the correct position after nonterminals.
 
-The codebase is in a clean state with only the previous void keyword fix applied.
+**Question 3: Is there another bug in CDTk or the grammar?**
 
-## Recommended Next Steps
+Yes - a bug in CDTk's `Pop()` function. The grammar was correct. The previous "fix" only addressed SPPF extent calculation, not position tracking.
 
-1. **Report to CDTk**: File bug report with CDTk maintainer showing the delegation issue
-2. **Evaluate alternatives**: Consider switching to Roslyn parser or waiting for CDTk fix  
-3. **Documentation**: Review `STATEMENT_PARSING_INVESTIGATION.md` for full technical details
+**Question 4: What specific fix is needed?**
 
-## Impact
+Update `Pop()` in CDTk to set continuation descriptors' input position to the completed nonterminal's `RightExtent` instead of using the unchanged `_currentPosition`.
 
-This is a **CRITICAL BLOCKER**:
-- ❌ Cannot parse ANY expressions (literals, variables, method calls, etc.)
-- ❌ Cannot parse ANY statements containing expressions
-- ❌ Essentially cannot compile ANY useful C# code
-- ❌ Blocks ALL CRAB functionality
+## Files Modified
 
-## Conclusion
+- `Dependencies/CDTk/Boilerplate/CDTk.cs` - Fixed `Pop()` function (line ~11964)
 
-The CRAB compiler's grammar is **correctly specified**. The issue is a fundamental limitation/bug in the CDTk parser framework that prevents proper expression parsing. This cannot be fixed within CRAB without either fixing CDTk or replacing the parser framework entirely.
+## Documentation
 
-**The architecture and specification of CRAB are sound** - it's the dependency (CDTk) that has the critical bug.
+- `STATEMENT_PARSING_FIX.md` - Comprehensive analysis with test results and execution traces
+- `STATEMENT_PARSING_INVESTIGATION.md` - Earlier investigation of expression parsing issues
+
+## Result
+
+**Statement parsing is now fully functional.** The CRAB compiler can parse:
+- Return statements with expressions
+- Variable declarations with initializers  
+- Field declarations with initializers
+- Expression statements
+- Complex method bodies with multiple statements
+
+This completes the CDTk GLL parser fixes for C# parsing.
