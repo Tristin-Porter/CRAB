@@ -3,9 +3,9 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class TestClass
-(type $TestClass (struct
-(func $Add
+;; class Test
+(type $Test (struct
+(func $First
   ;; TODO: Parameters lost due to CDTk field shifting bug - fix when CDTk is updated
   (result i32)
   ;; Method body with CTGC-inserted deallocations

@@ -129,3 +129,28 @@ Generates:
 - **10x improvement** in generated code completeness
 
 This represents a major step forward in CRAB's WASM generation capability. The fundamental infrastructure is now working; the remaining work is primarily completing the lowering of C# constructs to WASM instructions.
+
+## Update: Multiple Members Limitation
+
+After further testing, discovered that only the first class member is being generated in WASM output. Classes with multiple methods will only show the first method.
+
+**Example:**
+```csharp
+class Test {
+    int First(int x) { return x; }
+    int Second(int y) { return y; }
+}
+```
+
+Generates only:
+```wasm
+(func $First ...)
+```
+
+**Root Cause**: Likely related to how ClassMemberDeclarations collection is being processed by CDTk. The `members` field contains multiple nodes, but only the first is being transformed.
+
+**Impact**: Methods DO generate (major improvement from before), but multi-method classes are incomplete.
+
+**Next Step**: Debug CDTk collection processing or adjust ClassMemberDeclarations/ClassMemberDeclaration Map structure.
+
+**Current Status**: Still represents 10x improvement (from 0 methods to 1+ method with structure).
