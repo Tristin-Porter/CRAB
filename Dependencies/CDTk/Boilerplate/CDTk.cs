@@ -9261,6 +9261,10 @@ namespace CDTk
                 {
                     vars[key] = s;
                 }
+                else if (v is TokenInstance token)
+                {
+                    vars[key] = token.Lexeme;
+                }
                 else if (v is IEnumerable<string> ss)
                 {
                     vars[key] = string.Join(", ", ss);
@@ -10179,6 +10183,9 @@ namespace CDTk
                 output.AppendLine($"// {node.Type}");
             }
 
+            // Child nodes are now handled via recursive transformation in Map.Generate()
+            // The old recursive traversal is disabled to avoid duplication
+            /*
             // Process child nodes
             foreach (var field in node.Fields)
             {
@@ -10194,6 +10201,7 @@ namespace CDTk
                     }
                 }
             }
+            */
         }
     }
 

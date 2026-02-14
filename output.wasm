@@ -3,35 +3,8 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class {members}
-(type ${members} (struct
-{body}
+;; class name=Program
+(type $Program (struct
+{members}
 ))
 )
-;; class {members}
-(type ${members} (struct
-{body}
-))
-;; class {members}
-(type ${members} (struct
-{body}
-))
-;; class {members}
-(type ${members} (struct
-{body}
-))
-;; class {members}
-(type ${members} (struct
-{body}
-))
-
-Program
-{members}
-{members}
-;; field 
-{type}
-i32
-i32
-i32
-i32
-x

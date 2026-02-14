@@ -139,11 +139,13 @@ public class WASM : MapSet
     /// <summary>Type declaration dispatcher</summary>
     public Map TypeDeclaration = "{type}";
     
-    /// <summary>Class declaration - mapped to struct type in WASM</summary>
-    public Map ClassDeclaration = @";; class {name}
-(type ${name} (struct
-{body}
+    /// <summary>Class declaration - TODO: Fix parser field assignment bug</summary>
+    public Map ClassDeclaration = @";; class name={mods}
+(type ${mods} (struct
+{name}
 ))";
+
+
     
     /// <summary>Class body</summary>
     public Map ClassBody = "{members}";
