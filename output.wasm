@@ -5,11 +5,7 @@
   ;; Generated members
 {members}
 )
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
+{item}
 
 ;; WARNING: Unmapped C# construct: {type}
 ;; This node type requires explicit WASM mapping implementation
@@ -24,23 +20,16 @@ ClassMemberDeclarations
 {members}
 {member}
 {type}
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
+{type}
 
 ;; WARNING: Unmapped C# construct: {type}
 ;; This node type requires explicit WASM mapping implementation
 ;; Falling back to nop instruction to maintain valid WASM output
 nop
 {parameters}
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
+{parameters}
 (param ${name} {type})
+{type}
 {type}
 
 ;; WARNING: Unmapped C# construct: {type}
@@ -52,17 +41,7 @@ nop
 ;; This node type requires explicit WASM mapping implementation
 ;; Falling back to nop instruction to maintain valid WASM output
 nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-{stmts}
+{body}
 
 ;; WARNING: Unmapped C# construct: {type}
 ;; This node type requires explicit WASM mapping implementation
@@ -70,54 +49,19 @@ nop
 nop
 {member}
 {type}
+{type}
 
 ;; WARNING: Unmapped C# construct: {type}
 ;; This node type requires explicit WASM mapping implementation
 ;; Falling back to nop instruction to maintain valid WASM output
 nop
+{body}
+{member}
+{type}
+{type}
 
 ;; WARNING: Unmapped C# construct: {type}
 ;; This node type requires explicit WASM mapping implementation
 ;; Falling back to nop instruction to maintain valid WASM output
 nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-{stmts}
-
-;; WARNING: Unmapped C# construct: LocalVariableDeclarators
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
+{body}
