@@ -3,18 +3,35 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-{item}
+;; class {members}
+(type ${members} (struct
+{body}
+))
 )
-{item}
-;; TODO: Add map for this construct
-nop
-;; TODO: Add map for this construct
-nop
+;; class {members}
+(type ${members} (struct
+{body}
+))
+;; class {members}
+(type ${members} (struct
+{body}
+))
+;; class {members}
+(type ${members} (struct
+{body}
+))
+;; class {members}
+(type ${members} (struct
+{body}
+))
+
+Program
 {members}
 {members}
+;; field 
 {type}
-{type}
-;; TODO: Add map for this construct
-nop
-;; TODO: Add map for this construct
-nop
+i32
+i32
+i32
+i32
+x

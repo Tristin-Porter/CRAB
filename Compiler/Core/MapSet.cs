@@ -189,8 +189,8 @@ public class WASM : MapSet
 {body}
 )";
     
-    /// <summary>Field declaration - mapped to struct field</summary>
-    public Map FieldDeclaration = "(field ${name} {type})";
+    /// <summary>Field declaration - TODO: properly handle multiple declarators</summary>
+    public Map FieldDeclaration = ";; field {type}";
     
     /// <summary>
     /// Constructor declaration - CTGC analyzes object initialization.
@@ -1444,14 +1444,14 @@ public class WASM : MapSet
     /// <summary>Primitive type dispatcher</summary>
     public Map PrimitiveType = "{type}";
     
-    /// <summary>Integral type (int, long, etc.)</summary>
-    public Map IntegralType = "{type}";
+    /// <summary>Integral type - most map to i32 in WASM (except long/ulong)</summary>
+    public Map IntegralType = "i32";
     
-    /// <summary>Floating point type (float, double, decimal)</summary>
-    public Map FloatingPointType = "{type}";
+    /// <summary>Floating point type - default to f64</summary>
+    public Map FloatingPointType = "f64";
     
     /// <summary>Named type (user-defined type)</summary>
-    public Map NamedType = "{name}";
+    public Map NamedType = "(ref ${name})";
     
     /// <summary>Ref type (ref T)</summary>
     public Map RefType = "(ref {type})";
