@@ -116,7 +116,7 @@ public class WASM : MapSet
   (import ""env"" ""memory"" (memory 1))
   
   ;; Generated members
-{members}
+{items}
 )";
     
     /// <summary>Namespace member declarations</summary>
@@ -1685,11 +1685,9 @@ public class WASM : MapSet
     
     /// <summary>
     /// Fallback map for unmapped AST nodes.
-    /// Generates diagnostic error for unsupported constructs while still producing valid WASM.
+    /// Generates diagnostic comment for unsupported constructs.
+    /// Note: This should rarely be used - most C# constructs should have explicit maps.
     /// </summary>
-    public Map Fallback = @"
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
+    public Map Fallback = @";; TODO: Add map for this construct
 nop";
 }

@@ -3,65 +3,18 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-{members}
+{item}
 )
 {item}
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
+;; TODO: Add map for this construct
 nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
+;; TODO: Add map for this construct
 nop
-ClassMemberDeclarations
 {members}
-{member}
+{members}
 {type}
 {type}
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
+;; TODO: Add map for this construct
 nop
-{parameters}
-{parameters}
-(param ${name} {type})
-{type}
-{type}
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
+;; TODO: Add map for this construct
 nop
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-{body}
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-{member}
-{type}
-{type}
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-{body}
-{member}
-{type}
-{type}
-
-;; WARNING: Unmapped C# construct: {type}
-;; This node type requires explicit WASM mapping implementation
-;; Falling back to nop instruction to maintain valid WASM output
-nop
-{body}

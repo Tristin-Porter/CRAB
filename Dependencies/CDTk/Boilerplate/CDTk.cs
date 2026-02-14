@@ -8811,13 +8811,13 @@ namespace CDTk
             // Try exact name match using reference-based identity
             if (_mapsByName.TryGetValue(node.Type, out var map))
             {
-                return map.Generate(node);
+                return map.Generate(node, this);
             }
 
             // Per CDTk spec: Use Fallback map if defined (cdtk-spec.txt line 169)
             if (_mapsByName.TryGetValue("Fallback", out var fallbackMap))
             {
-                return fallbackMap.Generate(node);
+                return fallbackMap.Generate(node, this);
             }
 
             return null;
@@ -8843,7 +8843,7 @@ namespace CDTk
                     {
                         dummyNode[kv.Key] = kv.Value;
                     }
-                    return map.Generate(dummyNode);
+                    return map.Generate(dummyNode, this);
                 });
             }
             
@@ -8864,7 +8864,7 @@ namespace CDTk
                 var map = kvp.Value;
                 
                 // Create a semantic mapping that generates the output from the map template
-                semantics.Map(mapName, (ctx, node, ct) => map.Generate(node));
+                semantics.Map(mapName, (ctx, node, ct) => map.Generate(node, this));
             }
             
             return semantics;
@@ -9243,7 +9243,7 @@ namespace CDTk
         /// Generate output for the given AST node.
         /// Substitutes placeholders with field values.
         /// </summary>
-        internal string Generate(AstNode node)
+        internal string Generate(AstNode node, MapSet? mapSet = null)
         {
             if (node == null) throw new ArgumentNullException(nameof(node));
 
@@ -9267,11 +9267,27 @@ namespace CDTk
                 }
                 else if (v is AstNode child)
                 {
-                    vars[key] = child.Type;
+                    // Recursively transform child nodes if MapSet is available
+                    if (mapSet != null)
+                    {
+                        vars[key] = mapSet.Transform(child) ?? child.Type;
+                    }
+                    else
+                    {
+                        vars[key] = child.Type;
+                    }
                 }
                 else if (v is IEnumerable<AstNode> children)
                 {
-                    vars[key] = string.Join(", ", children.Select(c => c.Type));
+                    // Recursively transform child nodes if MapSet is available
+                    if (mapSet != null)
+                    {
+                        vars[key] = string.Join("\n", children.Select(c => mapSet.Transform(c) ?? c.Type));
+                    }
+                    else
+                    {
+                        vars[key] = string.Join(", ", children.Select(c => c.Type));
+                    }
                 }
                 else
                 {
