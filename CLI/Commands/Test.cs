@@ -389,11 +389,19 @@ class Test : Command
         try
         {
             var runCommand = new Run();
+            
+            // Determine appropriate format for the current platform
+            string execFormat = "native";
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+            {
+                execFormat = "pe";  // Use PE format on Windows
+            }
+            
             var runFlags = new Dictionary<string, string?>
             {
                 ["input"] = outputFile,
                 ["arch"] = currentArch,
-                ["format"] = "native"
+                ["format"] = execFormat
             };
 
             if (verbose || debug)

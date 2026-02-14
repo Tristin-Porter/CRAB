@@ -89,67 +89,84 @@ class Compile : Command
 
         try
         {
-            // Compile using CDTk pipeline
-            if (verbose) System.Console.WriteLine("\n[1/6] Reading source files...");
-            string sourceCode = ReadSourceCode(inputPath);
+            string wasmText;
             
-            if (verbose) System.Console.WriteLine($"      Read {sourceCode.Length} characters from {inputPath}");
-
-            if (verbose) System.Console.WriteLine("\n[2/6] Compiling with CDTk pipeline...");
-            var compiler = new Compiler()
-                .WithTokens(new Tokens())
-                .WithRules(new Rules())
-                .WithTarget(new WASM())
-                .Build();
-
-            // CDTk Compile method runs full pipeline: Tokens → Syntax → Structure → Semantics → Emission
-            var result = compiler.Compile(sourceCode);
+            // Check if input is already WAT/WASM format
+            bool isWasmInput = inputPath.EndsWith(".wat", StringComparison.OrdinalIgnoreCase) || 
+                              inputPath.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase);
             
-            if (result.Diagnostics.HasErrors || result.Ast == null)
+            if (isWasmInput && toAsm)
             {
-                System.Console.WriteLine("Error: Compilation failed. Check syntax.");
-                if (result.Diagnostics.HasErrors)
+                // Input is already WAT/WASM, skip C# compilation and go straight to BADGER
+                if (verbose) System.Console.WriteLine("\n[1/2] Reading WAT file...");
+                wasmText = File.ReadAllText(inputPath);
+                
+                if (verbose) System.Console.WriteLine($"      Read {wasmText.Length} characters from {inputPath}");
+            }
+            else
+            {
+                // Input is C# source, compile to WAT first
+                if (verbose) System.Console.WriteLine("\n[1/6] Reading source files...");
+                string sourceCode = ReadSourceCode(inputPath);
+                
+                if (verbose) System.Console.WriteLine($"      Read {sourceCode.Length} characters from {inputPath}");
+
+                if (verbose) System.Console.WriteLine("\n[2/6] Compiling with CDTk pipeline...");
+                var compiler = new Compiler()
+                    .WithTokens(new Tokens())
+                    .WithRules(new Rules())
+                    .WithTarget(new WASM())
+                    .Build();
+
+                // CDTk Compile method runs full pipeline: Tokens → Syntax → Structure → Semantics → Emission
+                var result = compiler.Compile(sourceCode);
+                
+                if (result.Diagnostics.HasErrors || result.Ast == null)
                 {
-                    foreach (var diag in result.Diagnostics.Items)
+                    System.Console.WriteLine("Error: Compilation failed. Check syntax.");
+                    if (result.Diagnostics.HasErrors)
                     {
-                        System.Console.WriteLine($"  {diag.Level}: {diag.Message}");
+                        foreach (var diag in result.Diagnostics.Items)
+                        {
+                            System.Console.WriteLine($"  {diag.Level}: {diag.Message}");
+                        }
                     }
+                    return;
                 }
-                return;
-            }
-            
-            if (verbose) System.Console.WriteLine("      Compilation complete.");
+                
+                if (verbose) System.Console.WriteLine("      Compilation complete.");
 
-            // Note: CDTk automatically runs semantic analysis during Compile()
-            // The models are integrated as properties in MapSet and called automatically
-            // We can access results from the compilation result
-            if (verbose) System.Console.WriteLine("\n[3/6] Memory analysis complete (automatic via CDTk)...");
-            
-            if (verbose) 
-            {
-                System.Console.WriteLine("      Memory safety verified");
+                // Note: CDTk automatically runs semantic analysis during Compile()
+                // The models are integrated as properties in MapSet and called automatically
+                // We can access results from the compilation result
+                if (verbose) System.Console.WriteLine("\n[3/6] Memory analysis complete (automatic via CDTk)...");
+                
+                if (verbose) 
+                {
+                    System.Console.WriteLine("      Memory safety verified");
+                }
+
+                if (verbose) System.Console.WriteLine("\n[4/6] Manual memory verification complete (automatic via CDTk)...");
+                
+                if (verbose)
+                {
+                    System.Console.WriteLine("      All memory operations verified safe");
+                }
+
+                // CDTk Compile() already generated the output
+                if (verbose) System.Console.WriteLine("\n[5/6] WebAssembly generation complete...");
+                wasmText = result.Output ?? "";
+                
+                if (string.IsNullOrWhiteSpace(wasmText))
+                {
+                    System.Console.WriteLine("Error: WebAssembly generation failed.");
+                    return;
+                }
+                
+                if (verbose) System.Console.WriteLine($"      Generated {wasmText.Length} characters of WebAssembly text format");
             }
 
-            if (verbose) System.Console.WriteLine("\n[4/6] Manual memory verification complete (automatic via CDTk)...");
-            
-            if (verbose)
-            {
-                System.Console.WriteLine("      All memory operations verified safe");
-            }
-
-            // CDTk Compile() already generated the output
-            if (verbose) System.Console.WriteLine("\n[5/6] WebAssembly generation complete...");
-            string wasmText = result.Output ?? "";
-            
-            if (string.IsNullOrWhiteSpace(wasmText))
-            {
-                System.Console.WriteLine("Error: WebAssembly generation failed.");
-                return;
-            }
-            
-            if (verbose) System.Console.WriteLine($"      Generated {wasmText.Length} characters of WebAssembly text format");
-
-            if (verbose) System.Console.WriteLine("\n[6/6] Writing output...");
+            if (verbose) System.Console.WriteLine($"\n[{(isWasmInput && toAsm ? "2/2" : "6/6")}] Writing output...");
             
             if (toAsm)
             {
