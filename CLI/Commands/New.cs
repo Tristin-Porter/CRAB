@@ -54,7 +54,9 @@ class Console : Command
             Directory.CreateDirectory(projectPath);
             
             // Create Program.cs with console template
-            // Note: Limited to parseable constructs (no expressions in method bodies yet)
+            // Note: Limited to parseable constructs due to CDTk GLL parser bug
+            // with expression delegation (see STATEMENT_PARSING_INVESTIGATION.md)
+            // Can parse method declarations but not expression/statement bodies yet.
             var programContent = @"using System;
 
 namespace " + name + @"
