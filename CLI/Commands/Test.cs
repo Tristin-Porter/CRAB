@@ -76,9 +76,9 @@ class Test : Command
             {
                 totalProjects++;
                 System.Console.WriteLine();
-                System.Console.WriteLine($"{'═', 70}");
+                System.Console.WriteLine(new string('═', 70));
                 System.Console.WriteLine($"Testing Project: {projectName}");
-                System.Console.WriteLine($"{'═', 70}");
+                System.Console.WriteLine(new string('═', 70));
                 
                 LogInfo($"Starting test for project: {projectName}");
 
