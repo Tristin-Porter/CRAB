@@ -346,6 +346,77 @@ public class WATRules : RuleSet
 }
 
 /// <summary>
+/// Template expansion engine for architecture-specific code generation
+/// </summary>
+public class TemplateExpander
+{
+    private readonly string architecture;
+    private readonly Dictionary<string, Func<Dictionary<string, string>, string>> templates;
+    
+    public TemplateExpander(string architecture)
+    {
+        this.architecture = architecture.ToLower();
+        this.templates = new Dictionary<string, Func<Dictionary<string, string>, string>>();
+        InitializeTemplates();
+    }
+    
+    private void InitializeTemplates()
+    {
+        switch (architecture)
+        {
+            case "x86_64":
+                templates["push"] = ctx => Badger.Architectures.x86_64.WATToX86_64MapSet.ExpandPush();
+                templates["pop"] = ctx => Badger.Architectures.x86_64.WATToX86_64MapSet.ExpandPop(ctx.GetValueOrDefault("dest", "rax"));
+                templates["pop2"] = ctx => Badger.Architectures.x86_64.WATToX86_64MapSet.ExpandPop2();
+                break;
+            
+            case "x86_32":
+                templates["push"] = ctx => Badger.Architectures.x86_32.WATToX86_32MapSet.ExpandPush();
+                templates["pop"] = ctx => Badger.Architectures.x86_32.WATToX86_32MapSet.ExpandPop(ctx.GetValueOrDefault("dest", "eax"));
+                templates["pop2"] = ctx => Badger.Architectures.x86_32.WATToX86_32MapSet.ExpandPop2();
+                break;
+            
+            case "arm64":
+                templates["push"] = ctx => Badger.Architectures.ARM64.WATToARM64MapSet.ExpandPush();
+                templates["pop"] = ctx => Badger.Architectures.ARM64.WATToARM64MapSet.ExpandPop(ctx.GetValueOrDefault("dest", "w0"));
+                templates["pop2"] = ctx => Badger.Architectures.ARM64.WATToARM64MapSet.ExpandPop2();
+                break;
+            
+            case "arm32":
+                templates["push"] = ctx => Badger.Architectures.ARM32.WATToARM32MapSet.ExpandPush();
+                templates["pop"] = ctx => Badger.Architectures.ARM32.WATToARM32MapSet.ExpandPop(ctx.GetValueOrDefault("dest", "r0"));
+                templates["pop2"] = ctx => Badger.Architectures.ARM32.WATToARM32MapSet.ExpandPop2();
+                break;
+            
+            default:
+                throw new ArgumentException($"Unknown architecture: {architecture}");
+        }
+    }
+    
+    public string Expand(string template, Dictionary<string, string>? context = null)
+    {
+        context ??= new Dictionary<string, string>();
+        var result = template;
+        
+        // Replace {value}, {id}, and other simple placeholders
+        foreach (var kv in context)
+        {
+            result = result.Replace($"{{{kv.Key}}}", kv.Value);
+        }
+        
+        // Replace template functions like {push}, {pop}, {pop2}
+        foreach (var kv in templates)
+        {
+            var placeholder = $"{{{kv.Key}}}";
+            var expanded = kv.Value(context);
+            result = result.Replace(placeholder, expanded);
+        }
+        
+        return result;
+    }
+}
+
+/// <summary>
 /// BADGER - Better Assembler for Dependable Generation of Efficient Results
 /// Main API for WAT to assembly compilation
 /// </summary>
@@ -362,10 +433,75 @@ public class BadgerCompiler
     {
         try
         {
-            // For now, generate simple test assembly directly
+            // Create template expander for the target architecture
+            var expander = new TemplateExpander(architecture);
+            
+            // For now, demonstrate template expansion with a simple i32.const example
             // The full CDTk pipeline with complete WAT grammar is scaffolded and ready
-            // This demonstrates the architecture working end-to-end
-            string assemblyText = "; Generated " + architecture + " assembly\n; From WAT input\n\nmain:\n    push rbp\n    mov rbp, rsp\n    ; function body would go here\n    mov rsp, rbp\n    pop rbp\n    ret\n";
+            // This demonstrates the template expansion system working end-to-end
+            
+            string template = architecture.ToLower() switch
+            {
+                "arm64" => @"    // i32.const {value}
+    mov w0, #{value}
+{push}",
+                "x86_64" => @"    ; i32.const {value}
+    mov eax, {value}
+{push}",
+                "x86_32" => @"    ; i32.const {value}
+    mov eax, {value}
+{push}",
+                "arm32" => @"    @ i32.const {value}
+    mov r0, #{value}
+{push}",
+                _ => throw new ArgumentException($"Unknown architecture: {architecture}")
+            };
+            
+            // Expand template with value = 42
+            var context = new Dictionary<string, string> { ["value"] = "42" };
+            string expandedCode = expander.Expand(template, context);
+            
+            // Wrap in a minimal function for testing
+            string assemblyText = architecture.ToLower() switch
+            {
+                "arm64" => $@"// ARM64 Assembly (Generated by BADGER with Template Expansion)
+.text
+.global _start
+
+_start:
+{expandedCode}
+    // Return
+    ret
+",
+                "x86_64" => $@"; x86_64 Assembly (Generated by BADGER with Template Expansion)
+section .text
+global _start
+
+_start:
+{expandedCode}
+    ; Return
+    ret
+",
+                "x86_32" => $@"; x86_32 Assembly (Generated by BADGER with Template Expansion)
+section .text
+global _start
+
+_start:
+{expandedCode}
+    ; Return
+    ret
+",
+                "arm32" => $@"@ ARM32 Assembly (Generated by BADGER with Template Expansion)
+.text
+.global _start
+
+_start:
+{expandedCode}
+    @ Return
+    bx lr
+",
+                _ => throw new ArgumentException($"Unknown architecture: {architecture}")
+            };
             
             // Assemble to machine code using architecture-specific assembler
             byte[] machineCode = architecture.ToLower() switch

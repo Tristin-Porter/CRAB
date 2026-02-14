@@ -165,6 +165,25 @@ public class WATToX86_32MapSet : MapSet
     }
     
     // ========================================================================
+    // PUBLIC TEMPLATE EXPANSION API
+    // ========================================================================
+    
+    /// <summary>
+    /// Expand {push} template - pushes eax onto virtual stack (simplified for demo)
+    /// </summary>
+    public static string ExpandPush() => ""; // Simplified - value already in eax
+    
+    /// <summary>
+    /// Expand {pop} template - pops into specified register (simplified for demo)
+    /// </summary>
+    public static string ExpandPop(string dest = "eax") => ""; // Simplified - value already in eax
+    
+    /// <summary>
+    /// Expand {pop2} template - pops two values into eax and ebx (simplified for demo)
+    /// </summary>
+    public static string ExpandPop2() => ""; // Simplified - values already in place
+    
+    // ========================================================================
     // MODULE AND FUNCTION LOWERING
     // ========================================================================
     
@@ -1055,6 +1074,16 @@ public static class Assembler
     private static Dictionary<string, int> labels = new Dictionary<string, int>();
     private static List<byte> code = new List<byte>();
     
+    private static bool IsDirectiveOrComment(string line)
+    {
+        var trimmed = line.Trim();
+        return string.IsNullOrEmpty(trimmed) || 
+               trimmed.StartsWith(";") || 
+               trimmed.StartsWith(".") || 
+               trimmed.StartsWith("section ") || 
+               trimmed.StartsWith("global ");
+    }
+    
     public static byte[] Assemble(string assemblyText)
     {
         labels.Clear();
@@ -1067,7 +1096,7 @@ public static class Assembler
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith(";"))
+            if (IsDirectiveOrComment(trimmed))
                 continue;
                 
             if (trimmed.EndsWith(":"))
@@ -1085,7 +1114,7 @@ public static class Assembler
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith(";") || trimmed.EndsWith(":"))
+            if (IsDirectiveOrComment(trimmed) || trimmed.EndsWith(":"))
                 continue;
                 
             EncodeInstruction(trimmed);
