@@ -353,7 +353,7 @@ public class Rules : RuleSet
 
     public Rule NullableSuffix = "@Question";
 
-    public Rule PrimitiveType = "type:@KwDynamic | type:@KwObject | type:@KwString | type:@KwBool | type:@KwChar | type:@KwDecimal | type:IntegralType | type:FloatingPointType";
+    public Rule PrimitiveType = "type:@KwVoid | type:@KwDynamic | type:@KwObject | type:@KwString | type:@KwBool | type:@KwChar | type:@KwDecimal | type:IntegralType | type:FloatingPointType";
 
     public Rule NamedType = new Rule("name:QualifiedName typeArgs:TypeArgumentList?")
         .Returns("name", "typeArgs");

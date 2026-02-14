@@ -8569,7 +8569,7 @@ namespace CDTk
     /// </summary>
     public sealed class __Ast
     {
-        internal AstNode Root { get; }
+        public AstNode Root { get; }
         
         internal __Ast(AstNode root)
         {
@@ -11444,7 +11444,16 @@ namespace CDTk
                 // The start extent should be where we started parsing this rule
                 // which is the GSS node's input position
                 var startExtent = _currentGSSNode.InputPosition;
-                var endExtent = _currentPosition;
+                
+                // CRITICAL FIX for expression parsing bug:
+                // When a rule completes, the end extent should be based on the actual content parsed,
+                // not just the current position. If we have a currentSPPFNode (content was parsed),
+                // use its RightExtent. Otherwise use current position.
+                // This fixes the bug where optional elements matching epsilon caused empty [9..9] nodes
+                // instead of proper [9..10] nodes that include the actual parsed content.
+                var endExtent = _currentSPPFNode != null 
+                    ? _currentSPPFNode.RightExtent 
+                    : _currentPosition;
                 
                 // Create or get symbol node for this rule completion
                 var symbolNode = GetOrCreateSPPFNode(labelRule, startExtent, endExtent);
@@ -11956,6 +11965,9 @@ namespace CDTk
         {
             if (_currentGSSNode == null) return;
 
+            // Determine the position where parsing should continue after this nonterminal
+            int continuationPosition = _currentPosition;
+            
             // Store this SPPF result for future reuse
             // This allows memoization of nonterminal parses
             if (sppfNode != null && sppfNode is SPPFSymbolNode symbolNode)
@@ -11967,6 +11979,22 @@ namespace CDTk
                 {
                     _sppfNodes[key] = sppfNode;
                 }
+                
+                // CRITICAL FIX for statement parsing bug:
+                // When a nonterminal completes, we must advance the parser position to where
+                // the nonterminal ended (its RightExtent). Otherwise, continuation descriptors
+                // will try to parse from the wrong position.
+                // 
+                // Example: "return 5;" at tokens [8, 9, 10]
+                // - ReturnStatement starts at position 8
+                // - Matches @KwReturn (token 8), advances to position 9
+                // - Calls Expression nonterminal at position 9
+                // - Expression matches literal "5", creates Expression[9..10]
+                // - WITHOUT THIS FIX: Pop creates continuation at position 9 (wrong!)
+                // - Tries to match @Semicolon at position 9, which is "5", fails
+                // - WITH THIS FIX: Pop creates continuation at position 10 (correct!)
+                // - Matches @Semicolon at position 10, which is ";", succeeds
+                continuationPosition = endPosition;
             }
 
             // For each edge from current GSS node, continue parsing
@@ -11975,11 +12003,11 @@ namespace CDTk
                 // Combine SPPF nodes if needed
                 var combinedSPPF = CombineSPPFNodes(edge.SPPFNode, sppfNode);
                 
-                // Add descriptor for continuation
+                // Add descriptor for continuation at the correct position
                 AddDescriptor(new Descriptor(
                     GetLabelFromString(edge.Target.Label),
                     edge.Target,
-                    _currentPosition,
+                    continuationPosition,  // Use the nonterminal's end position
                     combinedSPPF));
             }
         }

@@ -323,11 +323,13 @@ public class Tokens : TokenSet
     // SPECIAL TOKENS
     // ============================================================
     
-    // Interpolated string components (handled specially)
-    public Token InterpolatedStringText = @"[^{}\""]+";  // Text within interpolated strings
-    public Token InterpolatedStringEnd = @"""";
+    // Interpolated string components (DISABLED - requires context-sensitive lexing)
+    // These tokens match too broadly and interfere with normal tokenization
+    // TODO: Implement proper interpolated string support with lexer states
+    // public Token InterpolatedStringText = @"[^{}\""]+";  // Text within interpolated strings
+    // public Token InterpolatedStringEnd = @"""";
     
-    // Attributes for string interpolation holes
-    public Token OpenBraceInterpolation = @"\{";
-    public Token CloseBraceInterpolation = @"\}";
+    // Attributes for string interpolation holes (DISABLED)
+    // public Token OpenBraceInterpolation = @"\{";
+    // public Token CloseBraceInterpolation = @"\}";
 }

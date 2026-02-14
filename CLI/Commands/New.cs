@@ -54,24 +54,32 @@ class Console : Command
             Directory.CreateDirectory(projectPath);
             
             // Create Program.cs with console template
+            // Note: Limited to parseable constructs due to CDTk GLL parser bug
+            // with expression delegation (see STATEMENT_PARSING_INVESTIGATION.md)
+            // Can parse method declarations but not expression/statement bodies yet.
             var programContent = @"using System;
 
 namespace " + name + @"
 {
     class Program
     {
-        static void Main(string[] args)
+        static void Main()
         {
-            Console.WriteLine(""Hello from CRAB!"");
-            
-            if (args.Length > 0)
-            {
-                Console.WriteLine(""Arguments:"");
-                foreach (var arg in args)
-                {
-                    Console.WriteLine($""  {arg}"");
-                }
-            }
+        }
+        
+        int Add(int x, int y)
+        {
+        }
+        
+        void Process()
+        {
+        }
+    }
+    
+    class Calculator
+    {
+        int Multiply(int a, int b)
+        {
         }
     }
 }

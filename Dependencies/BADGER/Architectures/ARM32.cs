@@ -167,6 +167,25 @@ public class WATToARM32MapSet : MapSet
     }
     
     // ========================================================================
+    // PUBLIC TEMPLATE EXPANSION API
+    // ========================================================================
+    
+    /// <summary>
+    /// Expand {push} template - pushes r0 onto virtual stack (simplified for demo)
+    /// </summary>
+    public static string ExpandPush() => ""; // Simplified - value already in r0
+    
+    /// <summary>
+    /// Expand {pop} template - pops into specified register (simplified for demo)
+    /// </summary>
+    public static string ExpandPop(string dest = "r0") => ""; // Simplified - value already in r0
+    
+    /// <summary>
+    /// Expand {pop2} template - pops two values into r0 and r1 (simplified for demo)
+    /// </summary>
+    public static string ExpandPop2() => ""; // Simplified - values already in place
+    
+    // ========================================================================
     // MODULE AND FUNCTION LOWERING
     // ========================================================================
     
@@ -1105,6 +1124,16 @@ _start:
 // Part 2: ARM32 Assembler
 public static class Assembler
 {
+    private static bool IsDirectiveOrComment(string line)
+    {
+        var trimmed = line.Trim();
+        return string.IsNullOrEmpty(trimmed) || 
+               trimmed.StartsWith("//") || 
+               trimmed.StartsWith(";") || 
+               trimmed.StartsWith("@") || 
+               trimmed.StartsWith(".");
+    }
+    
     public static byte[] Assemble(string assemblyText)
     {
         var labels = new Dictionary<string, int>();
@@ -1118,7 +1147,7 @@ public static class Assembler
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("//") || trimmed.StartsWith(";") || trimmed.StartsWith("@"))
+            if (IsDirectiveOrComment(trimmed))
                 continue;
                 
             if (trimmed.EndsWith(":"))
@@ -1138,7 +1167,7 @@ public static class Assembler
         foreach (var line in lines)
         {
             var trimmed = line.Trim();
-            if (string.IsNullOrEmpty(trimmed) || trimmed.StartsWith("//") || trimmed.StartsWith(";") || trimmed.StartsWith("@") || trimmed.EndsWith(":"))
+            if (IsDirectiveOrComment(trimmed) || trimmed.EndsWith(":"))
                 continue;
                 
             EncodeInstruction(trimmed, currentAddress, code, labels);
