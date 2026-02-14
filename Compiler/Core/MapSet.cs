@@ -1680,6 +1680,75 @@ public class WASM : MapSet
     public Map ResourceAcquisition = "{resource}";
     
     // ============================================================
+    // TOKEN MAPS
+    // ============================================================
+    // Token nodes are created by the parser for terminals in the grammar.
+    // They have a 'lexeme' field containing the matched text.
+    // These maps extract the lexeme or map C# types to WASM types.
+    
+    /// <summary>Identifier token - extract lexeme</summary>
+    public Map Identifier = "{lexeme}";
+    
+    /// <summary>Verbatim identifier (@name) - extract lexeme</summary>
+    public Map VerbatimIdentifier = "{lexeme}";
+    
+    // Type keyword tokens - map C# types to WASM types
+    public Map KwInt = "i32";
+    public Map KwUint = "i32";
+    public Map KwShort = "i32";
+    public Map KwUshort = "i32";
+    public Map KwByte = "i32";
+    public Map KwSbyte = "i32";
+    public Map KwLong = "i64";
+    public Map KwUlong = "i64";
+    public Map KwFloat = "f32";
+    public Map KwDouble = "f64";
+    public Map KwBool = "i32";
+    public Map KwChar = "i32";
+    public Map KwNint = "i32";  // Native int
+    public Map KwNuint = "i32"; // Native uint
+    
+    // Other type keywords
+    public Map KwVoid = "";  // void has no WASM type
+    public Map KwObject = "(ref any)";
+    public Map KwString = "(ref string)";
+    public Map KwDecimal = "i64 i64";  // Decimal is 128-bit, represented as two i64s
+    public Map KwDynamic = "(ref any)";
+    
+    // Keyword tokens that are structural (mapped to empty string as they're handled by containing maps)
+    public Map KwClass = "";
+    public Map KwStruct = "";
+    public Map KwInterface = "";
+    public Map KwEnum = "";
+    public Map KwNamespace = "";
+    public Map KwPublic = "";
+    public Map KwPrivate = "";
+    public Map KwProtected = "";
+    public Map KwInternal = "";
+    public Map KwStatic = "";
+    public Map KwReadonly = "";
+    public Map KwConst = "";
+    public Map KwVirtual = "";
+    public Map KwAbstract = "";
+    public Map KwSealed = "";
+    public Map KwOverride = "";
+    public Map KwNew = "";
+    public Map KwAsync = "";
+    public Map KwPartial = "";
+    
+    // Punctuation tokens
+    public Map OpenBrace = "{{";
+    public Map CloseBrace = "}}";
+    public Map OpenParen = "(";
+    public Map CloseParen = ")";
+    public Map OpenBracket = "[";
+    public Map CloseBracket = "]";
+    public Map Semicolon = "";  // Semicolons are structural, handled by containing maps
+    public Map Comma = ", ";
+    public Map Dot = ".";
+    public Map Colon = ":";
+    
+    // ============================================================
     // FALLBACK
     // ============================================================
     
