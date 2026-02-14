@@ -1,5 +1,6 @@
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace CRAB;
 
@@ -9,6 +10,9 @@ namespace CRAB;
 /// </summary>
 class Test : Command
 {
+    private readonly List<string> _debugLog = new();
+    private readonly List<string> _infoLog = new();
+    
     public Test()
     {
         Name = "test";
@@ -16,8 +20,9 @@ class Test : Command
         
         SupportedFlags["name"] = "Name of the test project (default: TestProject).";
         SupportedFlags["keep"] = "Keep the generated test project after execution.";
-        SupportedFlags["save"] = "Save all compiled outputs (WAT and binaries from all architectures/containers).";
+        SupportedFlags["save"] = "Save all compiled outputs in tests/{test-name} folder with organized subfolders.";
         SupportedFlags["verbose"] = "Enable verbose output.";
+        SupportedFlags["debug"] = "Enable debug logging with detailed information.";
         SupportedFlags["quick"] = "Run quick test (single architecture only).";
         SupportedFlags["arch"] = "Single architecture to test (x86_64, x86_32, x86_16, arm64, arm32). Use with --quick.";
         SupportedFlags["format"] = "Output format (native, pe). Use with --quick.";
@@ -35,12 +40,29 @@ class Test : Command
         bool keepProject = flags.ContainsKey("keep");
         bool saveOutputs = flags.ContainsKey("save");
         bool verbose = flags.ContainsKey("verbose");
+        bool debugMode = flags.ContainsKey("debug");
         bool quickMode = flags.ContainsKey("quick");
 
         string currentDir = Directory.GetCurrentDirectory();
         string projectPath = Path.Combine(currentDir, projectName);
 
-        if (verbose || !quickMode)
+        // Set up save directory if requested
+        string? saveDir = null;
+        if (saveOutputs)
+        {
+            saveDir = Path.Combine(currentDir, "tests", projectName);
+            Directory.CreateDirectory(saveDir);
+            
+            // Create organized subfolders
+            Directory.CreateDirectory(Path.Combine(saveDir, "wasm"));
+            Directory.CreateDirectory(Path.Combine(saveDir, "binaries"));
+            Directory.CreateDirectory(Path.Combine(saveDir, "logs"));
+            
+            LogInfo($"Save directory created: {saveDir}");
+            LogDebug($"Created subfolders: wasm, binaries, logs");
+        }
+
+        if (verbose || debugMode || !quickMode)
         {
             System.Console.WriteLine("=".PadRight(70, '='));
             System.Console.WriteLine("CRAB Compiler - Comprehensive Test Suite");
@@ -49,15 +71,25 @@ class Test : Command
             System.Console.WriteLine($"Mode:       {(quickMode ? "Quick (single architecture)" : "Comprehensive (all architectures)")}");
             System.Console.WriteLine($"Keep:       {keepProject}");
             System.Console.WriteLine($"Save:       {saveOutputs}");
+            if (saveOutputs && saveDir != null)
+                System.Console.WriteLine($"Save Dir:   {saveDir}");
+            System.Console.WriteLine($"Verbose:    {verbose}");
+            System.Console.WriteLine($"Debug:      {debugMode}");
             System.Console.WriteLine("=".PadRight(70, '='));
             System.Console.WriteLine();
         }
 
+        LogInfo($"Starting test execution for project: {projectName}");
+        LogDebug($"Project path: {projectPath}");
+        LogDebug($"Quick mode: {quickMode}, Verbose: {verbose}, Debug: {debugMode}");
+
         try
         {
             // Step 1: Generate test project
-            if (verbose) System.Console.WriteLine("[1/3] Generating test project...");
+            if (verbose || debugMode) System.Console.WriteLine("[1/3] Generating test project...");
             else System.Console.WriteLine($"Generating test project '{projectName}'...");
+            
+            LogInfo("Step 1: Generating test project");
 
             var consoleCommand = new Console();
             var newFlags = new Dictionary<string, string?>
@@ -69,15 +101,21 @@ class Test : Command
 
             if (!Directory.Exists(projectPath))
             {
-                System.Console.WriteLine($"Error: Failed to create test project '{projectName}'.");
+                var errorMsg = $"Failed to create test project '{projectName}'.";
+                System.Console.WriteLine($"Error: {errorMsg}");
+                LogDebug($"ERROR: {errorMsg}");
                 return;
             }
+            
+            LogInfo($"Test project created successfully at {projectPath}");
 
-            if (verbose) System.Console.WriteLine();
+            if (verbose || debugMode) System.Console.WriteLine();
 
             // Step 2: Build the test project
-            if (verbose) System.Console.WriteLine("[2/3] Building test project...");
+            if (verbose || debugMode) System.Console.WriteLine("[2/3] Building test project...");
             else System.Console.WriteLine($"Building test project...");
+            
+            LogInfo("Step 2: Building test project");
 
             var buildCommand = new Build();
             var buildFlags = new Dictionary<string, string?>
@@ -85,7 +123,7 @@ class Test : Command
                 ["project"] = projectPath
             };
             
-            if (verbose)
+            if (verbose || debugMode)
                 buildFlags["verbose"] = null;
 
             buildCommand.Execute(Array.Empty<string>(), buildFlags);
@@ -97,56 +135,75 @@ class Test : Command
                 outputFile = Path.Combine(projectPath, "bin", "output.wat");
                 if (!File.Exists(outputFile))
                 {
-                    System.Console.WriteLine($"Error: Build failed - output file not found.");
-                    CleanupProject(projectPath, keepProject, verbose);
+                    var errorMsg = "Build failed - output file not found.";
+                    System.Console.WriteLine($"Error: {errorMsg}");
+                    LogDebug($"ERROR: {errorMsg}");
+                    LogDebug($"Checked paths: {Path.Combine(projectPath, "bin", "output.wasm")}, {Path.Combine(projectPath, "bin", "output.wat")}");
+                    CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
                     return;
                 }
             }
+            
+            LogInfo($"Build successful, output: {outputFile}");
 
-            if (verbose) System.Console.WriteLine();
+            if (verbose || debugMode) System.Console.WriteLine();
 
-            // Save WAT file if requested
-            string? saveDir = null;
-            if (saveOutputs)
+            // Save WASM/WAT file if requested
+            if (saveOutputs && saveDir != null)
             {
-                saveDir = Path.Combine(currentDir, $"{projectName}_outputs");
-                Directory.CreateDirectory(saveDir);
-                
-                // Copy WAT/WASM file to save directory
-                string watDest = Path.Combine(saveDir, Path.GetFileName(outputFile));
+                string wasmSaveDir = Path.Combine(saveDir, "wasm");
+                string watDest = Path.Combine(wasmSaveDir, Path.GetFileName(outputFile));
                 File.Copy(outputFile, watDest, overwrite: true);
                 
-                if (verbose)
-                    System.Console.WriteLine($"Saved {Path.GetFileName(outputFile)} to {saveDir}");
+                LogInfo($"Saved WASM/WAT output to {watDest}");
+                
+                if (verbose || debugMode)
+                    System.Console.WriteLine($"Saved {Path.GetFileName(outputFile)} to {wasmSaveDir}");
             }
 
             // Step 3: Compile to native/PE for all architectures (or single if quick mode)
             if (quickMode)
             {
-                RunQuickTest(outputFile, flags, verbose, saveDir);
+                RunQuickTest(outputFile, flags, verbose || debugMode, saveDir);
             }
             else
             {
-                RunComprehensiveTest(outputFile, verbose, saveDir);
+                RunComprehensiveTest(outputFile, verbose || debugMode, debugMode, saveDir);
             }
 
             // Step 4: Cleanup if requested
-            CleanupProject(projectPath, keepProject, verbose);
+            CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
+            
+            // Save logs if requested
+            if (saveOutputs && saveDir != null)
+            {
+                SaveLogs(saveDir);
+            }
 
             System.Console.WriteLine();
             System.Console.WriteLine("✓ Test completed successfully.");
+            LogInfo("Test execution completed successfully");
         }
         catch (Exception ex)
         {
-            System.Console.WriteLine($"Error: Test failed - {ex.Message}");
-            if (verbose)
+            var errorMsg = $"Test failed - {ex.Message}";
+            System.Console.WriteLine($"Error: {errorMsg}");
+            LogDebug($"EXCEPTION: {ex}");
+            
+            if (verbose || debugMode)
             {
                 System.Console.WriteLine("\nStack trace:");
                 System.Console.WriteLine(ex.StackTrace);
             }
 
+            // Save logs even on error if requested
+            if (saveOutputs && saveDir != null)
+            {
+                SaveLogs(saveDir);
+            }
+
             // Attempt cleanup even on error
-            CleanupProject(projectPath, keepProject, verbose);
+            CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
         }
     }
 
@@ -154,6 +211,8 @@ class Test : Command
     {
         if (verbose) System.Console.WriteLine("[3/3] Running quick test...");
         else System.Console.WriteLine($"Running test project...");
+        
+        LogInfo("Step 3: Running quick test");
 
         var runCommand = new Run();
         var runFlags = new Dictionary<string, string?>
@@ -174,6 +233,8 @@ class Test : Command
             runFlags["format"] = format;
         else
             runFlags["format"] = "native"; // default
+        
+        LogDebug($"Quick test - Architecture: {runFlags["arch"]}, Format: {runFlags["format"]}");
 
         runCommand.Execute(Array.Empty<string>(), runFlags);
         
@@ -184,18 +245,27 @@ class Test : Command
             if (File.Exists(outputBin))
             {
                 string extension = runFlags["format"] == "pe" ? "exe" : "bin";
+                string binarySaveDir = Path.Combine(saveDir, "binaries");
                 string destName = $"{runFlags["arch"]}_{runFlags["format"]}.{extension}";
-                File.Copy(outputBin, Path.Combine(saveDir, destName), overwrite: true);
+                string destPath = Path.Combine(binarySaveDir, destName);
+                File.Copy(outputBin, destPath, overwrite: true);
+                
+                LogInfo($"Saved binary to {destPath}");
+                
                 if (verbose)
-                    System.Console.WriteLine($"Saved {destName} to {saveDir}");
+                    System.Console.WriteLine($"Saved {destName} to {binarySaveDir}");
             }
         }
+        
+        LogInfo("Quick test completed");
     }
 
-    private void RunComprehensiveTest(string outputFile, bool verbose, string? saveDir)
+    private void RunComprehensiveTest(string outputFile, bool verbose, bool debug, string? saveDir)
     {
         System.Console.WriteLine("[3/3] Running comprehensive test suite...");
         System.Console.WriteLine();
+        
+        LogInfo("Step 3: Running comprehensive test suite");
 
         // Define all architecture and format combinations
         var architectures = new[] { "x86_64", "x86_32", "x86_16", "arm64", "arm32" };
@@ -211,11 +281,16 @@ class Test : Command
             {
                 // x86_16 doesn't typically support PE format on most systems
                 if (arch == "x86_16" && format == "pe")
+                {
+                    LogDebug($"Skipping {arch}/{format} - invalid combination");
                     continue;
+                }
 
                 total++;
                 string testName = $"{arch} ({format})";
                 System.Console.Write($"  Testing {testName,-25} ");
+                
+                LogDebug($"Testing {arch}/{format}");
 
                 try
                 {
@@ -233,7 +308,7 @@ class Test : Command
                     var originalOut = System.Console.Out;
                     try
                     {
-                        if (!verbose)
+                        if (!verbose && !debug)
                             System.Console.SetOut(TextWriter.Null);
 
                         compileCommand.Execute(new[] { outputFile }, compileFlags);
@@ -243,12 +318,17 @@ class Test : Command
                         passed++;
                         results.Add((arch, format, true, "Success"));
                         
+                        LogInfo($"Test {arch}/{format} PASSED");
+                        
                         // Save output if requested
                         if (saveDir != null && File.Exists(outputFileName))
                         {
                             string extension = format == "pe" ? "exe" : "bin";
-                            string destPath = Path.Combine(saveDir, $"{arch}_{format}.{extension}");
+                            string binarySaveDir = Path.Combine(saveDir, "binaries");
+                            string destPath = Path.Combine(binarySaveDir, $"{arch}_{format}.{extension}");
                             File.Copy(outputFileName, destPath, overwrite: true);
+                            
+                            LogDebug($"Saved {arch}/{format} binary to {destPath}");
                         }
                     }
                     catch
@@ -261,7 +341,11 @@ class Test : Command
                 {
                     System.Console.WriteLine("❌ FAIL");
                     results.Add((arch, format, false, ex.Message));
-                    if (verbose)
+                    
+                    LogInfo($"Test {arch}/{format} FAILED: {ex.Message}");
+                    LogDebug($"Exception for {arch}/{format}: {ex}");
+                    
+                    if (verbose || debug)
                         System.Console.WriteLine($"    Error: {ex.Message}");
                 }
 
@@ -277,21 +361,30 @@ class Test : Command
             }
         }
         
+        LogInfo($"Comprehensive tests completed: {passed}/{total} passed");
+        
         // Report saved outputs
         if (saveDir != null)
         {
             System.Console.WriteLine();
             System.Console.WriteLine($"Saved outputs to: {saveDir}");
-            System.Console.WriteLine($"  - WAT/WASM file: {Path.GetFileName(outputFile)}");
-            System.Console.WriteLine($"  - {passed} architecture/container binaries");
+            System.Console.WriteLine($"  - WASM files in: {Path.Combine(saveDir, "wasm")}");
+            System.Console.WriteLine($"  - {passed} binaries in: {Path.Combine(saveDir, "binaries")}");
+            System.Console.WriteLine($"  - Logs in: {Path.Combine(saveDir, "logs")}");
+            
+            LogInfo($"Saved {passed} binaries to {saveDir}");
         }
 
         // Try to run on the appropriate architecture for the current platform
         System.Console.WriteLine();
         System.Console.WriteLine("Attempting to run on current platform...");
         
+        LogInfo("Attempting hardware detection and execution");
+        
         string currentArch = DetectCurrentArchitecture();
         System.Console.WriteLine($"  Detected platform: {currentArch}");
+        
+        LogInfo($"Detected current architecture: {currentArch}");
 
         try
         {
@@ -303,16 +396,21 @@ class Test : Command
                 ["format"] = "native"
             };
 
-            if (verbose)
+            if (verbose || debug)
                 runFlags["verbose"] = null;
 
             runCommand.Execute(Array.Empty<string>(), runFlags);
             System.Console.WriteLine($"  ✅ Execution successful on {currentArch}");
+            
+            LogInfo($"Execution successful on {currentArch}");
         }
         catch (Exception ex)
         {
             System.Console.WriteLine($"  ⚠️  Execution failed: {ex.Message}");
             System.Console.WriteLine("  (This is expected if WAT execution is not fully implemented)");
+            
+            LogInfo($"Execution failed on {currentArch}: {ex.Message}");
+            LogDebug($"Execution exception: {ex}");
         }
 
         // Print summary
@@ -326,7 +424,7 @@ class Test : Command
         System.Console.WriteLine($"Success rate: {(passed * 100.0 / total):F1}%");
         System.Console.WriteLine("=".PadRight(70, '='));
 
-        if (verbose && results.Any(r => !r.success))
+        if ((verbose || debug) && results.Any(r => !r.success))
         {
             System.Console.WriteLine();
             System.Console.WriteLine("Failed tests:");
@@ -342,7 +440,7 @@ class Test : Command
         // Detect the current platform architecture
         var arch = RuntimeInformation.ProcessArchitecture;
         
-        return arch switch
+        var detected = arch switch
         {
             Architecture.X64 => "x86_64",
             Architecture.X86 => "x86_32",
@@ -350,9 +448,12 @@ class Test : Command
             Architecture.Arm => "arm32",
             _ => "x86_64" // default fallback
         };
+        
+        LogDebug($"Detected architecture: {detected} (RuntimeInformation: {arch})");
+        return detected;
     }
 
-    private void CleanupProject(string projectPath, bool keep, bool verbose)
+    private void CleanupProject(string projectPath, bool keep, bool verbose, string? saveDir)
     {
         if (!keep)
         {
@@ -361,17 +462,55 @@ class Test : Command
                 if (Directory.Exists(projectPath))
                 {
                     Directory.Delete(projectPath, recursive: true);
-                    if (verbose) System.Console.WriteLine($"Cleaned up test project: {projectPath}");
+                    
+                    LogInfo($"Cleaned up test project: {projectPath}");
+                    
+                    if (verbose) 
+                        System.Console.WriteLine($"Cleaned up test project: {projectPath}");
                 }
             }
             catch (Exception ex)
             {
-                System.Console.WriteLine($"Warning: Failed to cleanup test project - {ex.Message}");
+                var warnMsg = $"Failed to cleanup test project - {ex.Message}";
+                System.Console.WriteLine($"Warning: {warnMsg}");
+                LogDebug($"WARNING: {warnMsg}");
             }
         }
         else if (verbose && Directory.Exists(projectPath))
         {
             System.Console.WriteLine($"Kept test project at: {projectPath}");
+            LogInfo($"Kept test project at: {projectPath}");
+        }
+    }
+    
+    private void LogDebug(string message)
+    {
+        _debugLog.Add($"[{DateTime.Now:HH:mm:ss.fff}] DEBUG: {message}");
+    }
+    
+    private void LogInfo(string message)
+    {
+        _infoLog.Add($"[{DateTime.Now:HH:mm:ss.fff}] INFO: {message}");
+    }
+    
+    private void SaveLogs(string saveDir)
+    {
+        try
+        {
+            string logDir = Path.Combine(saveDir, "logs");
+            Directory.CreateDirectory(logDir);
+            
+            string debugLogPath = Path.Combine(logDir, "debug.log");
+            string infoLogPath = Path.Combine(logDir, "info.log");
+            
+            File.WriteAllLines(debugLogPath, _debugLog);
+            File.WriteAllLines(infoLogPath, _infoLog);
+            
+            LogInfo($"Logs saved to {logDir}");
+        }
+        catch (Exception ex)
+        {
+            System.Console.WriteLine($"Warning: Failed to save logs - {ex.Message}");
         }
     }
 }
