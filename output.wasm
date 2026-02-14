@@ -3,8 +3,8 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class name=Program
-(type $Program (struct
-{members}
+;; class name=Calculator
+(type $Calculator (struct
+
 ))
 )

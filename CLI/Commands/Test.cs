@@ -183,7 +183,8 @@ class Test : Command
             string outputBin = $"output.bin";
             if (File.Exists(outputBin))
             {
-                string destName = $"{runFlags["arch"]}_{runFlags["format"]}.bin";
+                string extension = runFlags["format"] == "pe" ? "exe" : "bin";
+                string destName = $"{runFlags["arch"]}_{runFlags["format"]}.{extension}";
                 File.Copy(outputBin, Path.Combine(saveDir, destName), overwrite: true);
                 if (verbose)
                     System.Console.WriteLine($"Saved {destName} to {saveDir}");
@@ -245,7 +246,8 @@ class Test : Command
                         // Save output if requested
                         if (saveDir != null && File.Exists(outputFileName))
                         {
-                            string destPath = Path.Combine(saveDir, $"{arch}_{format}.bin");
+                            string extension = format == "pe" ? "exe" : "bin";
+                            string destPath = Path.Combine(saveDir, $"{arch}_{format}.{extension}");
                             File.Copy(outputFileName, destPath, overwrite: true);
                         }
                     }

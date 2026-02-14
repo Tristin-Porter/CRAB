@@ -9255,7 +9255,12 @@ namespace CDTk
                 var key = kv.Key;
                 var v = kv.Value;
 
-                if (v is null) continue;
+                // Handle null values as empty strings
+                if (v is null)
+                {
+                    vars[key] = "";
+                    continue;
+                }
 
                 if (v is string s)
                 {

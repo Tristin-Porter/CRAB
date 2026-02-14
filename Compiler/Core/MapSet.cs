@@ -147,8 +147,8 @@ public class WASM : MapSet
 
 
     
-    /// <summary>Class body</summary>
-    public Map ClassBody = "{members}";
+    /// <summary>Class body - members may not be present due to parser bug</summary>
+    public Map ClassBody = "";  // Empty for now, members will be added when parser is fixed
     
     /// <summary>Class member declarations</summary>
     public Map ClassMemberDeclarations = "{members}";
