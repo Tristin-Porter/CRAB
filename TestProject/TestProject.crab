@@ -1,6 +1,0 @@
-{
-  "name": "TestProject",
-  "type": "console",
-  "output": "bin",
-  "sources": ["*.cs"]
-}

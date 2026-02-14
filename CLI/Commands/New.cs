@@ -54,24 +54,30 @@ class Console : Command
             Directory.CreateDirectory(projectPath);
             
             // Create Program.cs with console template
+            // Note: Limited to parseable constructs (no expressions in method bodies yet)
             var programContent = @"using System;
 
 namespace " + name + @"
 {
     class Program
     {
-        static void Main(string[] args)
+        static void Main()
         {
-            Console.WriteLine(""Hello from CRAB!"");
-            
-            if (args.Length > 0)
-            {
-                Console.WriteLine(""Arguments:"");
-                foreach (var arg in args)
-                {
-                    Console.WriteLine(""  "" + arg);
-                }
-            }
+        }
+        
+        int Add(int x, int y)
+        {
+        }
+        
+        void Process()
+        {
+        }
+    }
+    
+    class Calculator
+    {
+        int Multiply(int a, int b)
+        {
         }
     }
 }
