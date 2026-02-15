@@ -111,8 +111,8 @@ public class ProjectFile
             {
                 // SDK-style projects automatically include all .cs files
                 var csFiles = Directory.GetFiles(projectDir, "*.cs", SearchOption.AllDirectories)
-                    .Where(f => !f.Contains("/obj/") && !f.Contains("/bin/") && 
-                                !f.Contains("\\obj\\") && !f.Contains("\\bin\\"))
+                    .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) && 
+                                !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar))
                     .ToList();
                 
                 // Apply exclusions
@@ -120,19 +120,20 @@ public class ProjectFile
                 foreach (var file in csFiles)
                 {
                     var relativePath = Path.GetRelativePath(projectDir, file);
+                    // Normalize to forward slashes for consistent pattern matching
+                    var normalizedPath = relativePath.Replace(Path.DirectorySeparatorChar, '/');
                     bool excluded = false;
                     
                     foreach (var exclusion in compileExclusions)
                     {
-                        // Handle glob patterns like "Dependencies\**" or "Testing/**/*.cs"
+                        // Normalize pattern to forward slashes for consistent matching
                         var pattern = exclusion.Replace("**", "*").Replace("\\", "/");
-                        var relPath = relativePath.Replace("\\", "/");
                         
                         if (pattern.EndsWith("/*"))
                         {
                             // Directory exclusion
                             var dir = pattern.Substring(0, pattern.Length - 2);
-                            if (relPath.StartsWith(dir + "/", StringComparison.OrdinalIgnoreCase))
+                            if (normalizedPath.StartsWith(dir + "/", StringComparison.OrdinalIgnoreCase))
                             {
                                 excluded = true;
                                 break;
@@ -145,7 +146,7 @@ public class ProjectFile
                             bool matches = true;
                             foreach (var part in parts.Where(p => !string.IsNullOrEmpty(p)))
                             {
-                                if (!relPath.Contains(part, StringComparison.OrdinalIgnoreCase))
+                                if (!normalizedPath.Contains(part, StringComparison.OrdinalIgnoreCase))
                                 {
                                     matches = false;
                                     break;
@@ -157,7 +158,7 @@ public class ProjectFile
                                 break;
                             }
                         }
-                        else if (relPath.Equals(exclusion.Replace("\\", "/"), StringComparison.OrdinalIgnoreCase))
+                        else if (normalizedPath.Equals(pattern, StringComparison.OrdinalIgnoreCase))
                         {
                             excluded = true;
                             break;
