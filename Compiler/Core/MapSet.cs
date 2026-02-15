@@ -188,6 +188,8 @@ public static class WasmEmit
     /// </summary>
     public static string EmitStatement(object? stmtNode)
     {
+        System.Console.WriteLine($"DEBUG EmitStatement: stmtNode type={stmtNode?.GetType().Name}");
+        
         if (stmtNode == null)
         {
             return "";
@@ -196,6 +198,7 @@ public static class WasmEmit
         // Handle List<object> - process first element
         if (stmtNode is List<object> list)
         {
+            System.Console.WriteLine($"DEBUG EmitStatement: List with {list.Count} items");
             if (list.Count > 0)
             {
                 return EmitStatement(list[0]);
@@ -205,10 +208,13 @@ public static class WasmEmit
         
         if (!(stmtNode is AstNode node))
         {
+            System.Console.WriteLine($"DEBUG EmitStatement: Not an AstNode, returning empty");
             return "";  // Unknown type
         }
         
-        return node.Type switch
+        System.Console.WriteLine($"DEBUG EmitStatement: AstNode type={node.Type}");
+        
+        var result = node.Type switch
         {
             "ReturnStatement" => EmitReturnStatement(node),
             "ExpressionStatement" => node.Fields.ContainsKey("expr") ? EmitExpression(node.Fields["expr"]) : "",
@@ -221,6 +227,9 @@ public static class WasmEmit
             
             _ => $";; TODO: Emit {node.Type}\nnop"
         };
+        
+        System.Console.WriteLine($"DEBUG EmitStatement: returning result length={result?.Length}");
+        return result;
     }
     
     /// <summary>
@@ -228,22 +237,48 @@ public static class WasmEmit
     /// </summary>
     private static string EmitReturnStatement(AstNode node)
     {
+        System.Console.WriteLine($"DEBUG EmitReturnStatement: fields={string.Join(",", node.Fields.Keys)}");
         if (node.Fields.ContainsKey("expr") && node.Fields["expr"] != null)
         {
             var expr = node.Fields["expr"];
+            System.Console.WriteLine($"DEBUG EmitReturnStatement: expr type={expr?.GetType().Name}");
             
-            // Handle list of expressions (when there are multiple)
-            if (expr is List<object> list && list.Count > 0)
+            // Handle list of expressions (CDTk may return List<AstNode>)
+            if (expr is List<AstNode> astList)
             {
-                expr = list[0];
+                System.Console.WriteLine($"DEBUG EmitReturnStatement: expr is List<AstNode> with {astList.Count} items:");
+                for (int i = 0; i < astList.Count; i++)
+                {
+                    System.Console.WriteLine($"  [{i}] Type={astList[i].Type}");
+                }
+                if (astList.Count > 0)
+                {
+                    // Try to find the actual expression (not the return keyword or semicolon)
+                    foreach (var item in astList)
+                    {
+                        if (item.Type != "KwReturn" && item.Type != "Semicolon")
+                        {
+                            expr = item;
+                            System.Console.WriteLine($"DEBUG EmitReturnStatement: Found expression at type={item.Type}");
+                            break;
+                        }
+                    }
+                }
+            }
+            else if (expr is List<object> objList && objList.Count > 0)
+            {
+                System.Console.WriteLine($"DEBUG EmitReturnStatement: expr is List<object> with {objList.Count} items");
+                expr = objList[0];
             }
             
             var exprCode = EmitExpression(expr);
+            System.Console.WriteLine($"DEBUG EmitReturnStatement: exprCode={exprCode}");
             if (!string.IsNullOrWhiteSpace(exprCode))
             {
                 return exprCode + "\nreturn";
             }
         }
+        System.Console.WriteLine($"DEBUG EmitReturnStatement: returning just 'return'");
         return "return";
     }
     
@@ -261,6 +296,8 @@ public static class WasmEmit
     
     /// <summary>
     /// Emit a list of statements.
+    /// CDTk's Statement+ creates a linked list structure where each Statement node
+    /// has a 'stmt' field. This function recursively traverses the list.
     /// </summary>
     public static string EmitStatementList(object? stmtsNode)
     {
@@ -271,7 +308,7 @@ public static class WasmEmit
             return "";
         }
         
-        // Handle List<object> directly
+        // Handle List<object> directly (if CDTk ever returns this)
         if (stmtsNode is List<object> stmtList)
         {
             System.Console.WriteLine($"DEBUG EmitStatementList: List<object> with {stmtList.Count} items");
@@ -287,20 +324,48 @@ public static class WasmEmit
         
         System.Console.WriteLine($"DEBUG EmitStatementList: AstNode type={node.Type}, fields={string.Join(",", node.Fields.Keys)}");
         
-        // If it's a Statements node, process all members
+        // CDTk's Statement+ creates a recursive structure:
+        // - Statements node has 'stmts' field containing first Statement  
+        // - Each Statement node may have 'stmt' field containing next Statement
+        // We need to collect all statements in the linked list
+        var statements = new List<string>();
+        
         if (node.Type == "Statements" && node.Fields.ContainsKey("stmts"))
         {
-            var stmts = node.Fields["stmts"];
-            System.Console.WriteLine($"DEBUG EmitStatementList: Statements.stmts type={stmts?.GetType().Name}");
-            if (stmts is List<object> innerList)
+            // Start with the first statement
+            var current = node.Fields["stmts"];
+            while (current != null)
             {
-                System.Console.WriteLine($"DEBUG EmitStatementList: innerList with {innerList.Count} items");
-                return string.Join("\n", innerList.Select(EmitStatement));
+                if (current is AstNode currentNode)
+                {
+                    // Emit this statement
+                    var emitted = EmitStatement(currentNode);
+                    if (!string.IsNullOrWhiteSpace(emitted))
+                    {
+                        statements.Add(emitted);
+                    }
+                    
+                    // Move to next statement if it exists
+                    // The Statement node might have a 'stmt' field pointing to the next one
+                    if (currentNode.Fields.ContainsKey("next") && currentNode.Fields["next"] is AstNode)
+                    {
+                        current = currentNode.Fields["next"];
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    break;
+                }
             }
-            return EmitStatement(stmts);
+            
+            return string.Join("\n", statements);
         }
         
-        // Single statement
+        // Single statement node
         return EmitStatement(stmtsNode);
     }
     
@@ -695,16 +760,21 @@ public class WASM : MapSet
     /// <summary>Statements list - recursively emit all statements in the list</summary>
     public Map<AstNode, string> Statements = TypedMap.For<string>()
         .Emit(node => {
+            System.Console.WriteLine($"DEBUG Statements.Emit START: node.Type={node.Type}, fields={string.Join(",", node.Fields.Keys)}");
             if (node == null) return "";
             
             // The Statements rule creates stmts:Statement+
             // CDTk's + repetition creates a nested structure or list
             if (node.Fields.ContainsKey("stmts"))
             {
-                var result = WasmEmit.EmitStatementList(node.Fields["stmts"]);
+                var stmts = node.Fields["stmts"];
+                System.Console.WriteLine($"DEBUG Statements.Emit: stmts type={stmts?.GetType().Name}, value preview={stmts?.ToString()?.Substring(0, Math.Min(30, stmts?.ToString()?.Length ?? 0))}");
+                var result = WasmEmit.EmitStatementList(stmts);
+                System.Console.WriteLine($"DEBUG Statements.Emit END: result length={result?.Length}, value={result?.Substring(0, Math.Min(50, result?.Length ?? 0))}");
                 return result ?? "";
             }
             
+            System.Console.WriteLine($"DEBUG Statements.Emit: no stmts field, emitting as single statement");
             // Fallback: try to emit as single statement
             return WasmEmit.EmitStatement(node) ?? "";
         });
