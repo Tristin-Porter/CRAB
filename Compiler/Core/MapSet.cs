@@ -1,4 +1,5 @@
 using CDTk;
+using System;
 
 namespace CRAB;
 
@@ -23,6 +24,12 @@ public static class WasmEmit
             exprNode = list[0];
         }
         
+        // Handle List<AstNode> (CDTk may return this type)
+        if (exprNode is List<AstNode> astList && astList.Count > 0)
+        {
+            exprNode = astList[0];
+        }
+        
         if (!(exprNode is AstNode node))
         {
             // Might be a literal value
@@ -40,10 +47,20 @@ public static class WasmEmit
             "FalseLiteral" => "i32.const 0",
             
             // Binary operations
-            "AdditiveExpression" => EmitBinaryExpression(node, "+"),
-            "MultiplicativeExpression" => EmitBinaryExpression(node, "*"),
-            "RelationalExpression" => EmitBinaryExpression(node, "<"),
-            "EqualityExpression" => EmitBinaryExpression(node, "=="),
+            // ONLY call EmitBinaryExpression if the node has left/op/right fields
+            // If it only has 'expr' field, it's not a binary operation - pass through
+            "AdditiveExpression" => node.Fields.ContainsKey("left") && node.Fields.ContainsKey("op") && node.Fields.ContainsKey("right") 
+                ? EmitBinaryExpression(node, "+")
+                : EmitExpressionDispatcher(node),
+            "MultiplicativeExpression" => node.Fields.ContainsKey("left") && node.Fields.ContainsKey("op") && node.Fields.ContainsKey("right")
+                ? EmitBinaryExpression(node, "*")
+                : EmitExpressionDispatcher(node),
+            "RelationalExpression" => node.Fields.ContainsKey("left") && node.Fields.ContainsKey("op") && node.Fields.ContainsKey("right")
+                ? EmitBinaryExpression(node, "<")
+                : EmitExpressionDispatcher(node),
+            "EqualityExpression" => node.Fields.ContainsKey("left") && node.Fields.ContainsKey("op") && node.Fields.ContainsKey("right")
+                ? EmitBinaryExpression(node, "==")
+                : EmitExpressionDispatcher(node),
             
             // Identifier (variable access)
             "Identifier" => EmitIdentifier(node),
@@ -52,14 +69,157 @@ public static class WasmEmit
             "ParenthesizedExpression" => node.Fields.ContainsKey("expr") ? EmitExpression(node.Fields["expr"]) : "",
             
             // Expression dispatchers - pass through to child
-            "Expression" or "NonAssignmentExpression" or "UnaryExpression" or 
-            "PrimaryExpression" or "PrimaryNoArrayCreationExpression" =>
-                node.Fields.ContainsKey("expr") ? EmitExpression(node.Fields["expr"]) : 
-                (node.Fields.ContainsKey("literal") ? EmitExpression(node.Fields["literal"]) : ""),
+            // CDTk may return different field names due to field shifting
+            "Expression" or "NonAssignmentExpression" or "UnaryExpression" or "UnaryExpressionBase" or
+            "PrimaryExpression" or "PrimaryNoArrayCreationExpression" or "Sequence" or
+            "SwitchExpression" or "RangeExpression" or "NullCoalescingExpression" or
+            "ConditionalOrExpression" or "ConditionalAndExpression" or "InclusiveOrExpression" or
+            "ExclusiveOrExpression" or "AndExpression" or "ShiftExpression" => EmitExpressionDispatcher(node),
+            
+            // Skip operator nodes - they're handled by their parent
+            "AdditiveOperator" or "MultiplicativeOperator" or "RelationalOperator" or
+            "EqualityOperator" or "ShiftOperator" or "UnaryOperator" or
+            "AssignmentOperator" or "ConditionalOperator" => "",
             
             // Unknown - comment
             _ => $";; TODO: Emit expression {node.Type}\ni32.const 0"
         };
+    }
+    
+    /// <summary>
+    /// Handle expression dispatcher nodes that may have different field names.
+    /// </summary>
+    private static string EmitExpressionDispatcher(AstNode node)
+    {
+        // Skip operator nodes - they're handled by their parent binary expression
+        if (node.Type.EndsWith("Operator"))
+        {
+            return "";
+        }
+        
+        // For debugging complex expressions
+        if (node.Type == "Sequence" && node.Fields.Count > 0)
+        {
+            foreach (var kvp in node.Fields)
+            {
+                var value = kvp.Value;
+                if (value is AstNode an)
+                    System.Console.WriteLine($"  {kvp.Key}: AstNode({an.Type}, fields={string.Join(", ", an.Fields.Keys)})");
+                else
+                    System.Console.WriteLine($"  {kvp.Key}: {value?.GetType().Name}");
+            }
+            
+            // Sequence might be a binary operation - check for common patterns
+            if (node.Fields.ContainsKey("left") && node.Fields.ContainsKey("right"))
+            {
+                // Check if right is an operator - if so, this is CDTk parsing issue
+                var right = node.Fields["right"];
+                if (right is AstNode rightNode && rightNode.Type.EndsWith("Operator"))
+                {
+                }
+                
+                // This is a binary operation embedded in a sequence
+                return EmitBinaryExpression(node, "+");
+            }
+            
+            // Check for expr field
+            if (node.Fields.ContainsKey("expr"))
+                return EmitExpression(node.Fields["expr"]);
+        }
+        
+        // WORKAROUND for CDTk field shifting bug in Expression node
+        // If Expression has 'left' and 'right' fields instead of 'expr',
+        // this is CDTk creating a weird structure for binary operations
+        if (node.Type == "Expression" && node.Fields.ContainsKey("left") && node.Fields.ContainsKey("right") && !node.Fields.ContainsKey("expr"))
+        {
+            
+            var left = node.Fields["left"];
+            var right = node.Fields["right"];
+            
+            // Check if left is a Sequence with (operand, operator)
+            if (left is AstNode leftSeq && leftSeq.Type == "Sequence" && 
+                leftSeq.Fields.ContainsKey("left") && leftSeq.Fields.ContainsKey("right"))
+            {
+                var seqLeft = leftSeq.Fields["left"];   // First operand
+                var seqRight = leftSeq.Fields["right"]; // Operator
+                
+                var seqLeftNode = seqLeft as AstNode;
+                var rightExprNode = right as AstNode;
+                
+                // Extract the operator
+                string op = "+";  // default
+                if (seqRight is AstNode opNode && opNode.Fields.ContainsKey("lexeme"))
+                {
+                    op = opNode.Fields["lexeme"]?.ToString() ?? "+";
+                }
+                
+                // Emit: left_operand right_operand operator_instruction
+                var leftCode = EmitExpression(seqLeft);
+                
+                var rightCode = EmitExpression(right);
+                
+                var opCode = MapOperator(op);
+                
+                return $"{leftCode}\n{rightCode}\n{opCode}";
+            }
+            
+            // Fallback: just use the right field
+            if (right is AstNode rightNode && (rightNode.Type.EndsWith("Expression") || rightNode.Type == "Sequence"))
+            {
+                return EmitExpression(right);
+            }
+        }
+        
+        // Try common field names in order
+        if (node.Fields.ContainsKey("expr"))
+            return EmitExpression(node.Fields["expr"]);
+        if (node.Fields.ContainsKey("literal"))
+            return EmitExpression(node.Fields["literal"]);
+        if (node.Fields.ContainsKey("lexeme"))
+        {
+            var lexeme = node.Fields["lexeme"];
+            
+            // If lexeme is a string representing a number, emit it as a literal
+            if (lexeme is string str)
+            {
+                // Try to parse as integer
+                if (int.TryParse(str, out var intValue))
+                {
+                    return $"i32.const {intValue}";
+                }
+                // Try to parse as float
+                if (float.TryParse(str, out var floatValue))
+                {
+                    return $"f32.const {floatValue}";
+                }
+                // Try to parse as double
+                if (double.TryParse(str, out var doubleValue))
+                {
+                    return $"f64.const {doubleValue}";
+                }
+                // Boolean literals
+                if (str == "true")
+                    return "i32.const 1";
+                if (str == "false")
+                    return "i32.const 0";
+                    
+                // String literal - for now just emit as comment
+                return $";; TODO: string literal \"{str}\"";
+            }
+            
+            return EmitExpression(lexeme);
+        }
+        
+        // Try all fields to find an AstNode
+        foreach (var field in node.Fields.Values)
+        {
+            if (field is AstNode astNode)
+            {
+                return EmitExpression(astNode);
+            }
+        }
+        
+        return "";
     }
     
     /// <summary>
@@ -136,10 +296,63 @@ public static class WasmEmit
     /// </summary>
     public static string EmitBinaryExpression(AstNode node, string defaultOp)
     {
+        // DEBUG: Print node structure
+        foreach (var kvp in node.Fields)
+        {
+            var value = kvp.Value;
+            if (value is AstNode an)
+            {
+                System.Console.WriteLine($"  {kvp.Key}: AstNode({an.Type})");
+                if (an.Fields.Count > 0)
+                {
+                    System.Console.WriteLine($"    fields={string.Join(", ", an.Fields.Keys)}");
+                }
+            }
+            else if (kvp.Value is List<AstNode> lan)
+                System.Console.WriteLine($"  {kvp.Key}: List<AstNode>({lan.Count})");
+            else
+                System.Console.WriteLine($"  {kvp.Key}: {value?.GetType().Name}");
+        }
+        
         // Get left and right operands
         var left = node.Fields.ContainsKey("left") ? node.Fields["left"] : null;
         var right = node.Fields.ContainsKey("right") ? node.Fields["right"] : null;
-        var op = GetField(node, "op") ?? defaultOp;
+        
+        // Extract operator - it might be nested in an operator node
+        string op = defaultOp;
+        if (node.Fields.ContainsKey("op"))
+        {
+            var opField = node.Fields["op"];
+            if (opField is AstNode opNode)
+            {
+                // Operator is an AstNode like AdditiveOperator
+                // It has an inner op field with the actual token
+                if (opNode.Fields.ContainsKey("op"))
+                {
+                    var innerOp = opNode.Fields["op"];
+                    if (innerOp is TokenInstance token)
+                    {
+                        op = token.Lexeme;
+                    }
+                    else if (innerOp is AstNode innerOpNode && innerOpNode.Fields.ContainsKey("lexeme"))
+                    {
+                        op = innerOpNode.Fields["lexeme"]?.ToString() ?? defaultOp;
+                    }
+                }
+                else if (opNode.Fields.ContainsKey("lexeme"))
+                {
+                    op = opNode.Fields["lexeme"]?.ToString() ?? defaultOp;
+                }
+            }
+            else if (opField is TokenInstance token)
+            {
+                op = token.Lexeme;
+            }
+            else if (opField is string str)
+            {
+                op = str;
+            }
+        }
         
         // Emit left operand
         var leftCode = EmitExpression(left);
@@ -231,10 +444,25 @@ public static class WasmEmit
         {
             var expr = node.Fields["expr"];
             
-            // Handle list of expressions (when there are multiple)
-            if (expr is List<object> list && list.Count > 0)
+            // Handle list of expressions (CDTk may return List<AstNode>)
+            if (expr is List<AstNode> astList)
             {
-                expr = list[0];
+                if (astList.Count > 0)
+                {
+                    // Try to find the actual expression (not the return keyword or semicolon)
+                    foreach (var item in astList)
+                    {
+                        if (item.Type != "KwReturn" && item.Type != "Semicolon")
+                        {
+                            expr = item;
+                            break;
+                        }
+                    }
+                }
+            }
+            else if (expr is List<object> objList && objList.Count > 0)
+            {
+                expr = objList[0];
             }
             
             var exprCode = EmitExpression(expr);
@@ -260,6 +488,8 @@ public static class WasmEmit
     
     /// <summary>
     /// Emit a list of statements.
+    /// CDTk's Statement+ creates a linked list structure where each Statement node
+    /// has a 'stmt' field. This function recursively traverses the list.
     /// </summary>
     public static string EmitStatementList(object? stmtsNode)
     {
@@ -268,7 +498,7 @@ public static class WasmEmit
             return "";
         }
         
-        // Handle List<object> directly
+        // Handle List<object> directly (if CDTk ever returns this)
         if (stmtsNode is List<object> stmtList)
         {
             return string.Join("\n", stmtList.Select(EmitStatement));
@@ -280,18 +510,48 @@ public static class WasmEmit
             return "";
         }
         
-        // If it's a Statements node, process all members
+        // CDTk's Statement+ creates a recursive structure:
+        // - Statements node has 'stmts' field containing first Statement  
+        // - Each Statement node may have 'stmt' field containing next Statement
+        // We need to collect all statements in the linked list
+        var statements = new List<string>();
+        
         if (node.Type == "Statements" && node.Fields.ContainsKey("stmts"))
         {
-            var stmts = node.Fields["stmts"];
-            if (stmts is List<object> innerList)
+            // Start with the first statement
+            var current = node.Fields["stmts"];
+            while (current != null)
             {
-                return string.Join("\n", innerList.Select(EmitStatement));
+                if (current is AstNode currentNode)
+                {
+                    // Emit this statement
+                    var emitted = EmitStatement(currentNode);
+                    if (!string.IsNullOrWhiteSpace(emitted))
+                    {
+                        statements.Add(emitted);
+                    }
+                    
+                    // Move to next statement if it exists
+                    // The Statement node might have a 'stmt' field pointing to the next one
+                    if (currentNode.Fields.ContainsKey("next") && currentNode.Fields["next"] is AstNode)
+                    {
+                        current = currentNode.Fields["next"];
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    break;
+                }
             }
-            return EmitStatement(stmts);
+            
+            return string.Join("\n", statements);
         }
         
-        // Single statement
+        // Single statement node
         return EmitStatement(stmtsNode);
     }
     
@@ -364,7 +624,7 @@ public static class WasmEmit
     /// <summary>
     /// Map C# type name to WASM type.
     /// </summary>
-    private static string MapCSharpTypeToWasm(string csharpType)
+    public static string MapCSharpTypeToWasm(string csharpType)
     {
         return csharpType switch
         {
@@ -683,8 +943,22 @@ public class WASM : MapSet
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )";
     
-    /// <summary>Statements list - returns statement type for now, post-processing will handle lists</summary>
-    public Map Statements = "Statement";
+    /// <summary>Statements list - recursively emit all statements in the list</summary>
+    public Map<AstNode, string> Statements = TypedMap.For<string>()
+        .Emit(node => {
+            if (node == null) return "";
+            
+            // The Statements rule creates stmts:Statement+
+            // CDTk's + repetition creates a nested structure or list
+            if (node.Fields.ContainsKey("stmts"))
+            {
+                var result = WasmEmit.EmitStatementList(node.Fields["stmts"]);
+                return result ?? "";
+            }
+            
+            // Fallback: try to emit as single statement
+            return WasmEmit.EmitStatement(node) ?? "";
+        });
     
     /// <summary>Empty statement (no-op)</summary>
     public Map EmptyStatement = "(nop)";
@@ -1183,8 +1457,152 @@ public class WASM : MapSet
     // PARAMETERS AND ARGUMENTS
     // ============================================================
     
+    /// <summary>Formal parameter list - emit WASM parameter declarations</summary>
+    public Map<AstNode, string> FormalParameterList = TypedMap.For<string>()
+        .Emit(node => {
+            if (node == null || !node.Fields.ContainsKey("params")) return "";
+            
+            var paramsField = node.Fields["params"];
+            if (paramsField == null) return "";
+            
+            // Process the params field to extract parameters
+            return EmitParameterList(paramsField);
+        });
+    
+    /// <summary>
+    /// Emit parameter list from params field.
+    /// </summary>
+    private static string EmitParameterList(object? paramsNode)
+    {
+        if (paramsNode == null) return "";
+        
+        if (!(paramsNode is AstNode node)) return "";
+        
+        // Handle FormalParameterListContent
+        if (node.Type == "FormalParameterListContent" && node.Fields.ContainsKey("params"))
+        {
+            return EmitParameterList(node.Fields["params"]);
+        }
+        
+        // Handle FixedParameters
+        if (node.Type == "FixedParameters")
+        {
+            var results = new List<string>();
+            
+            // Check if we have a 'params' field with a list of parameters
+            if (node.Fields.ContainsKey("params"))
+            {
+                var paramsField = node.Fields["params"];
+                
+                if (paramsField is List<AstNode> paramsList)
+                {
+                    // New grammar: all parameters in a list (including Comma tokens)
+                    foreach (var item in paramsList)
+                    {
+                        // Skip Comma tokens, only process FixedParameter nodes
+                        if (item.Type == "FixedParameter")
+                        {
+                            var paramStr = EmitSingleParameter(item);
+                            if (!string.IsNullOrWhiteSpace(paramStr))
+                                results.Add(paramStr);
+                        }
+                    }
+                }
+            }
+            
+            return string.Join("\n  ", results);
+        }
+        
+        // Single FixedParameter
+        return EmitSingleParameter(paramsNode);
+    }
+    
+    /// <summary>
+    /// Emit a single parameter.
+    /// </summary>
+    private static string EmitSingleParameter(object? paramNode)
+    {
+        if (paramNode == null) return "";
+        if (!(paramNode is AstNode node)) return "";
+        
+        if (node.Type != "FixedParameter" && node.Type != "FormalParameter") return "";
+        
+        // Due to CDTk field shifting bug, the actual fields are in the wrong places:
+        // - For FixedParameter with "int a", we expect type="Type", name="Identifier"
+        // - But CDTk returns attrs="Type", modifier="Identifier"
+        // Try all possible field names to work around this
+        
+        // Get parameter name - try modifier first (field shift bug), then name
+        var nameField = node.Fields.ContainsKey("modifier") ? node.Fields["modifier"] : 
+                       (node.Fields.ContainsKey("name") ? node.Fields["name"] : null);
+        string name = "param";
+        if (nameField is TokenInstance token)
+        {
+            name = token.Lexeme;
+        }
+        else if (nameField is string str)
+        {
+            name = str;
+        }
+        else if (nameField is AstNode nameNode)
+        {
+            // Identifier node with lexeme field
+            if (nameNode.Type == "Identifier" && nameNode.Fields.ContainsKey("lexeme"))
+            {
+                var lexeme = nameNode.Fields["lexeme"];
+                if (lexeme is string lexStr)
+                {
+                    name = lexStr;
+                }
+            }
+        }
+        
+        // Get type - try attrs first (field shift bug), then type
+        var typeField = node.Fields.ContainsKey("attrs") ? node.Fields["attrs"] :
+                       (node.Fields.ContainsKey("type") ? node.Fields["type"] : null);
+        string wasmType = "i32";
+        if (typeField is AstNode typeNode)
+        {
+            wasmType = MapTypeNodeToWasm(typeNode);
+        }
+        else if (typeField is string typeStr)
+        {
+            wasmType = WasmEmit.MapCSharpTypeToWasm(typeStr);
+        }
+        
+        return $"(param ${name} {wasmType})";
+    }
+    
+    /// <summary>
+    /// Map a type AstNode to WASM type.
+    /// </summary>
+    private static string MapTypeNodeToWasm(AstNode typeNode)
+    {
+        // For simple types, look for a lexeme
+        if (typeNode.Fields.ContainsKey("lexeme"))
+        {
+            var lexeme = typeNode.Fields["lexeme"];
+            if (lexeme is string str)
+                return WasmEmit.MapCSharpTypeToWasm(str);
+            if (lexeme is TokenInstance token)
+                return WasmEmit.MapCSharpTypeToWasm(token.Lexeme);
+        }
+        
+        // Try the type field
+        if (typeNode.Fields.ContainsKey("type"))
+        {
+            var typeField = typeNode.Fields["type"];
+            if (typeField is AstNode childType)
+                return MapTypeNodeToWasm(childType);
+            if (typeField is string str)
+                return WasmEmit.MapCSharpTypeToWasm(str);
+        }
+        
+        return "i32"; // Default
+    }
+    
     /// <summary>Formal parameter list</summary>
-    public Map FormalParameterList = "{params}";
+    public Map OLD_FormalParameterList = "{params}";
     
     /// <summary>Fixed parameter</summary>
     public Map FixedParameter = "(param ${name} {type})";
@@ -1326,10 +1744,10 @@ public class WASM : MapSet
     public Map UnsignedRightShiftOperator = "i32.shr_u";
     
     /// <summary>Relational operator dispatcher</summary>
-    public Map RelationalOperator = "{op}";
+    public Map RelationalOperator = "";  // Handled by EmitBinaryExpression
     
     /// <summary>Shift operator dispatcher</summary>
-    public Map ShiftOperator = "{op}";
+    public Map ShiftOperator = "";  // Handled by EmitBinaryExpression
     
     /// <summary>Unary operator dispatcher</summary>
     public Map UnaryOperator = "{op}";
@@ -1661,7 +2079,7 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Additive operator (+ or -)</summary>
-    public Map AdditiveOperator = "{op}";
+    public Map AdditiveOperator = "";  // Handled by EmitBinaryExpression
     
     /// <summary>Conversion operator declaration</summary>
     public Map ConversionOperatorDeclaration = @"(func $op_{kind}_{type}
@@ -1671,10 +2089,10 @@ public class WASM : MapSet
 )";
     
     /// <summary>Equality operator (== or !=)</summary>
-    public Map EqualityOperator = "{op}";
+    public Map EqualityOperator = "";  // Handled by EmitBinaryExpression
     
     /// <summary>Multiplicative operator (*, /, %)</summary>
-    public Map MultiplicativeOperator = "{op}";
+    public Map MultiplicativeOperator = "";  // Handled by EmitBinaryExpression
     
     /// <summary>Operator declaration</summary>
     public Map OperatorDeclaration = @"(func $op_{operator}

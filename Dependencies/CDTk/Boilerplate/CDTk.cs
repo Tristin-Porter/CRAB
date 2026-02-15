@@ -9399,10 +9399,6 @@ namespace CDTk
                         }
                         if (astNodeList.Count > 0)
                         {
-                            if (key == "stmts")
-                            {
-                                Console.WriteLine($"FALLBACK: Found {astNodeList.Count} AstNodes in enumerable for key '{key}', mapSet={mapSet != null}");
-                            }
                             if (mapSet != null)
                             {
                                 vars[key] = string.Join("\n", astNodeList.Select(n => mapSet.Transform(n) ?? n.Type));
