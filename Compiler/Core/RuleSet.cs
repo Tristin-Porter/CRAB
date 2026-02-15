@@ -313,8 +313,8 @@ public class Rules : RuleSet
     public Rule FormalParameterListContent = new Rule("params:FixedParameters @Comma paramArray:ParameterArray | params:FixedParameters | params:ParameterArray")
         .Returns("params", "paramArray");
 
-    public Rule FixedParameters = new Rule("first:FixedParameter rest:(@Comma FixedParameter)*")
-        .Returns("first", "rest");
+    public Rule FixedParameters = new Rule("params:FixedParameter (@Comma params:FixedParameter)*")
+        .Returns("params");
 
     public Rule FixedParameter = new Rule("attrs:AttributeSections? modifier:ParameterModifier? type:Type name:@Identifier default:(@Assign Expression)?")
         .Returns("attrs", "modifier", "type", "name", "default");
