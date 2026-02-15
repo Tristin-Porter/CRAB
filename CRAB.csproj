@@ -13,6 +13,10 @@
     <Compile Remove="Testing/**/*.cs" />
     <Compile Remove="TestProject/**/*.cs" />
     <Compile Remove="testing/**/*.cs" />
+    <Compile Remove="HelloWorld/**/*.cs" />
+    <Compile Remove="Calculator/**/*.cs" />
+    <Compile Remove="ClassHierarchy/**/*.cs" />
+    <Compile Remove="GenericCollections/**/*.cs" />
     <None Include="Testing/**/*.cs" />
   </ItemGroup>
 
