@@ -9297,12 +9297,6 @@ namespace CDTk
             {
                 var key = kv.Key;
                 var v = kv.Value;
-                
-                // Debug logging for stmts
-                if (key == "stmts")
-                {
-                    Console.WriteLine($"DEBUG stmts: type={v?.GetType().Name}, value={v}");
-                }
 
                 // Handle null values as empty strings
                 if (v is null)
@@ -9338,21 +9332,10 @@ namespace CDTk
                 }
                 else if (v is AstNode child)
                 {
-                    // Debug logging for stmts child
-                    if (key == "stmts")
-                    {
-                        Console.WriteLine($"DEBUG stmts child: node.Type={child.Type}");
-                    }
-                    
                     // Recursively transform child nodes if MapSet is available
                     if (mapSet != null)
                     {
-                        var transformed = mapSet.Transform(child);
-                        if (key == "stmts")
-                        {
-                            Console.WriteLine($"DEBUG stmts transformed: result={transformed?.Substring(0, Math.Min(50, transformed?.Length ?? 0))}...");
-                        }
-                        vars[key] = transformed ?? child.Type;
+                        vars[key] = mapSet.Transform(child) ?? child.Type;
                     }
                     else
                     {
@@ -9416,7 +9399,6 @@ namespace CDTk
                         }
                         if (astNodeList.Count > 0)
                         {
-                            Console.WriteLine($"DEBUG: Found {astNodeList.Count} AstNodes in enumerable for key '{key}', type={v.GetType().Name}");
                             if (mapSet != null)
                             {
                                 vars[key] = string.Join("\n", astNodeList.Select(n => mapSet.Transform(n) ?? n.Type));
@@ -9424,7 +9406,6 @@ namespace CDTk
                             }
                         }
                     }
-                    Console.WriteLine($"DEBUG: Falling back to ToString for key '{key}', type={v.GetType().Name}");
                     vars[key] = v.ToString() ?? "";
                 }
             }
@@ -9503,7 +9484,6 @@ namespace CDTk
         /// </summary>
         internal TOutput? Generate(AstNode node)
         {
-            Console.WriteLine($"DEBUG Generate: node.Type={node.Type}, TNode={typeof(TNode).Name}");
             if (node == null) throw new ArgumentNullException(nameof(node));
             if (!(node is TNode typedNode))
             {
@@ -9530,15 +9510,11 @@ namespace CDTk
             }
 
             // Emit output
-            Console.WriteLine($"DEBUG Generate: calling _emitFunction, is null? {_emitFunction == null}");
             if (_emitFunction != null)
             {
-                var result = _emitFunction(typedNode);
-                Console.WriteLine($"DEBUG Generate: emitFunction returned type={result?.GetType().Name}, value={result?.ToString()?.Substring(0, Math.Min(50, result?.ToString()?.Length ?? 0))}");
-                return result;
+                return _emitFunction(typedNode);
             }
 
-            Console.WriteLine($"DEBUG Generate: _emitFunction is null, returning default");
             return default(TOutput);
         }
 
@@ -9569,14 +9545,11 @@ namespace CDTk
         /// </summary>
         internal string? GenerateString(AstNode node)
         {
-            Console.WriteLine($"DEBUG GenerateString: node.Type={node.Type}, TOutput={typeof(TOutput).Name}");
             if (typeof(TOutput) == typeof(string))
             {
                 var result = Generate(node);
-                Console.WriteLine($"DEBUG GenerateString: result type={result?.GetType().Name}, value={result?.ToString()?.Substring(0, Math.Min(50, result?.ToString()?.Length ?? 0))}");
                 return result as string;
             }
-            Console.WriteLine($"DEBUG GenerateString: TOutput is not string, returning null");
             return null;
         }
     }

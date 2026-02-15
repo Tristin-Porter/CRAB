@@ -24,6 +24,12 @@ public static class WasmEmit
             exprNode = list[0];
         }
         
+        // Handle List<AstNode> (CDTk may return this type)
+        if (exprNode is List<AstNode> astList && astList.Count > 0)
+        {
+            exprNode = astList[0];
+        }
+        
         if (!(exprNode is AstNode node))
         {
             // Might be a literal value
@@ -53,14 +59,70 @@ public static class WasmEmit
             "ParenthesizedExpression" => node.Fields.ContainsKey("expr") ? EmitExpression(node.Fields["expr"]) : "",
             
             // Expression dispatchers - pass through to child
+            // CDTk may return different field names due to field shifting
             "Expression" or "NonAssignmentExpression" or "UnaryExpression" or 
-            "PrimaryExpression" or "PrimaryNoArrayCreationExpression" =>
-                node.Fields.ContainsKey("expr") ? EmitExpression(node.Fields["expr"]) : 
-                (node.Fields.ContainsKey("literal") ? EmitExpression(node.Fields["literal"]) : ""),
+            "PrimaryExpression" or "PrimaryNoArrayCreationExpression" => EmitExpressionDispatcher(node),
             
             // Unknown - comment
             _ => $";; TODO: Emit expression {node.Type}\ni32.const 0"
         };
+    }
+    
+    /// <summary>
+    /// Handle expression dispatcher nodes that may have different field names.
+    /// </summary>
+    private static string EmitExpressionDispatcher(AstNode node)
+    {
+        // Try common field names in order
+        if (node.Fields.ContainsKey("expr"))
+            return EmitExpression(node.Fields["expr"]);
+        if (node.Fields.ContainsKey("literal"))
+            return EmitExpression(node.Fields["literal"]);
+        if (node.Fields.ContainsKey("lexeme"))
+        {
+            var lexeme = node.Fields["lexeme"];
+            
+            // If lexeme is a string representing a number, emit it as a literal
+            if (lexeme is string str)
+            {
+                // Try to parse as integer
+                if (int.TryParse(str, out var intValue))
+                {
+                    return $"i32.const {intValue}";
+                }
+                // Try to parse as float
+                if (float.TryParse(str, out var floatValue))
+                {
+                    return $"f32.const {floatValue}";
+                }
+                // Try to parse as double
+                if (double.TryParse(str, out var doubleValue))
+                {
+                    return $"f64.const {doubleValue}";
+                }
+                // Boolean literals
+                if (str == "true")
+                    return "i32.const 1";
+                if (str == "false")
+                    return "i32.const 0";
+                    
+                // String literal - for now just emit as comment
+                return $";; TODO: string literal \"{str}\"";
+            }
+            
+            return EmitExpression(lexeme);
+        }
+        
+        // Try all fields to find an AstNode
+        foreach (var field in node.Fields.Values)
+        {
+            if (field is AstNode astNode)
+            {
+                return EmitExpression(astNode);
+            }
+        }
+        
+        return "";
     }
     
     /// <summary>
@@ -188,8 +250,6 @@ public static class WasmEmit
     /// </summary>
     public static string EmitStatement(object? stmtNode)
     {
-        System.Console.WriteLine($"DEBUG EmitStatement: stmtNode type={stmtNode?.GetType().Name}");
-        
         if (stmtNode == null)
         {
             return "";
@@ -198,7 +258,6 @@ public static class WasmEmit
         // Handle List<object> - process first element
         if (stmtNode is List<object> list)
         {
-            System.Console.WriteLine($"DEBUG EmitStatement: List with {list.Count} items");
             if (list.Count > 0)
             {
                 return EmitStatement(list[0]);
@@ -208,13 +267,10 @@ public static class WasmEmit
         
         if (!(stmtNode is AstNode node))
         {
-            System.Console.WriteLine($"DEBUG EmitStatement: Not an AstNode, returning empty");
             return "";  // Unknown type
         }
         
-        System.Console.WriteLine($"DEBUG EmitStatement: AstNode type={node.Type}");
-        
-        var result = node.Type switch
+        return node.Type switch
         {
             "ReturnStatement" => EmitReturnStatement(node),
             "ExpressionStatement" => node.Fields.ContainsKey("expr") ? EmitExpression(node.Fields["expr"]) : "",
@@ -227,9 +283,6 @@ public static class WasmEmit
             
             _ => $";; TODO: Emit {node.Type}\nnop"
         };
-        
-        System.Console.WriteLine($"DEBUG EmitStatement: returning result length={result?.Length}");
-        return result;
     }
     
     /// <summary>
@@ -237,20 +290,13 @@ public static class WasmEmit
     /// </summary>
     private static string EmitReturnStatement(AstNode node)
     {
-        System.Console.WriteLine($"DEBUG EmitReturnStatement: fields={string.Join(",", node.Fields.Keys)}");
         if (node.Fields.ContainsKey("expr") && node.Fields["expr"] != null)
         {
             var expr = node.Fields["expr"];
-            System.Console.WriteLine($"DEBUG EmitReturnStatement: expr type={expr?.GetType().Name}");
             
             // Handle list of expressions (CDTk may return List<AstNode>)
             if (expr is List<AstNode> astList)
             {
-                System.Console.WriteLine($"DEBUG EmitReturnStatement: expr is List<AstNode> with {astList.Count} items:");
-                for (int i = 0; i < astList.Count; i++)
-                {
-                    System.Console.WriteLine($"  [{i}] Type={astList[i].Type}");
-                }
                 if (astList.Count > 0)
                 {
                     // Try to find the actual expression (not the return keyword or semicolon)
@@ -259,7 +305,6 @@ public static class WasmEmit
                         if (item.Type != "KwReturn" && item.Type != "Semicolon")
                         {
                             expr = item;
-                            System.Console.WriteLine($"DEBUG EmitReturnStatement: Found expression at type={item.Type}");
                             break;
                         }
                     }
@@ -267,18 +312,15 @@ public static class WasmEmit
             }
             else if (expr is List<object> objList && objList.Count > 0)
             {
-                System.Console.WriteLine($"DEBUG EmitReturnStatement: expr is List<object> with {objList.Count} items");
                 expr = objList[0];
             }
             
             var exprCode = EmitExpression(expr);
-            System.Console.WriteLine($"DEBUG EmitReturnStatement: exprCode={exprCode}");
             if (!string.IsNullOrWhiteSpace(exprCode))
             {
                 return exprCode + "\nreturn";
             }
         }
-        System.Console.WriteLine($"DEBUG EmitReturnStatement: returning just 'return'");
         return "return";
     }
     
@@ -301,8 +343,6 @@ public static class WasmEmit
     /// </summary>
     public static string EmitStatementList(object? stmtsNode)
     {
-        System.Console.WriteLine($"DEBUG EmitStatementList: stmtsNode type={stmtsNode?.GetType().Name}");
-        
         if (stmtsNode == null)
         {
             return "";
@@ -311,18 +351,14 @@ public static class WasmEmit
         // Handle List<object> directly (if CDTk ever returns this)
         if (stmtsNode is List<object> stmtList)
         {
-            System.Console.WriteLine($"DEBUG EmitStatementList: List<object> with {stmtList.Count} items");
             return string.Join("\n", stmtList.Select(EmitStatement));
         }
         
         // Handle single AstNode
         if (!(stmtsNode is AstNode node))
         {
-            System.Console.WriteLine($"DEBUG EmitStatementList: Not an AstNode, ToString={stmtsNode}");
             return "";
         }
-        
-        System.Console.WriteLine($"DEBUG EmitStatementList: AstNode type={node.Type}, fields={string.Join(",", node.Fields.Keys)}");
         
         // CDTk's Statement+ creates a recursive structure:
         // - Statements node has 'stmts' field containing first Statement  
@@ -760,21 +796,16 @@ public class WASM : MapSet
     /// <summary>Statements list - recursively emit all statements in the list</summary>
     public Map<AstNode, string> Statements = TypedMap.For<string>()
         .Emit(node => {
-            System.Console.WriteLine($"DEBUG Statements.Emit START: node.Type={node.Type}, fields={string.Join(",", node.Fields.Keys)}");
             if (node == null) return "";
             
             // The Statements rule creates stmts:Statement+
             // CDTk's + repetition creates a nested structure or list
             if (node.Fields.ContainsKey("stmts"))
             {
-                var stmts = node.Fields["stmts"];
-                System.Console.WriteLine($"DEBUG Statements.Emit: stmts type={stmts?.GetType().Name}, value preview={stmts?.ToString()?.Substring(0, Math.Min(30, stmts?.ToString()?.Length ?? 0))}");
-                var result = WasmEmit.EmitStatementList(stmts);
-                System.Console.WriteLine($"DEBUG Statements.Emit END: result length={result?.Length}, value={result?.Substring(0, Math.Min(50, result?.Length ?? 0))}");
+                var result = WasmEmit.EmitStatementList(node.Fields["stmts"]);
                 return result ?? "";
             }
             
-            System.Console.WriteLine($"DEBUG Statements.Emit: no stmts field, emitting as single statement");
             // Fallback: try to emit as single statement
             return WasmEmit.EmitStatement(node) ?? "";
         });
