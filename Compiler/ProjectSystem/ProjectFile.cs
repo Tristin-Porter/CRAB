@@ -7,6 +7,17 @@ using System.Xml.Linq;
 namespace CRAB.ProjectSystem;
 
 /// <summary>
+/// Represents a NuGet package reference.
+/// </summary>
+public class PackageReference
+{
+    public string Name { get; set; } = "";
+    public string Version { get; set; } = "";
+    public bool IsImplicit { get; set; } = false;
+    public Dictionary<string, string> Metadata { get; set; } = new();
+}
+
+/// <summary>
 /// Represents a parsed C# project file (.csproj).
 /// </summary>
 public class ProjectFile
@@ -17,6 +28,7 @@ public class ProjectFile
     public string OutputType { get; set; } = "";
     public List<string> SourceFiles { get; set; } = new();
     public List<string> ProjectReferences { get; set; } = new();
+    public List<PackageReference> PackageReferences { get; set; } = new();
     public Dictionary<string, string> Properties { get; set; } = new();
     
     /// <summary>
@@ -102,6 +114,44 @@ public class ProjectFile
                     {
                         var absolutePath = Path.Combine(projectDir, include);
                         project.ProjectReferences.Add(absolutePath);
+                    }
+                }
+                
+                // Package references (NuGet packages)
+                foreach (var packageRef in itemGroup.Elements("PackageReference"))
+                {
+                    var include = packageRef.Attribute("Include")?.Value;
+                    var version = packageRef.Attribute("Version")?.Value;
+                    
+                    if (!string.IsNullOrEmpty(include))
+                    {
+                        var package = new PackageReference
+                        {
+                            Name = include,
+                            Version = version ?? "",
+                            IsImplicit = false
+                        };
+                        
+                        // Parse child elements for additional metadata
+                        foreach (var element in packageRef.Elements())
+                        {
+                            if (!string.IsNullOrEmpty(element.Value))
+                            {
+                                package.Metadata[element.Name.LocalName] = element.Value;
+                            }
+                        }
+                        
+                        // Check if Version is a child element instead of attribute
+                        if (string.IsNullOrEmpty(package.Version))
+                        {
+                            var versionElement = packageRef.Element("Version");
+                            if (versionElement != null)
+                            {
+                                package.Version = versionElement.Value;
+                            }
+                        }
+                        
+                        project.PackageReferences.Add(package);
                     }
                 }
             }
