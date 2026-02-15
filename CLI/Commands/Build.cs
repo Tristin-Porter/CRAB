@@ -190,19 +190,22 @@ class Build : Command
                     
                     // Read the WAT text that was generated
                     string watText = File.ReadAllText(outputFile);
+                    if (verbose) System.Console.WriteLine($"      Read {watText.Length} characters of WAT text");
                     
                     // Generate WASM binary and JS wrapper using BADGER
+                    if (verbose) System.Console.WriteLine("      Calling BADGER WasmJS.Emit()...");
                     var (wasmBinary, jsWrapper) = WasmJS.Emit(watText);
+                    if (verbose) System.Console.WriteLine($"      BADGER generated {wasmBinary.Length} bytes of WASM binary");
                     
                     // Save WASM binary
                     string wasmBinaryPath = Path.Combine(outputPath, "output.wasm");
                     File.WriteAllBytes(wasmBinaryPath, wasmBinary);
-                    if (verbose) System.Console.WriteLine($"      Generated {wasmBinaryPath} ({wasmBinary.Length} bytes)");
+                    if (verbose) System.Console.WriteLine($"      Saved {wasmBinaryPath} ({wasmBinary.Length} bytes)");
                     
                     // Save JS wrapper
                     string jsPath = Path.Combine(outputPath, "output.js");
                     File.WriteAllText(jsPath, jsWrapper);
-                    if (verbose) System.Console.WriteLine($"      Generated {jsPath}");
+                    if (verbose) System.Console.WriteLine($"      Saved {jsPath}");
                     
                     // Generate HTML file
                     string projectNameForHtml = discovery.ProjectFiles.Count > 0 
@@ -211,12 +214,12 @@ class Build : Command
                     string htmlContent = HtmlGenerator.GenerateHtml(projectNameForHtml);
                     string htmlPath = Path.Combine(outputPath, "index.html");
                     File.WriteAllText(htmlPath, htmlContent);
-                    if (verbose) System.Console.WriteLine($"      Generated {htmlPath}");
+                    if (verbose) System.Console.WriteLine($"      Saved {htmlPath}");
                     
                     // Also save the original WAT as output.wat for debugging
                     string watPath = Path.Combine(outputPath, "output.wat");
                     File.WriteAllText(watPath, watText);
-                    if (verbose) System.Console.WriteLine($"      Generated {watPath} (WebAssembly text format)");
+                    if (verbose) System.Console.WriteLine($"      Saved {watPath} (WebAssembly text format)");
                     
                     if (verbose)
                     {
@@ -224,9 +227,20 @@ class Build : Command
                         System.Console.WriteLine("      Open index.html in a browser to run the WebAssembly module.");
                     }
                 }
+                catch (IOException ioEx)
+                {
+                    System.Console.WriteLine($"Warning: Failed to write browser files to disk - {ioEx.Message}");
+                    if (verbose)
+                    {
+                        System.Console.WriteLine("This may be a file permissions or disk space issue.");
+                        System.Console.WriteLine("Stack trace:");
+                        System.Console.WriteLine(ioEx.StackTrace);
+                    }
+                }
                 catch (Exception wasmEx)
                 {
                     System.Console.WriteLine($"Warning: Failed to generate WASM binary/browser files - {wasmEx.Message}");
+                    System.Console.WriteLine("This may be due to invalid WAT format or BADGER compilation error.");
                     if (verbose)
                     {
                         System.Console.WriteLine("Stack trace:");

@@ -17,6 +17,7 @@
     <Compile Remove="Calculator/**/*.cs" />
     <Compile Remove="ClassHierarchy/**/*.cs" />
     <Compile Remove="GenericCollections/**/*.cs" />
+    <Compile Remove="Examples/**/*.cs" />
     <None Include="Testing/**/*.cs" />
   </ItemGroup>
 
