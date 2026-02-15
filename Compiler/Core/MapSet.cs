@@ -1,4 +1,5 @@
 using CDTk;
+using System;
 
 namespace CRAB;
 
@@ -263,6 +264,8 @@ public static class WasmEmit
     /// </summary>
     public static string EmitStatementList(object? stmtsNode)
     {
+        System.Console.WriteLine($"DEBUG EmitStatementList: stmtsNode type={stmtsNode?.GetType().Name}");
+        
         if (stmtsNode == null)
         {
             return "";
@@ -271,21 +274,27 @@ public static class WasmEmit
         // Handle List<object> directly
         if (stmtsNode is List<object> stmtList)
         {
+            System.Console.WriteLine($"DEBUG EmitStatementList: List<object> with {stmtList.Count} items");
             return string.Join("\n", stmtList.Select(EmitStatement));
         }
         
         // Handle single AstNode
         if (!(stmtsNode is AstNode node))
         {
+            System.Console.WriteLine($"DEBUG EmitStatementList: Not an AstNode, ToString={stmtsNode}");
             return "";
         }
+        
+        System.Console.WriteLine($"DEBUG EmitStatementList: AstNode type={node.Type}, fields={string.Join(",", node.Fields.Keys)}");
         
         // If it's a Statements node, process all members
         if (node.Type == "Statements" && node.Fields.ContainsKey("stmts"))
         {
             var stmts = node.Fields["stmts"];
+            System.Console.WriteLine($"DEBUG EmitStatementList: Statements.stmts type={stmts?.GetType().Name}");
             if (stmts is List<object> innerList)
             {
+                System.Console.WriteLine($"DEBUG EmitStatementList: innerList with {innerList.Count} items");
                 return string.Join("\n", innerList.Select(EmitStatement));
             }
             return EmitStatement(stmts);
@@ -683,8 +692,22 @@ public class WASM : MapSet
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )";
     
-    /// <summary>Statements list - returns statement type for now, post-processing will handle lists</summary>
-    public Map Statements = "Statement";
+    /// <summary>Statements list - recursively emit all statements in the list</summary>
+    public Map<AstNode, string> Statements = TypedMap.For<string>()
+        .Emit(node => {
+            if (node == null) return "";
+            
+            // The Statements rule creates stmts:Statement+
+            // CDTk's + repetition creates a nested structure or list
+            if (node.Fields.ContainsKey("stmts"))
+            {
+                var result = WasmEmit.EmitStatementList(node.Fields["stmts"]);
+                return result ?? "";
+            }
+            
+            // Fallback: try to emit as single statement
+            return WasmEmit.EmitStatement(node) ?? "";
+        });
     
     /// <summary>Empty statement (no-op)</summary>
     public Map EmptyStatement = "(nop)";
