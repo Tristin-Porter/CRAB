@@ -375,6 +375,7 @@ class Compile : Command
 
     /// <summary>
     /// Get line number for an AST node from its Span information.
+    /// Note: sourceCode parameter reserved for future fallback line counting if Span is unavailable.
     /// </summary>
     private int GetLineNumber(AstNode node, string sourceCode)
     {
