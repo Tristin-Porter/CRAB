@@ -18,6 +18,7 @@
     <Compile Remove="ClassHierarchy/**/*.cs" />
     <Compile Remove="GenericCollections/**/*.cs" />
     <Compile Remove="Examples/**/*.cs" />
+    <Compile Remove="StandardLibrary/**/*.cs" />
     <None Include="Testing/**/*.cs" />
   </ItemGroup>
 
