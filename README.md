@@ -79,6 +79,28 @@ crab build MyApp.sln
 crab run bin/Program.wat
 ```
 
+### Run in Browser
+
+CRAB automatically generates browser-ready files:
+
+```bash
+# Build your project
+crab build
+
+# Generated files in bin/:
+#   - output.wasm (WebAssembly binary)
+#   - output.js (JavaScript wrapper)
+#   - index.html (Browser runner)
+#   - output.wat (WebAssembly text for debugging)
+
+# Serve and open in browser
+cd bin
+python -m http.server 8000
+# Navigate to http://localhost:8000/index.html
+```
+
+See [WASM_BROWSER_GUIDE.md](WASM_BROWSER_GUIDE.md) for complete browser execution guide.
+
 ## Project System Support
 
 CRAB supports standard MSBuild project files:

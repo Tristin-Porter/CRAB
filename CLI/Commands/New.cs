@@ -57,6 +57,7 @@ class Console : Command
             // Note: Limited to parseable constructs due to CDTk GLL parser bug
             // with expression delegation (see STATEMENT_PARSING_INVESTIGATION.md)
             // Can parse method declarations but not expression/statement bodies yet.
+            // TODO: Once parser supports statement bodies, add Console I/O code
             var programContent = @"using System;
 
 namespace " + name + @"
@@ -65,6 +66,10 @@ namespace " + name + @"
     {
         static void Main()
         {
+            // TODO: Add your code here
+            // Console.WriteLine(""Hello from CRAB!"");
+            // Console.WriteLine(""Press any key to exit..."");
+            // Console.ReadKey();
         }
         
         int Add(int x, int y)

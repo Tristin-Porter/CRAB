@@ -1,6 +1,8 @@
 using System.IO;
 using System.Diagnostics;
 using CRAB.ProjectSystem;
+using CRAB.WebAssembly;
+using Badger.Containers;
 
 namespace CRAB;
 
@@ -179,14 +181,105 @@ class Build : Command
                 return;
             }
 
+            // For WAT/WASM output, also generate WASM binary, JS wrapper, and HTML files
+            if (!toAsm && outputFile.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    if (verbose) System.Console.WriteLine("\n[4/6] Generating WebAssembly binary and browser files...");
+                    
+                    // Read the WAT text that was generated
+                    string watText = File.ReadAllText(outputFile);
+                    if (verbose) System.Console.WriteLine($"      Read {watText.Length} characters of WAT text");
+                    
+                    // Generate WASM binary and JS wrapper using BADGER
+                    if (verbose) System.Console.WriteLine("      Calling BADGER WasmJS.Emit()...");
+                    var (wasmBinary, jsWrapper) = WasmJS.Emit(watText);
+                    if (verbose) System.Console.WriteLine($"      BADGER generated {wasmBinary.Length} bytes of WASM binary");
+                    
+                    // Save WASM binary
+                    string wasmBinaryPath = Path.Combine(outputPath, "output.wasm");
+                    File.WriteAllBytes(wasmBinaryPath, wasmBinary);
+                    if (verbose) System.Console.WriteLine($"      Saved {wasmBinaryPath} ({wasmBinary.Length} bytes)");
+                    
+                    // Save JS wrapper
+                    string jsPath = Path.Combine(outputPath, "output.js");
+                    File.WriteAllText(jsPath, jsWrapper);
+                    if (verbose) System.Console.WriteLine($"      Saved {jsPath}");
+                    
+                    // Generate HTML file
+                    string projectNameForHtml = discovery.ProjectFiles.Count > 0 
+                        ? Path.GetFileNameWithoutExtension(discovery.ProjectFiles[0])
+                        : "CRAB Project";
+                    string htmlContent = HtmlGenerator.GenerateHtml(projectNameForHtml);
+                    string htmlPath = Path.Combine(outputPath, "index.html");
+                    File.WriteAllText(htmlPath, htmlContent);
+                    if (verbose) System.Console.WriteLine($"      Saved {htmlPath}");
+                    
+                    // Also save the original WAT as output.wat for debugging
+                    string watPath = Path.Combine(outputPath, "output.wat");
+                    File.WriteAllText(watPath, watText);
+                    if (verbose) System.Console.WriteLine($"      Saved {watPath} (WebAssembly text format)");
+                    
+                    if (verbose)
+                    {
+                        System.Console.WriteLine("\n[5/6] Browser files generated.");
+                        System.Console.WriteLine("      Open index.html in a browser to run the WebAssembly module.");
+                    }
+                }
+                catch (IOException ioEx)
+                {
+                    System.Console.WriteLine($"Warning: Failed to write browser files to disk - {ioEx.Message}");
+                    if (verbose)
+                    {
+                        System.Console.WriteLine("This may be a file permissions or disk space issue.");
+                        System.Console.WriteLine("Stack trace:");
+                        System.Console.WriteLine(ioEx.StackTrace);
+                    }
+                }
+                catch (Exception wasmEx)
+                {
+                    System.Console.WriteLine($"Warning: Failed to generate WASM binary/browser files - {wasmEx.Message}");
+                    System.Console.WriteLine("This may be due to invalid WAT format or BADGER compilation error.");
+                    if (verbose)
+                    {
+                        System.Console.WriteLine("Stack trace:");
+                        System.Console.WriteLine(wasmEx.StackTrace);
+                    }
+                }
+            }
+
             if (verbose)
             {
-                System.Console.WriteLine("\n[4/4] Build complete.");
+                System.Console.WriteLine($"\n[{(toAsm ? "4/4" : "6/6")}] Build complete.");
                 System.Console.WriteLine("=".PadRight(60, '='));
             }
 
             System.Console.WriteLine($"✓ Build successful: {outputFile}");
             System.Console.WriteLine($"  Output size: {new FileInfo(outputFile).Length} bytes");
+            
+            // Show additional outputs if generated
+            if (!toAsm && outputFile.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase))
+            {
+                string wasmBinaryPath = Path.Combine(outputPath, "output.wasm");
+                string jsPath = Path.Combine(outputPath, "output.js");
+                string htmlPath = Path.Combine(outputPath, "index.html");
+                string watPath = Path.Combine(outputPath, "output.wat");
+                
+                if (File.Exists(wasmBinaryPath))
+                    System.Console.WriteLine($"  WASM binary: {wasmBinaryPath} ({new FileInfo(wasmBinaryPath).Length} bytes)");
+                if (File.Exists(jsPath))
+                    System.Console.WriteLine($"  JS wrapper: {jsPath}");
+                if (File.Exists(htmlPath))
+                    System.Console.WriteLine($"  HTML runner: {htmlPath}");
+                if (File.Exists(watPath))
+                    System.Console.WriteLine($"  WAT text: {watPath}");
+                    
+                System.Console.WriteLine();
+                System.Console.WriteLine("To run in browser:");
+                System.Console.WriteLine($"  1. Open {htmlPath} in your web browser");
+                System.Console.WriteLine("  2. Or serve with: python -m http.server 8000");
+            }
         }
         catch (Exception ex)
         {

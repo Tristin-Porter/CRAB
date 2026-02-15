@@ -5,13 +5,14 @@ TestProject/
 testing/
 tests/
 *_outputs/
-*.bin
-*.wasm
-*.wat
 
-# Test command generated projects
-HelloWorld/
-Calculator/
-ClassHierarchy/
-GenericCollections/
+# Test command generated projects (at root level only)
+/HelloWorld/
+/Calculator/
+/ClassHierarchy/
+/GenericCollections/
 
+# Allow Examples directory but ignore their bin/obj folders
+!Examples/
+Examples/*/bin/
+Examples/*/obj/
