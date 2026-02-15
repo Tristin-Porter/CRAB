@@ -1,5 +1,7 @@
 using CDTk;
 
+namespace CRAB;
+
 /// <summary>
 /// WASM MapSet: Translates C# AST to WebAssembly text format (WAT).
 /// 
@@ -105,6 +107,50 @@ public class WASM : MapSet
             return null;
         }
     }
+    
+    // ============================================================
+    // TYPED MAP API DEMONSTRATION (New Architecture)
+    // ============================================================
+    // 
+    // The following demonstrates the new typed Map API that replaces string templates
+    // with semantic, rule-driven transformations and arbitrary output types.
+    //
+    // Example usage (commented out - for demonstration):
+    //
+    // Using WASM IR types:
+    // public Map<AstNode, WasmInstruction> NumberLiteral = TypedMap.For<WasmInstruction>()
+    //     .Emit(node => new WasmInstruction(OpCode.I32Const, int.Parse(node["value"] as string ?? "0")));
+    //
+    // With semantic model integration:
+    // public Map<AstNode, WasmInstruction> Expression = TypedMap.For<WasmInstruction>()
+    //     .Using(model => ((Optimization)model).NormalizeExpression)
+    //     .Emit(node => EmitExpression(node));
+    //
+    // Multiple statements with WasmInstructionSequence:
+    // public Map<AstNode, WasmInstructionSequence> IfStatement = TypedMap.For<WasmInstructionSequence>()
+    //     .Emit(node => {
+    //         var seq = new WasmInstructionSequence();
+    //         seq.Add(new WasmInstruction(OpCode.If));
+    //         // ... build sequence
+    //         seq.Add(new WasmInstruction(OpCode.End));
+    //         return seq;
+    //     });
+    //
+    // To fully migrate to typed API:
+    // 1. Replace string Map with Map<AstNode, TOutput>
+    // 2. Use TypedMap.For<TOutput>() factory
+    // 3. Add .Emit(node => ...) for output generation
+    // 4. Optionally add .Using(model => ...) for semantic transformations
+    // 5. Change Transform() calls to use typed output
+    //
+    // Benefits:
+    // - Type-safe output (WASM IR, binary, custom types)
+    // - Semantic model hooks for transformations
+    // - Composable emitters
+    // - No string template bugs
+    // - Supports dispatcher chains for expression lowering
+    //
+    // ============================================================
     
     // ============================================================
     // MODULE STRUCTURE
@@ -1771,6 +1817,138 @@ public class WASM : MapSet
     public Map Comma = ", ";
     public Map Dot = ".";
     public Map Colon = ":";
+    
+    // ============================================================
+    // WASM IR EMISSION HELPERS (for Typed Map API)
+    // ============================================================
+    
+    /// <summary>
+    /// Helper method to emit WASM instruction for a literal value.
+    /// Demonstrates how typed Maps can generate WasmInstruction objects.
+    /// </summary>
+    private WasmInstruction EmitLiteral(AstNode node)
+    {
+        var value = node["value"] as string ?? "0";
+        
+        // Try to parse as int
+        if (int.TryParse(value, out var intValue))
+        {
+            return new WasmInstruction(OpCode.I32Const, intValue) { Comment = $"literal {value}" };
+        }
+        
+        // Try to parse as long
+        if (long.TryParse(value, out var longValue))
+        {
+            return new WasmInstruction(OpCode.I64Const, longValue) { Comment = $"literal {value}" };
+        }
+        
+        // Try to parse as float
+        if (value.EndsWith("f") && float.TryParse(value.TrimEnd('f'), out var floatValue))
+        {
+            return new WasmInstruction(OpCode.F32Const, floatValue) { Comment = $"literal {value}" };
+        }
+        
+        // Try to parse as double
+        if (double.TryParse(value, out var doubleValue))
+        {
+            return new WasmInstruction(OpCode.F64Const, doubleValue) { Comment = $"literal {value}" };
+        }
+        
+        // Invalid literal - throw exception with diagnostic information
+        throw new InvalidOperationException(
+            $"Invalid literal value '{value}' in AST node '{node.Type}'. " +
+            $"Expected numeric literal (int, long, float, double).");
+    }
+    
+    /// <summary>
+    /// Helper method to emit WASM instruction for binary operations.
+    /// Maps C# operators to WASM opcodes.
+    /// </summary>
+    private WasmInstruction EmitBinaryOp(string op, string operandType = "i32")
+    {
+        var opCode = (op, operandType) switch
+        {
+            ("+", "i32") => OpCode.I32Add,
+            ("-", "i32") => OpCode.I32Sub,
+            ("*", "i32") => OpCode.I32Mul,
+            ("/", "i32") => OpCode.I32DivS,
+            ("%", "i32") => OpCode.I32RemS,
+            ("&", "i32") => OpCode.I32And,
+            ("|", "i32") => OpCode.I32Or,
+            ("^", "i32") => OpCode.I32Xor,
+            ("==", "i32") => OpCode.I32Eq,
+            ("!=", "i32") => OpCode.I32Ne,
+            ("<", "i32") => OpCode.I32LtS,
+            (">", "i32") => OpCode.I32GtS,
+            ("<=", "i32") => OpCode.I32LeS,
+            (">=", "i32") => OpCode.I32GeS,
+            
+            ("+", "i64") => OpCode.I64Add,
+            ("-", "i64") => OpCode.I64Sub,
+            ("*", "i64") => OpCode.I64Mul,
+            
+            ("+", "f32") => OpCode.F32Add,
+            ("-", "f32") => OpCode.F32Sub,
+            ("*", "f32") => OpCode.F32Mul,
+            ("/", "f32") => OpCode.F32Div,
+            
+            ("+", "f64") => OpCode.F64Add,
+            ("-", "f64") => OpCode.F64Sub,
+            ("*", "f64") => OpCode.F64Mul,
+            ("/", "f64") => OpCode.F64Div,
+            
+            _ => OpCode.Nop
+        };
+        
+        return new WasmInstruction(opCode) { Comment = $"operator {op}" };
+    }
+    
+    /// <summary>
+    /// Emit a complete function as WasmFunction IR.
+    /// This is a demonstration/stub showing how typed Maps can generate
+    /// entire WASM structures, not just strings.
+    /// 
+    /// TODO: Complete implementation for production use:
+    /// 1. Parse parameter list from AST
+    /// 2. Emit function body instructions recursively
+    /// 3. Handle local variables
+    /// 4. Support all statement types
+    /// 
+    /// This stub demonstrates the API pattern - actual implementation
+    /// would recursively call other typed Maps to build the complete function.
+    /// </summary>
+    private WasmFunction EmitFunction(AstNode node)
+    {
+        var func = new WasmFunction
+        {
+            Name = node["name"] as string ?? "unnamed",
+            IsExport = true
+        };
+        
+        // Parse return type
+        var returnType = node["returnType"] as string ?? "void";
+        if (returnType != "void")
+        {
+            func.Type.Results.Add(WasmTypeExtensions.FromCSharpType(returnType));
+        }
+        
+        // TODO: Parse parameters
+        if (node["parameters"] is AstNode paramsNode)
+        {
+            // Add parameter types to function signature
+            // (Stub - real implementation would parse parameter list)
+        }
+        
+        // TODO: Parse and emit body instructions
+        if (node["body"] is AstNode bodyNode)
+        {
+            // Emit body instructions recursively
+            // (Stub - demonstrates pattern only)
+            func.Body.Add(new WasmInstruction(OpCode.Nop) { Comment = "TODO: emit function body" });
+        }
+        
+        return func;
+    }
     
     // ============================================================
     // FALLBACK
