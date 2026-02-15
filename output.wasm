@@ -3,15 +3,17 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class Test
-(type $Test (struct
-(func $M
+;; class TestUnsafe
+(type $TestUnsafe (struct
+(func $i32
+TestUnsafeBlock
+  (result ;; modifiers: 
+)
 (block
-Statement
+;; TODO: Emit UnsafeStatement
+nop
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )
-  (result )
-
 )
 ))
 )

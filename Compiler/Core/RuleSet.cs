@@ -466,7 +466,7 @@ public class Rules : RuleSet
     public Rule Statement = new Rule("stmt:Block | stmt:LabeledStatement | stmt:DeclarationStatement | stmt:EmbeddedStatement")
         .Returns("stmt");
 
-    public Rule EmbeddedStatement = new Rule("stmt:EmptyStatement | stmt:ExpressionStatement | stmt:SelectionStatement | stmt:IterationStatement | stmt:JumpStatement | stmt:TryStatement | stmt:CheckedStatement | stmt:UncheckedStatement | stmt:LockStatement | stmt:UsingStatement | stmt:YieldStatement | stmt:LocalFunctionStatement")
+    public Rule EmbeddedStatement = new Rule("stmt:EmptyStatement | stmt:ExpressionStatement | stmt:SelectionStatement | stmt:IterationStatement | stmt:JumpStatement | stmt:TryStatement | stmt:CheckedStatement | stmt:UncheckedStatement | stmt:UnsafeStatement | stmt:ManualStatement | stmt:LockStatement | stmt:UsingStatement | stmt:YieldStatement | stmt:LocalFunctionStatement")
         .Returns("stmt");
 
     public Rule Block = new Rule("@OpenBrace stmts:Statements? @CloseBrace")
@@ -617,6 +617,15 @@ public class Rules : RuleSet
         .Returns("body");
 
     public Rule UncheckedStatement = new Rule("@KwUnchecked body:Block")
+        .Returns("body");
+
+    // UNSAFE/MANUAL STATEMENTS
+    // Manual is the primary keyword for explicit memory management in CRAB
+    // Unsafe is supported as an alias but generates a warning
+    public Rule UnsafeStatement = new Rule("@KwUnsafe body:Block")
+        .Returns("body");
+
+    public Rule ManualStatement = new Rule("@KwManual body:Block")
         .Returns("body");
 
     // LOCK STATEMENT

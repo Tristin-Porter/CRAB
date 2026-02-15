@@ -137,6 +137,9 @@ class Compile : Command
                 
                 if (verbose) System.Console.WriteLine("      Compilation complete.");
 
+                // Check for deprecated 'unsafe' keyword usage and emit warnings
+                CheckForUnsafeKeywordUsage(result.Ast, sourceCode);
+
                 // Note: CDTk automatically runs semantic analysis during Compile()
                 // The models are integrated as properties in MapSet and called automatically
                 // We can access results from the compilation result
@@ -325,5 +328,63 @@ class Compile : Command
     {
         // This method is no longer used, kept for potential future use
         return string.Join("\n", funcLines);
+    }
+
+    /// <summary>
+    /// Check AST for deprecated 'unsafe' keyword usage and emit warnings.
+    /// The 'manual' keyword should be used instead of 'unsafe' in CRAB.
+    /// </summary>
+    private void CheckForUnsafeKeywordUsage(AstNode? ast, string sourceCode)
+    {
+        if (ast == null) return;
+        
+        // Check if this node is an UnsafeStatement
+        if (ast.Type == "UnsafeStatement")
+        {
+            // Get the position info from the AST node if available
+            var line = GetLineNumber(ast, sourceCode);
+            
+            if (line > 0)
+            {
+                System.Console.WriteLine($"Warning: Use of deprecated 'unsafe' keyword at line {line}.");
+            }
+            else
+            {
+                System.Console.WriteLine($"Warning: Use of deprecated 'unsafe' keyword detected.");
+            }
+            System.Console.WriteLine($"         Please use 'manual' keyword instead for explicit memory management.");
+            System.Console.WriteLine($"         The 'unsafe' keyword is supported for compatibility but may be removed in future versions.");
+        }
+        
+        // Recursively check all fields that are AstNodes
+        foreach (var field in ast.Fields.Values)
+        {
+            if (field is AstNode childNode)
+            {
+                CheckForUnsafeKeywordUsage(childNode, sourceCode);
+            }
+            else if (field is List<AstNode> nodeList)
+            {
+                foreach (var node in nodeList)
+                {
+                    CheckForUnsafeKeywordUsage(node, sourceCode);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get line number for an AST node from its Span information.
+    /// </summary>
+    private int GetLineNumber(AstNode node, string sourceCode)
+    {
+        // Use the Span property from AstNode which contains line/column info
+        if (node.Span.Line > 0)
+        {
+            return node.Span.Line;
+        }
+        
+        // Fallback: return unknown line number
+        return 0;
     }
 }
