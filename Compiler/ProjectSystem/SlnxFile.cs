@@ -49,11 +49,19 @@ public class SlnxFile
                 
                 if (!string.IsNullOrEmpty(path))
                 {
+                    var absolutePath = path;
+                    
+                    // Make absolute path if relative and solutionDir is provided
+                    if (!string.IsNullOrEmpty(solutionDir) && !Path.IsPathRooted(path))
+                    {
+                        absolutePath = Path.Combine(solutionDir, path);
+                    }
+                    
                     var project = new SlnxProject
                     {
                         Name = name ?? Path.GetFileNameWithoutExtension(path),
                         RelativePath = path,
-                        AbsolutePath = Path.Combine(solutionDir, path),
+                        AbsolutePath = absolutePath,
                         Type = type ?? "",
                         Id = id ?? ""
                     };

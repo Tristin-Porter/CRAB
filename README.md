@@ -69,12 +69,41 @@ Hello from CRAB!
 crab new console MyApp
 cd MyApp
 
-# Build the project
+# Build the project (supports .sln, .slnx, .csproj)
 crab build
+
+# Or build from solution file
+crab build MyApp.sln
 
 # Run the output (BADGER compiles to native and executes)
 crab run bin/Program.wat
 ```
+
+## Project System Support
+
+CRAB supports standard MSBuild project files:
+
+- **`.sln`** - Visual Studio Solution files
+- **`.slnx`** - XML-based solution files (VS 2022+)  
+- **`.csproj`** - C# project files
+- **Directories** - Auto-discovers solution/project files
+- **Single `.cs` files** - Direct compilation
+
+```bash
+# Build from solution
+crab build MySolution.sln
+
+# Build from project
+crab build MyProject.csproj
+
+# Build from directory (auto-discovers)
+crab build ./MyApp
+
+# Compile single file
+crab compile Program.cs
+```
+
+See [PROJECT_SYSTEM_SUPPORT.md](PROJECT_SYSTEM_SUPPORT.md) for details.
 
 ## Installation
 

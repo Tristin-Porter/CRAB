@@ -144,17 +144,29 @@ public class ProjectDiscovery
         };
         
         var solution = SlnxFile.Parse(slnxPath);
+        var solutionDir = Path.GetDirectoryName(slnxPath);
+        if (string.IsNullOrEmpty(solutionDir))
+        {
+            solutionDir = ".";
+        }
         
         // Get all C# projects
         var csProjects = solution.Projects.Where(p => p.IsCSProject).ToList();
         
         foreach (var slnxProject in csProjects)
         {
-            if (File.Exists(slnxProject.AbsolutePath))
+            // Make absolute path if it's relative
+            var projectPath = slnxProject.AbsolutePath;
+            if (!Path.IsPathRooted(projectPath))
             {
-                result.ProjectFiles.Add(slnxProject.AbsolutePath);
+                projectPath = Path.Combine(solutionDir, projectPath);
+            }
+            
+            if (File.Exists(projectPath))
+            {
+                result.ProjectFiles.Add(projectPath);
                 
-                var project = ProjectFile.Parse(slnxProject.AbsolutePath);
+                var project = ProjectFile.Parse(projectPath);
                 result.SourceFiles.AddRange(project.SourceFiles);
                 
                 // Add referenced projects recursively
