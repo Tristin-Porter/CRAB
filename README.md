@@ -17,7 +17,10 @@ CRAB is a sovereign, zero-runtime C# to WebAssembly compiler that compiles the e
 
 ### Key Features
 
-✅ **100% C# Compatible** - Write normal C# 13 code  
+✅ **100% C# 14 Compatible** - Write modern C# code with all latest features  
+✅ **Complete OOP Support** - Classes, interfaces, inheritance, polymorphism, abstraction  
+✅ **Full Generics** - Generic types with all constraint types and variance  
+✅ **var Declarations** - Implicit type inference for local variables  
 ✅ **Zero Runtime** - No garbage collector, no JIT, no runtime dependencies  
 ✅ **Memory Safe** - Mathematically proven: no leaks, no use-after-free, no undefined behavior  
 ✅ **Fully Implemented CTGC** - Complete automatic memory management with O(n log n) complexity  
@@ -25,6 +28,8 @@ CRAB is a sovereign, zero-runtime C# to WebAssembly compiler that compiles the e
 ✅ **Pure WASM MVP** - Maximum portability, runs everywhere  
 ✅ **Deterministic** - Identical execution every time  
 ✅ **Fast** - Matches/exceeds .NET AOT and Rust/C++ to WASM
+
+> 📖 **See [CSHARP14_COMPLETE_SUPPORT.md](CSHARP14_COMPLETE_SUPPORT.md) for comprehensive C# 14 feature documentation**
 
 ## Quick Start
 
@@ -201,6 +206,38 @@ WebAssembly Text (WAT)
 Native Executable (x86-64, ARM, etc.)
 ```
 
+## C# 14 Feature Support
+
+CRAB provides comprehensive support for all C# 14 language features:
+
+### Latest Features (C# 12-14)
+- ✅ **Primary Constructors** - For classes and structs
+- ✅ **Collection Expressions** - `[1, 2, 3]` syntax
+- ✅ **Lambda Default Parameters** - Optional parameters in lambdas
+- ✅ **ref readonly Parameters** - Enhanced parameter safety
+- ✅ **Using Alias for Any Type** - Alias tuples, generics, etc.
+- ✅ **Static Abstract Interface Members** - Generic math and more
+- ✅ **Params Collections** - Beyond just arrays
+
+### Complete OOP
+- ✅ **Classes** - With inheritance, virtual methods, abstract classes
+- ✅ **Interfaces** - With default implementations and operators
+- ✅ **Polymorphism** - Virtual dispatch and method overriding
+- ✅ **Abstraction** - Abstract classes and members
+- ✅ **Generics** - Full support with all constraint types
+- ✅ **Delegates & Events** - First-class function support
+
+### Core Language Features
+- ✅ **var Declarations** - Implicit type inference
+- ✅ **Records** - Immutable data types with value semantics
+- ✅ **Pattern Matching** - All pattern types
+- ✅ **LINQ** - Query expressions
+- ✅ **Async/Await** - Asynchronous programming
+- ✅ **Nullable Reference Types** - Null safety
+- ✅ **Tuples** - Value tuples with named elements
+
+See [CSHARP14_COMPLETE_SUPPORT.md](CSHARP14_COMPLETE_SUPPORT.md) for detailed documentation.
+
 ## Examples
 
 ### Collections
@@ -244,6 +281,41 @@ class Container<T> where T : class
         return _value;
     }
 }
+```
+
+### OOP with Inheritance & Polymorphism (C# 14)
+```csharp
+// Primary constructor (C# 12)
+class Point(int x, int y)
+{
+    public int X { get; } = x;
+    public int Y { get; } = y;
+}
+
+// Inheritance and virtual methods
+abstract class Shape
+{
+    public abstract int Area();
+    public virtual int Perimeter() => 0;
+}
+
+class Rectangle : Shape
+{
+    private int width, height;
+    
+    public Rectangle(int w, int h)
+    {
+        width = w;
+        height = h;
+    }
+    
+    public override int Area() => width * height;
+    public override int Perimeter() => 2 * (width + height);
+}
+
+// var declarations
+var shape = new Rectangle(10, 20);
+var area = shape.Area();  // Polymorphic dispatch
 ```
 
 ### High-Performance Manual Code
