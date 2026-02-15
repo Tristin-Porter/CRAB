@@ -61,7 +61,15 @@ public static class WasmEmit
             // Expression dispatchers - pass through to child
             // CDTk may return different field names due to field shifting
             "Expression" or "NonAssignmentExpression" or "UnaryExpression" or 
-            "PrimaryExpression" or "PrimaryNoArrayCreationExpression" => EmitExpressionDispatcher(node),
+            "PrimaryExpression" or "PrimaryNoArrayCreationExpression" or "Sequence" or
+            "SwitchExpression" or "RangeExpression" or "NullCoalescingExpression" or
+            "ConditionalOrExpression" or "ConditionalAndExpression" or "InclusiveOrExpression" or
+            "ExclusiveOrExpression" or "AndExpression" or "ShiftExpression" => EmitExpressionDispatcher(node),
+            
+            // Skip operator nodes - they're handled by their parent
+            "AdditiveOperator" or "MultiplicativeOperator" or "RelationalOperator" or
+            "EqualityOperator" or "ShiftOperator" or "UnaryOperator" or
+            "AssignmentOperator" or "ConditionalOperator" => "",
             
             // Unknown - comment
             _ => $";; TODO: Emit expression {node.Type}\ni32.const 0"
@@ -73,6 +81,27 @@ public static class WasmEmit
     /// </summary>
     private static string EmitExpressionDispatcher(AstNode node)
     {
+        // Skip operator nodes - they're handled by their parent binary expression
+        if (node.Type.EndsWith("Operator"))
+        {
+            return "";
+        }
+        
+        // For debugging complex expressions
+        if (node.Type == "Sequence" && node.Fields.Count > 0)
+        {
+            // Sequence might be a binary operation - check for common patterns
+            if (node.Fields.ContainsKey("left") && node.Fields.ContainsKey("right"))
+            {
+                // This is a binary operation embedded in a sequence
+                return EmitBinaryExpression(node, "+");
+            }
+            
+            // Check for expr field
+            if (node.Fields.ContainsKey("expr"))
+                return EmitExpression(node.Fields["expr"]);
+        }
+        
         // Try common field names in order
         if (node.Fields.ContainsKey("expr"))
             return EmitExpression(node.Fields["expr"]);
@@ -202,7 +231,42 @@ public static class WasmEmit
         // Get left and right operands
         var left = node.Fields.ContainsKey("left") ? node.Fields["left"] : null;
         var right = node.Fields.ContainsKey("right") ? node.Fields["right"] : null;
-        var op = GetField(node, "op") ?? defaultOp;
+        
+        // Extract operator - it might be nested in an operator node
+        string op = defaultOp;
+        if (node.Fields.ContainsKey("op"))
+        {
+            var opField = node.Fields["op"];
+            if (opField is AstNode opNode)
+            {
+                // Operator is an AstNode like AdditiveOperator
+                // It has an inner op field with the actual token
+                if (opNode.Fields.ContainsKey("op"))
+                {
+                    var innerOp = opNode.Fields["op"];
+                    if (innerOp is TokenInstance token)
+                    {
+                        op = token.Lexeme;
+                    }
+                    else if (innerOp is AstNode innerOpNode && innerOpNode.Fields.ContainsKey("lexeme"))
+                    {
+                        op = innerOpNode.Fields["lexeme"]?.ToString() ?? defaultOp;
+                    }
+                }
+                else if (opNode.Fields.ContainsKey("lexeme"))
+                {
+                    op = opNode.Fields["lexeme"]?.ToString() ?? defaultOp;
+                }
+            }
+            else if (opField is TokenInstance token)
+            {
+                op = token.Lexeme;
+            }
+            else if (opField is string str)
+            {
+                op = str;
+            }
+        }
         
         // Emit left operand
         var leftCode = EmitExpression(left);
@@ -1594,10 +1658,10 @@ public class WASM : MapSet
     public Map UnsignedRightShiftOperator = "i32.shr_u";
     
     /// <summary>Relational operator dispatcher</summary>
-    public Map RelationalOperator = "{op}";
+    public Map RelationalOperator = "";  // Handled by EmitBinaryExpression
     
     /// <summary>Shift operator dispatcher</summary>
-    public Map ShiftOperator = "{op}";
+    public Map ShiftOperator = "";  // Handled by EmitBinaryExpression
     
     /// <summary>Unary operator dispatcher</summary>
     public Map UnaryOperator = "{op}";
@@ -1929,7 +1993,7 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Additive operator (+ or -)</summary>
-    public Map AdditiveOperator = "{op}";
+    public Map AdditiveOperator = "";  // Handled by EmitBinaryExpression
     
     /// <summary>Conversion operator declaration</summary>
     public Map ConversionOperatorDeclaration = @"(func $op_{kind}_{type}
@@ -1939,10 +2003,10 @@ public class WASM : MapSet
 )";
     
     /// <summary>Equality operator (== or !=)</summary>
-    public Map EqualityOperator = "{op}";
+    public Map EqualityOperator = "";  // Handled by EmitBinaryExpression
     
     /// <summary>Multiplicative operator (*, /, %)</summary>
-    public Map MultiplicativeOperator = "{op}";
+    public Map MultiplicativeOperator = "";  // Handled by EmitBinaryExpression
     
     /// <summary>Operator declaration</summary>
     public Map OperatorDeclaration = @"(func $op_{operator}
