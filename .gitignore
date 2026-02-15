@@ -8,3 +8,8 @@ tests/
 *.bin
 *.wasm
 *.wat
+# CRAB output files
+output.wasm
+output.bin
+*.wasm
+*.bin
