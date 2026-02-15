@@ -306,43 +306,97 @@ class Test : Command
             
             string sourceCode = projectName switch
             {
-                "HelloWorld" => @"class Program
+                "HelloWorld" => @"using System;
+
+class Program
 {
+    static void Main()
+    {
+        Console.WriteLine(""Hello, World!"");
+    }
 }",
-                "Calculator" => @"class Calculator
+                "Calculator" => @"using System;
+
+class Calculator
 {
     public int x;
     public int y;
+    
+    public int Add()
+    {
+        return x + y;
+    }
 }
 
 class Program
 {
+    static void Main()
+    {
+        var calc = new Calculator { x = 5, y = 3 };
+        Console.WriteLine($""Calculator: {calc.x} + {calc.y} = {calc.Add()}"");
+    }
 }",
-                "ClassHierarchy" => @"abstract class Animal
+                "ClassHierarchy" => @"using System;
+
+abstract class Animal
 {
+    public abstract string MakeSound();
 }
 
 class Dog : Animal
 {
+    public override string MakeSound()
+    {
+        return ""Woof!"";
+    }
 }
 
 class Cat : Animal
 {
+    public override string MakeSound()
+    {
+        return ""Meow!"";
+    }
 }
 
 class Program
 {
+    static void Main()
+    {
+        Animal dog = new Dog();
+        Animal cat = new Cat();
+        Console.WriteLine($""Dog says: {dog.MakeSound()}"");
+        Console.WriteLine($""Cat says: {cat.MakeSound()}"");
+    }
 }",
-                "GenericCollections" => @"class Container
+                "GenericCollections" => @"using System;
+
+class Container
 {
     public int data;
+    
+    public Container(int value)
+    {
+        data = value;
+    }
 }
 
 class Program
 {
+    static void Main()
+    {
+        var container = new Container(42);
+        Console.WriteLine($""Container holds: {container.data}"");
+    }
 }",
-                _ => @"class Program
+                _ => @"using System;
+
+class Program
 {
+    static void Main()
+    {
+        Console.WriteLine(""Test program"");
+    }
 }"
             };
             
@@ -357,7 +411,66 @@ class Program
 }}";
             File.WriteAllText(Path.Combine(projectPath, $"{projectName}.crab"), crabProject);
             
+            // Generate GUID for the project
+            string projectGuid = Guid.NewGuid().ToString("B").ToUpper();
+            
+            // Create .csproj file
+            string csprojContent = $@"<Project Sdk=""Microsoft.NET.Sdk"">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>{projectName}</RootNamespace>
+  </PropertyGroup>
+
+</Project>
+";
+            File.WriteAllText(Path.Combine(projectPath, $"{projectName}.csproj"), csprojContent);
+            
+            // Create .sln file
+            string slnContent = $@"
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11312.210 d18.3
+MinimumVisualStudioVersion = 10.0.40219.1
+Project(""{{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}}"") = ""{projectName}"", ""{projectName}.csproj"", ""{projectGuid}""
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{projectGuid}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{projectGuid}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{projectGuid}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{projectGuid}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {{9F613E25-9B1A-49E2-A847-B8FC584263C9}}
+	EndGlobalSection
+EndGlobal
+";
+            File.WriteAllText(Path.Combine(projectPath, $"{projectName}.sln"), slnContent);
+            
+            // Create .slnx file
+            string slnxContent = $@"<?xml version=""1.0"" encoding=""utf-8""?>
+<Solution Version=""1.0"">
+  <Properties>
+    <Name>{projectName}</Name>
+  </Properties>
+  <Project Path=""{projectName}.csproj"" Name=""{projectName}"" Type=""C#"" Id=""{projectGuid}"" />
+</Solution>
+";
+            File.WriteAllText(Path.Combine(projectPath, $"{projectName}.slnx"), slnxContent);
+            
             LogDebug($"Generated {projectName} project at {projectPath}");
+            LogDebug($"Created files: Program.cs, {projectName}.crab, {projectName}.csproj, {projectName}.sln, {projectName}.slnx");
             return true;
         }
         catch (Exception ex)
