@@ -1,7 +1,7 @@
 using System.IO;
 using System.Diagnostics;
 using CRAB.ProjectSystem;
-using CRAB.Compiler.Core;
+using CRAB.WebAssembly;
 using Badger.Containers;
 
 namespace CRAB;

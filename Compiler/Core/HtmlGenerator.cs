@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace CRAB.Compiler.Core;
+namespace CRAB.WebAssembly;
 
 /// <summary>
 /// Generates HTML files for running WebAssembly modules in the browser
