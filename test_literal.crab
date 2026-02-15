@@ -1,5 +1,0 @@
-class Test {
-    void M() {
-        int x = 5;
-    }
-}

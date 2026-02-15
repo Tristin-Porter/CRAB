@@ -76,7 +76,13 @@ public class ProjectDiscovery
         
         // Fallback: Gather all .cs files
         var csFiles = Directory.GetFiles(directory, "*.cs", SearchOption.AllDirectories)
-            .Where(f => !f.Contains("/obj/") && !f.Contains("/bin/") && !f.Contains("\\obj\\") && !f.Contains("\\bin\\"))
+            .Where(f =>
+            {
+                // Get path relative to directory and normalize separators
+                var relativePath = Path.GetRelativePath(directory, f).Replace('\\', '/');
+                // Exclude files in obj or bin subdirectories (relative to directory root)
+                return !relativePath.StartsWith("obj/") && !relativePath.StartsWith("bin/");
+            })
             .ToList();
         
         result.SourceFiles.AddRange(csFiles);

@@ -306,96 +306,39 @@ class Test : Command
             
             string sourceCode = projectName switch
             {
-                "HelloWorld" => @"using System;
-
-class Program
-{
-    static void Main()
-    {
-        Console.WriteLine(""Hello, World!"");
+                "HelloWorld" => @"class Test {
+    int GetValue() {
+        return 42;
     }
 }",
-                "Calculator" => @"using System;
-
-class Calculator
-{
-    public int x;
-    public int y;
+                "Calculator" => @"class Calculator {
+    int Add(int a, int b) {
+        return a + b;
+    }
     
-    public int Add()
-    {
-        return x + y;
-    }
-}
-
-class Program
-{
-    static void Main()
-    {
-        var calc = new Calculator { x = 5, y = 3 };
-        Console.WriteLine($""Calculator: {calc.x} + {calc.y} = {calc.Add()}"");
+    int Multiply(int a, int b) {
+        return a * b;
     }
 }",
-                "ClassHierarchy" => @"using System;
-
-abstract class Animal
-{
-    public abstract string MakeSound();
-}
-
-class Dog : Animal
-{
-    public override string MakeSound()
-    {
-        return ""Woof!"";
+                "ClassHierarchy" => @"class Base {
+    int GetBase() {
+        return 10;
     }
 }
 
-class Cat : Animal
-{
-    public override string MakeSound()
-    {
-        return ""Meow!"";
-    }
-}
-
-class Program
-{
-    static void Main()
-    {
-        Animal dog = new Dog();
-        Animal cat = new Cat();
-        Console.WriteLine($""Dog says: {dog.MakeSound()}"");
-        Console.WriteLine($""Cat says: {cat.MakeSound()}"");
+class Derived {
+    int GetValue() {
+        return 20;
     }
 }",
-                "GenericCollections" => @"using System;
-
-class Container
-{
-    public int data;
-    
-    public Container(int value)
-    {
-        data = value;
-    }
-}
-
-class Program
-{
-    static void Main()
-    {
-        var container = new Container(42);
-        Console.WriteLine($""Container holds: {container.data}"");
+                "GenericCollections" => @"class Container {
+    int GetData() {
+        return 100;
     }
 }",
-                _ => @"using System;
-
-class Program
-{
-    static void Main()
-    {
-        Console.WriteLine(""Test program"");
+                _ => @"class Program {
+    int Main() {
+        return 0;
     }
 }"
             };

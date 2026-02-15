@@ -1,4 +1,0 @@
-class Test {
-    int NoParams() { return 5; }
-    int WithParams(int a) { return a; }
-}
