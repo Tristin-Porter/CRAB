@@ -9,4 +9,10 @@
     <Description>CRAB Standard Library - Basic functionality for CRAB compiled programs</Description>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Exclude example files from compilation -->
+    <Compile Remove="Examples/**/*.cs" />
+    <None Include="Examples/**/*.cs" />
+  </ItemGroup>
+
 </Project>
