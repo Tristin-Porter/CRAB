@@ -3,8 +3,8 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class Program
-(type $Program (struct
+;; class Test
+(type $Test (struct
 (func $Add
   (result i32)
 (block
