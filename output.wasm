@@ -27,16 +27,5 @@ nop
   (result i32)
 
 )
-(func $Subtract
-(param $ ), 
-  (result i32)
-(block
-(return ;; TODO: Add map for this construct
-nop
-
-)
-  ;; Deallocation instructions inserted here based on AutomaticModel analysis
-)
-)
 ))
 )
