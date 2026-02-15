@@ -1,5 +1,6 @@
 using System.IO;
 using System.Diagnostics;
+using CRAB.ProjectSystem;
 
 namespace CRAB;
 
@@ -31,8 +32,16 @@ class Build : Command
         else if (args.Length > 0)
             projectPath = args[0];
 
+        // Determine base directory for output
+        string baseDir = projectPath;
+        if (File.Exists(projectPath))
+        {
+            // If a file is provided (sln, csproj, etc.), use its directory
+            baseDir = Path.GetDirectoryName(projectPath) ?? ".";
+        }
+        
         // Parse output path
-        string outputPath = Path.Combine(projectPath, "bin");
+        string outputPath = Path.Combine(baseDir, "bin");
         if (flags.TryGetValue("output", out var flagOutput) && !string.IsNullOrWhiteSpace(flagOutput))
             outputPath = flagOutput;
 
@@ -43,10 +52,10 @@ class Build : Command
 
         bool verbose = flags.ContainsKey("verbose");
 
-        // Validate project path
-        if (!Directory.Exists(projectPath))
+        // Validate project path exists (can be file or directory)
+        if (!Directory.Exists(projectPath) && !File.Exists(projectPath))
         {
-            System.Console.WriteLine($"Error: Project directory '{projectPath}' does not exist.");
+            System.Console.WriteLine($"Error: Path '{projectPath}' does not exist.");
             return;
         }
 
@@ -63,15 +72,41 @@ class Build : Command
 
         try
         {
-            // Find all .cs files
-            if (verbose) System.Console.WriteLine("\n[1/4] Discovering source files...");
-            var csFiles = Directory.GetFiles(projectPath, "*.cs", SearchOption.AllDirectories)
-                .Where(f => !f.Contains("/obj/") && !f.Contains("/bin/"))
-                .ToArray();
+            // Discover projects and source files using the new project system
+            if (verbose) System.Console.WriteLine("\n[1/4] Discovering projects and source files...");
+            
+            var discovery = ProjectDiscovery.Discover(projectPath);
+            
+            if (verbose)
+            {
+                System.Console.WriteLine($"      Project type: {discovery.ProjectType}");
+                if (!string.IsNullOrEmpty(discovery.SolutionFile))
+                {
+                    System.Console.WriteLine($"      Solution: {Path.GetFileName(discovery.SolutionFile)}");
+                }
+                if (discovery.ProjectFiles.Count > 0)
+                {
+                    System.Console.WriteLine($"      Projects: {discovery.ProjectFiles.Count}");
+                    foreach (var proj in discovery.ProjectFiles.Take(3))
+                    {
+                        System.Console.WriteLine($"        {Path.GetFileName(proj)}");
+                    }
+                    if (discovery.ProjectFiles.Count > 3)
+                    {
+                        System.Console.WriteLine($"        ... and {discovery.ProjectFiles.Count - 3} more");
+                    }
+                }
+            }
+            
+            var csFiles = discovery.SourceFiles.ToArray();
 
             if (csFiles.Length == 0)
             {
-                System.Console.WriteLine($"Error: No .cs files found in project directory: {projectPath}");
+                System.Console.WriteLine($"Error: No .cs files found in: {projectPath}");
+                if (discovery.HasProjects)
+                {
+                    System.Console.WriteLine("       Check that the project files are valid and contain source files.");
+                }
                 return;
             }
 
@@ -95,13 +130,29 @@ class Build : Command
             bool toAsm = flags.ContainsKey("to-asm");
             string outputFile = Path.Combine(outputPath, toAsm ? "output.bin" : "output.wasm");
 
-            // Compile each file or concatenate them
+            // Compile source files
             if (verbose) System.Console.WriteLine("\n[3/4] Compiling project...");
+            
+            // Create a temporary file with all source code concatenated
+            var tempSourceFile = Path.Combine(outputPath, "temp_combined_source.cs");
+            var combinedSource = new System.Text.StringBuilder();
+            
+            foreach (var file in csFiles)
+            {
+                if (File.Exists(file))
+                {
+                    combinedSource.AppendLine($"// Source: {Path.GetFileName(file)}");
+                    combinedSource.AppendLine(File.ReadAllText(file));
+                    combinedSource.AppendLine();
+                }
+            }
+            
+            File.WriteAllText(tempSourceFile, combinedSource.ToString());
             
             var compileCommand = new Compile();
             var compileFlags = new Dictionary<string, string?>
             {
-                ["input"] = projectPath,
+                ["input"] = tempSourceFile,
                 ["output"] = outputFile
             };
             

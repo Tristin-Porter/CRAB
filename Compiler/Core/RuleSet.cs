@@ -31,8 +31,9 @@ public class Rules : RuleSet
     public Rule UsingDirective = new Rule("directive:UsingAliasDirective | directive:UsingNamespaceDirective | directive:UsingStaticDirective")
         .Returns("directive");
 
-    public Rule UsingAliasDirective = new Rule("@KwUsing alias:@Identifier @Assign name:QualifiedName @Semicolon")
-        .Returns("alias", "name");
+    // C# 12: Using alias can now alias any type, not just qualified names
+    public Rule UsingAliasDirective = new Rule("@KwUsing alias:@Identifier @Assign aliasedType:Type @Semicolon")
+        .Returns("alias", "aliasedType");
 
     public Rule UsingStaticDirective = new Rule("@KwUsing @KwStatic name:QualifiedName @Semicolon")
         .Returns("name");
@@ -80,9 +81,9 @@ public class Rules : RuleSet
     public Rule TypeDeclaration = new Rule("type:ClassDeclaration | type:StructDeclaration | type:InterfaceDeclaration | type:EnumDeclaration | type:DelegateDeclaration | type:RecordDeclaration")
         .Returns("type");
 
-    // CLASS DECLARATION
-    public Rule ClassDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwClass name:@Identifier typeParams:TypeParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:ClassBody @Semicolon?")
-        .Returns("attrs", "mods", "name", "typeParams", "baseList", "constraints", "body");
+    // CLASS DECLARATION (C# 12: Added primary constructor support)
+    public Rule ClassDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwClass name:@Identifier typeParams:TypeParameterList? paramList:PrimaryConstructorParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:ClassBody @Semicolon?")
+        .Returns("attrs", "mods", "name", "typeParams", "paramList", "baseList", "constraints", "body");
 
     public Rule ClassBody = new Rule("@OpenBrace members:ClassMemberDeclarations? @CloseBrace")
         .Returns("members");
@@ -93,9 +94,9 @@ public class Rules : RuleSet
     public Rule ClassMemberDeclaration = new Rule("member:FieldDeclaration | member:MethodDeclaration | member:PropertyDeclaration | member:EventDeclaration | member:EventDeclarationWithAccessors | member:IndexerDeclaration | member:OperatorDeclaration | member:ConversionOperatorDeclaration | member:ConstructorDeclaration | member:DestructorDeclaration | member:TypeDeclaration")
         .Returns("member");
 
-    // STRUCT DECLARATION
-    public Rule StructDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwStruct name:@Identifier typeParams:TypeParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:StructBody @Semicolon?")
-        .Returns("attrs", "mods", "name", "typeParams", "baseList", "constraints", "body");
+    // STRUCT DECLARATION (C# 12: Added primary constructor support)
+    public Rule StructDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwStruct name:@Identifier typeParams:TypeParameterList? paramList:PrimaryConstructorParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:StructBody @Semicolon?")
+        .Returns("attrs", "mods", "name", "typeParams", "paramList", "baseList", "constraints", "body");
 
     public Rule StructBody = new Rule("@OpenBrace members:StructMemberDeclarations? @CloseBrace")
         .Returns("members");
@@ -116,7 +117,8 @@ public class Rules : RuleSet
     public Rule InterfaceMemberDeclarations = new Rule("members:InterfaceMemberDeclaration+")
         .Returns("members");
 
-    public Rule InterfaceMemberDeclaration = new Rule("member:InterfaceMethodDeclaration | member:InterfacePropertyDeclaration | member:InterfaceEventDeclaration | member:InterfaceIndexerDeclaration")
+    // C# 11: Interfaces can now have static abstract members, operators, etc.
+    public Rule InterfaceMemberDeclaration = new Rule("member:InterfaceMethodDeclaration | member:InterfacePropertyDeclaration | member:InterfaceEventDeclaration | member:InterfaceIndexerDeclaration | member:InterfaceOperatorDeclaration | member:InterfaceConversionOperatorDeclaration")
         .Returns("member");
 
     // ENUM DECLARATION
@@ -144,6 +146,10 @@ public class Rules : RuleSet
         .Returns("attrs", "mods", "kind", "name", "typeParams", "paramList", "baseList", "constraints", "body");
 
     public Rule RecordParameterList = new Rule("@OpenParen parameters:FormalParameterList? @CloseParen")
+        .Returns("parameters");
+
+    // C# 12: Primary constructor parameter list (for classes and structs)
+    public Rule PrimaryConstructorParameterList = new Rule("@OpenParen parameters:FormalParameterList? @CloseParen")
         .Returns("parameters");
 
     public Rule RecordBody = new Rule("@OpenBrace members:ClassMemberDeclarations? @CloseBrace")
@@ -303,6 +309,13 @@ public class Rules : RuleSet
     public Rule InterfaceIndexerDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? type:Type @KwThis @OpenBracket parameters:FormalParameterList @CloseBracket accessors:AccessorDeclarations")
         .Returns("attrs", "mods", "type", "parameters", "accessors");
 
+    // C# 11: Static abstract operators in interfaces
+    public Rule InterfaceOperatorDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? returnType:Type @KwOperator op:OverloadableOperator @OpenParen parameters:FormalParameterList @CloseParen body:InterfaceMethodBody")
+        .Returns("attrs", "mods", "returnType", "op", "parameters", "body");
+
+    public Rule InterfaceConversionOperatorDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? kind:(@KwImplicit | @KwExplicit) @KwOperator type:Type @OpenParen parameter:FormalParameter @CloseParen body:InterfaceMethodBody")
+        .Returns("attrs", "mods", "kind", "type", "parameter", "body");
+
     // ============================================================
     // FORMAL PARAMETERS
     // ============================================================
@@ -453,7 +466,7 @@ public class Rules : RuleSet
     public Rule Statement = new Rule("stmt:Block | stmt:LabeledStatement | stmt:DeclarationStatement | stmt:EmbeddedStatement")
         .Returns("stmt");
 
-    public Rule EmbeddedStatement = new Rule("stmt:EmptyStatement | stmt:ExpressionStatement | stmt:SelectionStatement | stmt:IterationStatement | stmt:JumpStatement | stmt:TryStatement | stmt:CheckedStatement | stmt:UncheckedStatement | stmt:LockStatement | stmt:UsingStatement | stmt:YieldStatement | stmt:LocalFunctionStatement")
+    public Rule EmbeddedStatement = new Rule("stmt:EmptyStatement | stmt:ExpressionStatement | stmt:SelectionStatement | stmt:IterationStatement | stmt:JumpStatement | stmt:TryStatement | stmt:CheckedStatement | stmt:UncheckedStatement | stmt:UnsafeStatement | stmt:ManualStatement | stmt:LockStatement | stmt:UsingStatement | stmt:YieldStatement | stmt:LocalFunctionStatement")
         .Returns("stmt");
 
     public Rule Block = new Rule("@OpenBrace stmts:Statements? @CloseBrace")
@@ -479,8 +492,8 @@ public class Rules : RuleSet
 
     public Rule LocalVariableType = "type:@KwVar | type:RefType | type:Type";
 
-    public Rule RefType = new Rule("@KwRef type:Type")
-        .Returns("type");
+    public Rule RefType = new Rule("@KwRef readonly:@KwReadonly? type:Type")
+        .Returns("readonly", "type");
 
     public Rule LocalVariableDeclarators = new Rule("first:LocalVariableDeclarator rest:(@Comma LocalVariableDeclarator)*")
         .Returns("first", "rest");
@@ -604,6 +617,15 @@ public class Rules : RuleSet
         .Returns("body");
 
     public Rule UncheckedStatement = new Rule("@KwUnchecked body:Block")
+        .Returns("body");
+
+    // UNSAFE/MANUAL STATEMENTS
+    // Manual is the primary keyword for explicit memory management in CRAB
+    // Unsafe is supported as an alias but generates a warning
+    public Rule UnsafeStatement = new Rule("@KwUnsafe body:Block")
+        .Returns("body");
+
+    public Rule ManualStatement = new Rule("@KwManual body:Block")
         .Returns("body");
 
     // LOCK STATEMENT

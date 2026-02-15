@@ -424,21 +424,40 @@ public class TemplateExpander
 
 /// <summary>
 /// BADGER - Better Assembler for Dependable Generation of Efficient Results
-/// Main API for WAT to assembly compilation
+/// Main API for WAT to assembly/WASM compilation
 /// </summary>
 public class BadgerCompiler
 {
     /// <summary>
-    /// Compile WAT text to assembly for the specified architecture and format
+    /// Compile WAT text to assembly/WASM for the specified architecture and format
     /// </summary>
     /// <param name="watInput">WebAssembly Text format input</param>
-    /// <param name="architecture">Target architecture (x86_64, x86_32, x86_16, arm64, arm32)</param>
-    /// <param name="format">Output format (native, pe)</param>
+    /// <param name="architecture">Target architecture (x86_64, x86_32, x86_16, arm64, arm32, wasm)</param>
+    /// <param name="format">Output format (native, pe, wasm)</param>
     /// <returns>Binary output</returns>
     public static byte[] Compile(string watInput, string architecture = "x86_64", string format = "native")
     {
         try
         {
+            // Check if WASM format is requested
+            if (format.ToLower() == "wasm")
+            {
+                // Emit WASM binary (ignore architecture parameter for WASM)
+                var (wasmBinary, jsWrapper) = Badger.Containers.WasmJS.Emit(watInput);
+                
+                // Save JavaScript wrapper as output.js in current directory
+                try
+                {
+                    File.WriteAllText("output.js", jsWrapper);
+                }
+                catch
+                {
+                    // Silently ignore if we can't write the JS file
+                }
+                
+                return wasmBinary;
+            }
+            
             // Create template expander for the target architecture
             var expander = new TemplateExpander(architecture);
             
@@ -553,12 +572,28 @@ _start:
     /// </summary>
     /// <param name="inputFile">Input WAT file path</param>
     /// <param name="outputFile">Output binary file path</param>
-    /// <param name="architecture">Target architecture (x86_64, x86_32, x86_16, arm64, arm32)</param>
-    /// <param name="format">Output format (native, pe)</param>
+    /// <param name="architecture">Target architecture (x86_64, x86_32, x86_16, arm64, arm32, wasm)</param>
+    /// <param name="format">Output format (native, pe, wasm)</param>
     public static void CompileFile(string inputFile, string outputFile, string architecture = "x86_64", string format = "native")
     {
         string watInput = File.ReadAllText(inputFile);
-        byte[] binary = Compile(watInput, architecture, format);
-        File.WriteAllBytes(outputFile, binary);
+        
+        if (format.ToLower() == "wasm")
+        {
+            // For WASM format, also output the JavaScript wrapper
+            var (wasmBinary, jsWrapper) = Badger.Containers.WasmJS.Emit(watInput);
+            
+            // Write WASM binary
+            File.WriteAllBytes(outputFile, wasmBinary);
+            
+            // Write JavaScript wrapper
+            string jsFile = Path.ChangeExtension(outputFile, ".js");
+            File.WriteAllText(jsFile, jsWrapper);
+        }
+        else
+        {
+            byte[] binary = Compile(watInput, architecture, format);
+            File.WriteAllBytes(outputFile, binary);
+        }
     }
 }

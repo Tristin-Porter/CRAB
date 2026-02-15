@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Solution Version="1.0">
+  <Properties>
+    <Name>CRAB</Name>
+  </Properties>
+  <Project Path="CRAB.csproj" Name="CRAB" Type="C#" Id="{7479FA3A-EC7B-1F5D-752E-D5AF27F00F65}" />
+  <Project Path="Dependencies\CDTk\CDTk.csproj" Name="CDTk" Type="C#" Id="{0B8D63CF-D1D8-AEE9-0D34-CDD0B01D0697}" />
+  <Project Path="Dependencies\BADGER\Badger.csproj" Name="Badger" Type="C#" Id="{E46A5E4F-DE3E-7D60-8FC8-850040D6593C}" />
+</Solution>

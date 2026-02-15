@@ -845,7 +845,16 @@ public class WASM : MapSet
     public Map TypeDeclaration = "{type}";
     
     /// <summary>
-    /// Class declaration - WORKAROUND for CDTk parser bug with optional fields.
+    /// Class declaration - generates WASM struct type.
+    /// 
+    /// Full OOP implementation requires:
+    /// - Virtual method table (vtable) generation for virtual/override methods
+    /// - Base class field inclusion (inheritance)
+    /// - Type identification field for runtime type checking
+    /// - Interface implementation tables
+    /// - Constructor chaining to base class
+    /// 
+    /// WORKAROUND for CDTk parser bug with optional fields.
     /// Bug causes field shifting: when 'attrs' is absent, subsequent fields shift:
     /// - 'mods' field receives the class name (e.g., "Calculator")
     /// - 'name' field receives the ClassBody AST node
@@ -904,6 +913,16 @@ public class WASM : MapSet
     /// - WITH params: params first (correct!), result after, body last (correct!)
     /// 
     /// TODO: Fix CDTk parser to assign fields by pattern labels, not Returns() order
+    /// 
+    /// Additional context for OOP implementation:
+    /// For virtual methods, a vtable dispatch mechanism should be added by semantic analysis.
+    /// For interface methods, interface dispatch tables should be generated.
+    /// Once CDTk parser is fixed, the proper structure should be:
+    ///   (func ${name}
+    ///     (param {parameters})
+    ///     (result {returnType})
+    ///   {body}
+    ///   )
     /// </summary>
     public Map MethodDeclaration = @"(func ${mods}
 {returnType}
@@ -1623,7 +1642,13 @@ public class WASM : MapSet
     // INTERFACE AND ENUM DECLARATIONS
     // ============================================================
     
-    /// <summary>Interface declaration</summary>
+    /// <summary>
+    /// Interface declaration - lowered to WASM struct type.
+    /// Full OOP requires:
+    /// - Interface method dispatch tables (similar to vtables)
+    /// - Type casting and interface implementation checking
+    /// - Default interface implementation support (C# 8+)
+    /// </summary>
     public Map InterfaceDeclaration = @";; interface {name}
 (type ${name} (struct
 {body}
@@ -1643,7 +1668,14 @@ public class WASM : MapSet
     /// <summary>Enum member</summary>
     public Map EnumMemberDeclaration = "(global ${name} i32 (i32.const {value}))";
     
-    /// <summary>Delegate declaration</summary>
+    /// <summary>
+    /// Delegate declaration - lowered to WASM function type.
+    /// Delegates require:
+    /// - Function pointer storage
+    /// - Instance object storage (for instance methods)
+    /// - Invoke method generation
+    /// - Multi-cast support for combining delegates
+    /// </summary>
     public Map DelegateDeclaration = @";; delegate {returnType} {name}({parameters})
 (type ${name} (func (param {parameters}) (result {returnType})))";
     
@@ -1980,10 +2012,20 @@ public class WASM : MapSet
     /// <summary>Type parameter constraints clauses</summary>
     public Map TypeParameterConstraintsClauses = "{clauses}";
     
-    /// <summary>Type parameter</summary>
+    /// <summary>
+    /// Type parameter - represents a generic type parameter like T.
+    /// Full generic implementation requires:
+    /// - Monomorphization (creating concrete versions for each instantiation)
+    /// - Or type erasure with runtime type information
+    /// - Constraint checking at instantiation sites
+    /// - Generic method specialization
+    /// </summary>
     public Map TypeParameter = "{name}";
     
-    /// <summary>Type parameter list</summary>
+    /// <summary>
+    /// Type parameter list - <T1, T2, ...>
+    /// For WASM: generics are typically handled via monomorphization
+    /// </summary>
     public Map TypeParameterList = "{parameters}";
     
     /// <summary>Type parameters</summary>
@@ -2619,6 +2661,11 @@ public class WASM : MapSet
     public Map KwDecimal = "i64 i64";  // Decimal is 128-bit, represented as two i64s
     public Map KwDynamic = "(ref any)";
     
+    // C# 3: var keyword for type inference
+    // Note: True type inference requires semantic analysis - for now we default to i32
+    // A proper implementation would analyze the initializer expression
+    public Map KwVar = "i32";  // Default to i32, should be inferred from initializer
+    
     // Keyword tokens that are structural (mapped to empty string as they're handled by containing maps)
     public Map KwClass = "";
     public Map KwStruct = "";
@@ -2632,10 +2679,11 @@ public class WASM : MapSet
     public Map KwStatic = "";
     public Map KwReadonly = "";
     public Map KwConst = "";
-    public Map KwVirtual = "";
-    public Map KwAbstract = "";
-    public Map KwSealed = "";
-    public Map KwOverride = "";
+    // OOP modifiers - these require semantic analysis for proper implementation
+    public Map KwVirtual = "";   // Virtual methods require vtable dispatch
+    public Map KwAbstract = "";  // Abstract members prevent instantiation
+    public Map KwSealed = "";    // Sealed prevents inheritance
+    public Map KwOverride = "";  // Override requires vtable slot matching
     public Map KwNew = "";
     public Map KwAsync = "";
     public Map KwPartial = "";
