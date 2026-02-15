@@ -1,8 +1,0 @@
-class Calculator
-{
-    int Add(int a, int b) { }
-    
-    void PrintResult() { }
-    
-    string GetMessage() { }
-}

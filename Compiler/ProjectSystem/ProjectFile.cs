@@ -161,8 +161,13 @@ public class ProjectFile
             {
                 // SDK-style projects automatically include all .cs files
                 var csFiles = Directory.GetFiles(projectDir, "*.cs", SearchOption.AllDirectories)
-                    .Where(f => !f.Contains(Path.DirectorySeparatorChar + "obj" + Path.DirectorySeparatorChar) && 
-                                !f.Contains(Path.DirectorySeparatorChar + "bin" + Path.DirectorySeparatorChar))
+                    .Where(f =>
+                    {
+                        // Get path relative to project directory and normalize separators
+                        var relativePath = Path.GetRelativePath(projectDir, f).Replace('\\', '/');
+                        // Exclude files in obj or bin subdirectories (relative to project root)
+                        return !relativePath.StartsWith("obj/") && !relativePath.StartsWith("bin/");
+                    })
                     .ToList();
                 
                 // Apply exclusions
