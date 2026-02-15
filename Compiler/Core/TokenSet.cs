@@ -191,11 +191,11 @@ public class Tokens : TokenSet
     public Token VerbatimInterpolatedStringStart = @"@\$""";
     public Token InterpolatedStringStart = @"\$""";
     public Token VerbatimStringLiteral = @"@""(?:""""|[^""])*""";
-    public Token StringLiteral = @"""(?:\\.|[^""\\])*""";
+    public Token StringLiteral = @"""(?:\\.|[^""\\])*""";  // Supports all escape sequences including \e (C# 13)
     public Token Utf8StringLiteral = @"""(?:\\.|[^""\\])*""u8";  // C# 11
     
     // Character Literal
-    public Token CharacterLiteral = @"'(?:\\.|[^'\\])'";
+    public Token CharacterLiteral = @"'(?:\\.|[^'\\])'";  // Supports all escape sequences including \e (C# 13)
     
     // Numeric Literals (Order matters for proper matching)
     // Binary literals (C# 7.0)

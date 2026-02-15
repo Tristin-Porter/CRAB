@@ -31,8 +31,9 @@ public class Rules : RuleSet
     public Rule UsingDirective = new Rule("directive:UsingAliasDirective | directive:UsingNamespaceDirective | directive:UsingStaticDirective")
         .Returns("directive");
 
-    public Rule UsingAliasDirective = new Rule("@KwUsing alias:@Identifier @Assign name:QualifiedName @Semicolon")
-        .Returns("alias", "name");
+    // C# 12: Using alias can now alias any type, not just qualified names
+    public Rule UsingAliasDirective = new Rule("@KwUsing alias:@Identifier @Assign aliasedType:Type @Semicolon")
+        .Returns("alias", "aliasedType");
 
     public Rule UsingStaticDirective = new Rule("@KwUsing @KwStatic name:QualifiedName @Semicolon")
         .Returns("name");
@@ -80,9 +81,9 @@ public class Rules : RuleSet
     public Rule TypeDeclaration = new Rule("type:ClassDeclaration | type:StructDeclaration | type:InterfaceDeclaration | type:EnumDeclaration | type:DelegateDeclaration | type:RecordDeclaration")
         .Returns("type");
 
-    // CLASS DECLARATION
-    public Rule ClassDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwClass name:@Identifier typeParams:TypeParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:ClassBody @Semicolon?")
-        .Returns("attrs", "mods", "name", "typeParams", "baseList", "constraints", "body");
+    // CLASS DECLARATION (C# 12: Added primary constructor support)
+    public Rule ClassDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwClass name:@Identifier typeParams:TypeParameterList? paramList:PrimaryConstructorParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:ClassBody @Semicolon?")
+        .Returns("attrs", "mods", "name", "typeParams", "paramList", "baseList", "constraints", "body");
 
     public Rule ClassBody = new Rule("@OpenBrace members:ClassMemberDeclarations? @CloseBrace")
         .Returns("members");
@@ -93,9 +94,9 @@ public class Rules : RuleSet
     public Rule ClassMemberDeclaration = new Rule("member:FieldDeclaration | member:MethodDeclaration | member:PropertyDeclaration | member:EventDeclaration | member:EventDeclarationWithAccessors | member:IndexerDeclaration | member:OperatorDeclaration | member:ConversionOperatorDeclaration | member:ConstructorDeclaration | member:DestructorDeclaration | member:TypeDeclaration")
         .Returns("member");
 
-    // STRUCT DECLARATION
-    public Rule StructDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwStruct name:@Identifier typeParams:TypeParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:StructBody @Semicolon?")
-        .Returns("attrs", "mods", "name", "typeParams", "baseList", "constraints", "body");
+    // STRUCT DECLARATION (C# 12: Added primary constructor support)
+    public Rule StructDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwStruct name:@Identifier typeParams:TypeParameterList? paramList:PrimaryConstructorParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:StructBody @Semicolon?")
+        .Returns("attrs", "mods", "name", "typeParams", "paramList", "baseList", "constraints", "body");
 
     public Rule StructBody = new Rule("@OpenBrace members:StructMemberDeclarations? @CloseBrace")
         .Returns("members");
@@ -144,6 +145,10 @@ public class Rules : RuleSet
         .Returns("attrs", "mods", "kind", "name", "typeParams", "paramList", "baseList", "constraints", "body");
 
     public Rule RecordParameterList = new Rule("@OpenParen parameters:FormalParameterList? @CloseParen")
+        .Returns("parameters");
+
+    // C# 12: Primary constructor parameter list (for classes and structs)
+    public Rule PrimaryConstructorParameterList = new Rule("@OpenParen parameters:FormalParameterList? @CloseParen")
         .Returns("parameters");
 
     public Rule RecordBody = new Rule("@OpenBrace members:ClassMemberDeclarations? @CloseBrace")
@@ -479,8 +484,8 @@ public class Rules : RuleSet
 
     public Rule LocalVariableType = "type:@KwVar | type:RefType | type:Type";
 
-    public Rule RefType = new Rule("@KwRef type:Type")
-        .Returns("type");
+    public Rule RefType = new Rule("@KwRef readonly:@KwReadonly? type:Type")
+        .Returns("readonly", "type");
 
     public Rule LocalVariableDeclarators = new Rule("first:LocalVariableDeclarator rest:(@Comma LocalVariableDeclarator)*")
         .Returns("first", "rest");
