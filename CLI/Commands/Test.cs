@@ -273,8 +273,9 @@ class Test : Command
                         System.Console.WriteLine($"Saved index.html to {wasmSaveDir}");
                 }
                 
+                // Final summary log after all files are copied
                 if (verbose || debugMode)
-                    System.Console.WriteLine($"Saved {Path.GetFileName(outputFile)} to {wasmSaveDir}");
+                    System.Console.WriteLine($"Saved all test outputs to {wasmSaveDir}");
             }
 
             // Step 3: Compile to native/PE for all architectures (or single if quick mode)
