@@ -3,8 +3,15 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class name=Calculator
-(type $Calculator (struct
+;; class Test
+(type $Test (struct
+(func $M
+(block
+Statement
+  ;; Deallocation instructions inserted here based on AutomaticModel analysis
+)
+  (result )
 
+)
 ))
 )

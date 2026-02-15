@@ -1,0 +1,5 @@
+class Test {
+    int M() {
+        return 5;
+    }
+}

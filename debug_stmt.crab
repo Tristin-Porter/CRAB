@@ -1,0 +1,5 @@
+class Test {
+    void Method(int x) {
+        return;
+    }
+}

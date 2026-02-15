@@ -28,7 +28,8 @@ public class Rules : RuleSet
     // USING DIRECTIVES
     // ============================================================
 
-    public Rule UsingDirective = "directive:UsingAliasDirective | directive:UsingNamespaceDirective | directive:UsingStaticDirective";
+    public Rule UsingDirective = new Rule("directive:UsingAliasDirective | directive:UsingNamespaceDirective | directive:UsingStaticDirective")
+        .Returns("directive");
 
     public Rule UsingAliasDirective = new Rule("@KwUsing alias:@Identifier @Assign name:QualifiedName @Semicolon")
         .Returns("alias", "name");
@@ -46,7 +47,8 @@ public class Rules : RuleSet
     public Rule GlobalAttributeSection = new Rule("@OpenBracket target:GlobalAttributeTarget @Colon attributes:AttributeList @CloseBracket")
         .Returns("target", "attributes");
 
-    public Rule GlobalAttributeTarget = "target:@KwAssembly | target:@KwModule";
+    public Rule GlobalAttributeTarget = new Rule("target:@KwAssembly | target:@KwModule")
+        .Returns("target");
 
     // ============================================================
     // NAMESPACE DECLARATIONS
@@ -65,9 +67,11 @@ public class Rules : RuleSet
     public Rule NamespaceBody = new Rule("@OpenBrace items:NamespaceBodyItem* @CloseBrace")
         .Returns("items");
 
-    public Rule NamespaceBodyItem = "item:ExternAliasDirective | item:UsingDirective | item:NamespaceMemberDeclaration";
+    public Rule NamespaceBodyItem = new Rule("item:ExternAliasDirective | item:UsingDirective | item:NamespaceMemberDeclaration")
+        .Returns("item");
 
-    public Rule NamespaceMemberDeclarations = "members:NamespaceMemberDeclaration+";
+    public Rule NamespaceMemberDeclarations = new Rule("members:NamespaceMemberDeclaration+")
+        .Returns("members");
 
     // ============================================================
     // TYPE DECLARATIONS
@@ -83,7 +87,8 @@ public class Rules : RuleSet
     public Rule ClassBody = new Rule("@OpenBrace members:ClassMemberDeclarations? @CloseBrace")
         .Returns("members");
 
-    public Rule ClassMemberDeclarations = "members:ClassMemberDeclaration+";
+    public Rule ClassMemberDeclarations = new Rule("members:ClassMemberDeclaration+")
+        .Returns("members");
 
     public Rule ClassMemberDeclaration = new Rule("member:FieldDeclaration | member:MethodDeclaration | member:PropertyDeclaration | member:EventDeclaration | member:EventDeclarationWithAccessors | member:IndexerDeclaration | member:OperatorDeclaration | member:ConversionOperatorDeclaration | member:ConstructorDeclaration | member:DestructorDeclaration | member:TypeDeclaration")
         .Returns("member");
@@ -95,9 +100,11 @@ public class Rules : RuleSet
     public Rule StructBody = new Rule("@OpenBrace members:StructMemberDeclarations? @CloseBrace")
         .Returns("members");
 
-    public Rule StructMemberDeclarations = "members:StructMemberDeclaration+";
+    public Rule StructMemberDeclarations = new Rule("members:StructMemberDeclaration+")
+        .Returns("members");
 
-    public Rule StructMemberDeclaration = "member:FieldDeclaration | member:MethodDeclaration | member:PropertyDeclaration | member:EventDeclaration | member:EventDeclarationWithAccessors | member:IndexerDeclaration | member:OperatorDeclaration | member:ConversionOperatorDeclaration | member:ConstructorDeclaration | member:TypeDeclaration";
+    public Rule StructMemberDeclaration = new Rule("member:FieldDeclaration | member:MethodDeclaration | member:PropertyDeclaration | member:EventDeclaration | member:EventDeclarationWithAccessors | member:IndexerDeclaration | member:OperatorDeclaration | member:ConversionOperatorDeclaration | member:ConstructorDeclaration | member:TypeDeclaration")
+        .Returns("member");
 
     // INTERFACE DECLARATION
     public Rule InterfaceDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwInterface name:@Identifier typeParams:TypeParameterList? baseList:BaseList? constraints:TypeParameterConstraintsClauses? body:InterfaceBody @Semicolon?")
@@ -106,9 +113,11 @@ public class Rules : RuleSet
     public Rule InterfaceBody = new Rule("@OpenBrace members:InterfaceMemberDeclarations? @CloseBrace")
         .Returns("members");
 
-    public Rule InterfaceMemberDeclarations = "members:InterfaceMemberDeclaration+";
+    public Rule InterfaceMemberDeclarations = new Rule("members:InterfaceMemberDeclaration+")
+        .Returns("members");
 
-    public Rule InterfaceMemberDeclaration = "member:InterfaceMethodDeclaration | member:InterfacePropertyDeclaration | member:InterfaceEventDeclaration | member:InterfaceIndexerDeclaration";
+    public Rule InterfaceMemberDeclaration = new Rule("member:InterfaceMethodDeclaration | member:InterfacePropertyDeclaration | member:InterfaceEventDeclaration | member:InterfaceIndexerDeclaration")
+        .Returns("member");
 
     // ENUM DECLARATION
     public Rule EnumDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwEnum name:@Identifier baseType:EnumBase? body:EnumBody @Semicolon?")
@@ -144,9 +153,11 @@ public class Rules : RuleSet
     // MODIFIERS
     // ============================================================
 
-    public Rule Modifiers = "mods:Modifier+";
+    public Rule Modifiers = new Rule("mods:Modifier+")
+        .Returns("mods");
 
-    public Rule Modifier = "mod:@KwNew | mod:@KwPublic | mod:@KwProtected | mod:@KwInternal | mod:@KwPrivate | mod:@KwAbstract | mod:@KwSealed | mod:@KwStatic | mod:@KwReadonly | mod:@KwVirtual | mod:@KwOverride | mod:@KwExtern | mod:@KwAsync | mod:@KwUnsafe | mod:@KwVolatile | mod:@KwPartial | mod:@KwFile | mod:@KwRequired | mod:@KwManual";
+    public Rule Modifier = new Rule("mod:@KwNew | mod:@KwPublic | mod:@KwProtected | mod:@KwInternal | mod:@KwPrivate | mod:@KwAbstract | mod:@KwSealed | mod:@KwStatic | mod:@KwReadonly | mod:@KwVirtual | mod:@KwOverride | mod:@KwExtern | mod:@KwAsync | mod:@KwUnsafe | mod:@KwVolatile | mod:@KwPartial | mod:@KwFile | mod:@KwRequired | mod:@KwManual")
+        .Returns("mod");
 
     // ============================================================
     // TYPE PARAMETERS AND CONSTRAINTS
@@ -161,7 +172,8 @@ public class Rules : RuleSet
     public Rule TypeParameter = new Rule("attrs:AttributeSections? variance:VarianceAnnotation? name:@Identifier")
         .Returns("attrs", "variance", "name");
 
-    public Rule VarianceAnnotation = "variance:@KwIn | variance:@KwOut";
+    public Rule VarianceAnnotation = new Rule("variance:@KwIn | variance:@KwOut")
+        .Returns("variance");
 
     public Rule TypeParameterConstraintsClauses = "clauses:TypeParameterConstraintsClause+";
 
@@ -171,9 +183,11 @@ public class Rules : RuleSet
     public Rule TypeParameterConstraints = new Rule("first:TypeParameterConstraint rest:(@Comma TypeParameterConstraint)*")
         .Returns("first", "rest");
 
-    public Rule TypeParameterConstraint = "constraint:PrimaryConstraint | constraint:SecondaryConstraint | constraint:ConstructorConstraint | constraint:AllowsConstraint";
+    public Rule TypeParameterConstraint = new Rule("constraint:PrimaryConstraint | constraint:SecondaryConstraint | constraint:ConstructorConstraint | constraint:AllowsConstraint")
+        .Returns("constraint");
 
-    public Rule PrimaryConstraint = "constraint:@KwClass | constraint:@KwStruct | constraint:@KwNotnull | constraint:@KwUnmanaged | constraint:BaseType";
+    public Rule PrimaryConstraint = new Rule("constraint:@KwClass | constraint:@KwStruct | constraint:@KwNotnull | constraint:@KwUnmanaged | constraint:BaseType")
+        .Returns("constraint");
 
     public Rule SecondaryConstraint = "constraint:BaseType";
 
@@ -209,13 +223,15 @@ public class Rules : RuleSet
     public Rule VariableDeclarator = new Rule("name:@Identifier initializer:(@Assign VariableInitializer)?")
         .Returns("name", "initializer");
 
-    public Rule VariableInitializer = "init:Expression | init:ArrayInitializer";
+    public Rule VariableInitializer = new Rule("init:Expression | init:ArrayInitializer")
+        .Returns("init");
 
     // METHOD DECLARATION
     public Rule MethodDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? returnType:Type name:@Identifier typeParams:TypeParameterList? @OpenParen parameters:FormalParameterList? @CloseParen constraints:TypeParameterConstraintsClauses? body:MethodBody")
         .Returns("attrs", "mods", "returnType", "name", "typeParams", "parameters", "constraints", "body");
 
-    public Rule MethodBody = "body:Block | body:ExpressionBody | body:@Semicolon";
+    public Rule MethodBody = new Rule("body:Block | body:ExpressionBody | body:@Semicolon")
+        .Returns("body");
 
     public Rule ExpressionBody = new Rule("@LambdaArrow expr:Expression @Semicolon")
         .Returns("expr");
@@ -232,9 +248,11 @@ public class Rules : RuleSet
     public Rule Accessor = new Rule("attrs:AttributeSections? mods:Modifiers? kind:AccessorKind body:AccessorBody")
         .Returns("attrs", "mods", "kind", "body");
 
-    public Rule AccessorKind = "kind:@KwGet | kind:@KwSet | kind:@KwInit | kind:@KwAdd | kind:@KwRemove";
+    public Rule AccessorKind = new Rule("kind:@KwGet | kind:@KwSet | kind:@KwInit | kind:@KwAdd | kind:@KwRemove")
+        .Returns("kind");
 
-    public Rule AccessorBody = "body:Block | body:ExpressionBody | body:@Semicolon";
+    public Rule AccessorBody = new Rule("body:Block | body:ExpressionBody | body:@Semicolon")
+        .Returns("body");
 
     // EVENT DECLARATION
     public Rule EventDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? @KwEvent type:Type declarators:VariableDeclarators @Semicolon")
@@ -251,7 +269,8 @@ public class Rules : RuleSet
     public Rule OperatorDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? returnType:Type @KwOperator op:OverloadableOperator @OpenParen parameters:FormalParameterList @CloseParen body:MethodBody")
         .Returns("attrs", "mods", "returnType", "op", "parameters", "body");
 
-    public Rule OverloadableOperator = "op:@Plus | op:@Minus | op:@Multiply | op:@Divide | op:@Modulo | op:@BitwiseAnd | op:@BitwiseOr | op:@BitwiseXor | op:@BitwiseNot | op:@LogicalNot | op:@LeftShift | op:@RightShift | op:@UnsignedRightShift | op:@Equality | op:@Inequality | op:@LessThan | op:@GreaterThan | op:@LessThanOrEqual | op:@GreaterThanOrEqual | op:@Increment | op:@Decrement | op:@KwTrue | op:@KwFalse";
+    public Rule OverloadableOperator = new Rule("op:@Plus | op:@Minus | op:@Multiply | op:@Divide | op:@Modulo | op:@BitwiseAnd | op:@BitwiseOr | op:@BitwiseXor | op:@BitwiseNot | op:@LogicalNot | op:@LeftShift | op:@RightShift | op:@UnsignedRightShift | op:@Equality | op:@Inequality | op:@LessThan | op:@GreaterThan | op:@LessThanOrEqual | op:@GreaterThanOrEqual | op:@Increment | op:@Decrement | op:@KwTrue | op:@KwFalse")
+        .Returns("op");
 
     // CONVERSION OPERATOR DECLARATION
     public Rule ConversionOperatorDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? kind:(@KwImplicit | @KwExplicit) @KwOperator type:Type @OpenParen parameter:FormalParameter @CloseParen body:MethodBody")
@@ -272,7 +291,8 @@ public class Rules : RuleSet
     public Rule InterfaceMethodDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? returnType:Type name:@Identifier typeParams:TypeParameterList? @OpenParen parameters:FormalParameterList? @CloseParen constraints:TypeParameterConstraintsClauses? body:InterfaceMethodBody")
         .Returns("attrs", "mods", "returnType", "name", "typeParams", "parameters", "constraints", "body");
 
-    public Rule InterfaceMethodBody = "body:@Semicolon | body:Block | body:ExpressionBody";
+    public Rule InterfaceMethodBody = new Rule("body:@Semicolon | body:Block | body:ExpressionBody")
+        .Returns("body");
 
     public Rule InterfacePropertyDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? type:Type name:@Identifier accessors:AccessorDeclarations")
         .Returns("attrs", "mods", "type", "name", "accessors");
@@ -290,7 +310,8 @@ public class Rules : RuleSet
     public Rule FormalParameterList = new Rule("params:FormalParameterListContent?")
         .Returns("params");
 
-    public Rule FormalParameterListContent = "params:FixedParameters @Comma paramArray:ParameterArray | params:FixedParameters | params:ParameterArray";
+    public Rule FormalParameterListContent = new Rule("params:FixedParameters @Comma paramArray:ParameterArray | params:FixedParameters | params:ParameterArray")
+        .Returns("params", "paramArray");
 
     public Rule FixedParameters = new Rule("first:FixedParameter rest:(@Comma FixedParameter)*")
         .Returns("first", "rest");
@@ -301,7 +322,8 @@ public class Rules : RuleSet
     public Rule FormalParameter = new Rule("attrs:AttributeSections? modifier:ParameterModifier? type:Type name:@Identifier")
         .Returns("attrs", "modifier", "type", "name");
 
-    public Rule ParameterModifier = "mod:@KwRef | mod:@KwOut | mod:@KwIn | mod:@KwParams | mod:@KwThis | mod:@KwScoped";
+    public Rule ParameterModifier = new Rule("mod:@KwRef | mod:@KwOut | mod:@KwIn | mod:@KwParams | mod:@KwThis | mod:@KwScoped")
+        .Returns("mod");
 
     public Rule ParameterArray = new Rule("attrs:AttributeSections? @KwParams type:Type name:@Identifier")
         .Returns("attrs", "type", "name");
@@ -318,7 +340,8 @@ public class Rules : RuleSet
     public Rule AttributeTarget = new Rule("target:AttributeTargetSpecifier @Colon")
         .Returns("target");
 
-    public Rule AttributeTargetSpecifier = "target:@KwField | target:@KwEvent | target:@KwMethod | target:@KwParam | target:@KwProperty | target:@KwReturn | target:@KwType | target:@KwAssembly | target:@KwModule";
+    public Rule AttributeTargetSpecifier = new Rule("target:@KwField | target:@KwEvent | target:@KwMethod | target:@KwParam | target:@KwProperty | target:@KwReturn | target:@KwType | target:@KwAssembly | target:@KwModule")
+        .Returns("target");
 
     public Rule AttributeList = new Rule("first:Attribute rest:(@Comma Attribute)*")
         .Returns("first", "rest");
@@ -329,7 +352,8 @@ public class Rules : RuleSet
     public Rule AttributeArguments = new Rule("@OpenParen args:AttributeArgumentList? @CloseParen")
         .Returns("args");
 
-    public Rule AttributeArgumentList = "positional:PositionalArgumentList @Comma named:NamedArgumentList | positional:PositionalArgumentList | named:NamedArgumentList";
+    public Rule AttributeArgumentList = new Rule("positional:PositionalArgumentList @Comma named:NamedArgumentList | positional:PositionalArgumentList | named:NamedArgumentList")
+        .Returns("positional", "named");
 
     public Rule PositionalArgumentList = new Rule("first:Expression rest:(@Comma Expression)*")
         .Returns("first", "rest");
@@ -350,9 +374,11 @@ public class Rules : RuleSet
     public Rule NonArrayType = new Rule("type:PrimitiveType | type:NamedType | type:TupleType | type:FunctionPointerType")
         .Returns("type");
 
-    public Rule TypeSuffixes = "suffixes:TypeSuffix+";
+    public Rule TypeSuffixes = new Rule("suffixes:TypeSuffix+")
+        .Returns("suffixes");
 
-    public Rule TypeSuffix = "suffix:ArrayRankSpecifier | suffix:PointerSuffix | suffix:NullableSuffix";
+    public Rule TypeSuffix = new Rule("suffix:ArrayRankSpecifier | suffix:PointerSuffix | suffix:NullableSuffix")
+        .Returns("suffix");
 
     public Rule PointerSuffix = "@Asterisk";
 
@@ -424,14 +450,17 @@ public class Rules : RuleSet
     // STATEMENTS
     // ============================================================
 
-    public Rule Statement = "stmt:Block | stmt:LabeledStatement | stmt:DeclarationStatement | stmt:EmbeddedStatement";
+    public Rule Statement = new Rule("stmt:Block | stmt:LabeledStatement | stmt:DeclarationStatement | stmt:EmbeddedStatement")
+        .Returns("stmt");
 
-    public Rule EmbeddedStatement = "stmt:EmptyStatement | stmt:ExpressionStatement | stmt:SelectionStatement | stmt:IterationStatement | stmt:JumpStatement | stmt:TryStatement | stmt:CheckedStatement | stmt:UncheckedStatement | stmt:LockStatement | stmt:UsingStatement | stmt:YieldStatement | stmt:LocalFunctionStatement";
+    public Rule EmbeddedStatement = new Rule("stmt:EmptyStatement | stmt:ExpressionStatement | stmt:SelectionStatement | stmt:IterationStatement | stmt:JumpStatement | stmt:TryStatement | stmt:CheckedStatement | stmt:UncheckedStatement | stmt:LockStatement | stmt:UsingStatement | stmt:YieldStatement | stmt:LocalFunctionStatement")
+        .Returns("stmt");
 
     public Rule Block = new Rule("@OpenBrace stmts:Statements? @CloseBrace")
         .Returns("stmts");
 
-    public Rule Statements = "stmts:Statement+";
+    public Rule Statements = new Rule("stmts:Statement+")
+        .Returns("stmts");
 
     public Rule EmptyStatement = "@Semicolon";
 
@@ -474,7 +503,8 @@ public class Rules : RuleSet
         .Returns("expr");
 
     // SELECTION STATEMENTS
-    public Rule SelectionStatement = "stmt:IfStatement | stmt:SwitchStatement";
+    public Rule SelectionStatement = new Rule("stmt:IfStatement | stmt:SwitchStatement")
+        .Returns("stmt");
 
     public Rule IfStatement = new Rule("@KwIf @OpenParen condition:Expression @CloseParen thenStmt:Statement elseClause:ElseClause?")
         .Returns("condition", "thenStmt", "elseClause");
@@ -500,7 +530,8 @@ public class Rules : RuleSet
     public Rule DefaultLabel = "@KwDefault @Colon";
 
     // ITERATION STATEMENTS
-    public Rule IterationStatement = "stmt:WhileStatement | stmt:DoStatement | stmt:ForStatement | stmt:ForEachStatement";
+    public Rule IterationStatement = new Rule("stmt:WhileStatement | stmt:DoStatement | stmt:ForStatement | stmt:ForEachStatement")
+        .Returns("stmt");
 
     public Rule WhileStatement = new Rule("@KwWhile @OpenParen condition:Expression @CloseParen body:Statement")
         .Returns("condition", "body");
@@ -524,7 +555,8 @@ public class Rules : RuleSet
     public Rule ForEachModifier = "mod:@KwRef | mod:@KwScoped";
 
     // JUMP STATEMENTS
-    public Rule JumpStatement = "stmt:BreakStatement | stmt:ContinueStatement | stmt:GotoStatement | stmt:ReturnStatement | stmt:ThrowStatement";
+    public Rule JumpStatement = new Rule("stmt:BreakStatement | stmt:ContinueStatement | stmt:GotoStatement | stmt:ReturnStatement | stmt:ThrowStatement")
+        .Returns("stmt");
 
     public Rule BreakStatement = "@KwBreak @Semicolon";
 
@@ -540,6 +572,9 @@ public class Rules : RuleSet
 
     public Rule GotoDefaultTarget = "@KwDefault";
 
+    // Return statement - uses Expression which goes through dispatcher chain
+    // KNOWN ISSUE: Expression dispatcher chain doesn't properly populate expr field
+    // causing Fallback map to be used instead of proper lowering
     public Rule ReturnStatement = new Rule("@KwReturn expr:Expression? @Semicolon")
         .Returns("expr");
 
@@ -604,6 +639,11 @@ public class Rules : RuleSet
     // EXPRESSIONS - Fixed left recursion
     // ============================================================
 
+    // Expression dispatcher - uses string syntax with labeled alternatives
+    // "expr:NonAssignmentExpression | expr:AssignmentExpression" creates an Expression AST node
+    // with an 'expr' field containing whichever alternative matched.
+    // The Map uses {expr} to pass through to the child node.
+    // NOTE: String syntax with labels automatically populates fields; .Returns() not needed here.
     public Rule Expression = "expr:NonAssignmentExpression | expr:AssignmentExpression";
 
     // ASSIGNMENT EXPRESSIONS
@@ -737,7 +777,25 @@ public class Rules : RuleSet
     // PRIMARY EXPRESSION - Core items without suffixes
     public Rule PrimaryExpressionCore = "expr:Literal | expr:SimpleName | expr:ParenthesizedExpression | expr:ThisAccessExpression | expr:BaseAccessExpression | expr:ObjectCreationExpression | expr:DelegateCreationExpression | expr:AnonymousObjectCreationExpression | expr:ArrayCreationExpression | expr:ImplicitArrayCreationExpression | expr:TypeofExpression | expr:LambdaExpression | expr:QueryExpression | expr:StackallocExpression | expr:TupleExpression | expr:CollectionExpression";
 
-    public Rule Literal = "lit:@KwTrue | lit:@KwFalse | lit:@KwNull | lit:@DecimalIntegerLiteral | lit:@HexIntegerLiteral | lit:@BinaryIntegerLiteral | lit:@FloatLiteral | lit:@FloatLiteralNoDecimal | lit:@FloatLiteralSuffix | lit:@CharacterLiteral | lit:@StringLiteral | lit:@VerbatimStringLiteral | lit:@InterpolatedStringStart | lit:@RawStringLiteral | lit:@Utf8StringLiteral";
+    // Literal dispatcher - creates specific literal type nodes
+    public Rule Literal = "TrueLiteral | FalseLiteral | NullLiteral | DecimalIntegerLiteral | HexIntegerLiteral | BinaryIntegerLiteral | FloatLiteral | FloatLiteralNoDecimal | FloatLiteralSuffix | CharacterLiteral | StringLiteral | VerbatimStringLiteral | InterpolatedStringStart | RawStringLiteral | Utf8StringLiteral";
+
+    // Literal type rules - Each creates its own AST node type
+    public Rule TrueLiteral = new Rule("@KwTrue");
+    public Rule FalseLiteral = new Rule("@KwFalse");
+    public Rule NullLiteral = new Rule("@KwNull");
+    public Rule DecimalIntegerLiteral = new Rule("@DecimalIntegerLiteral");
+    public Rule HexIntegerLiteral = new Rule("@HexIntegerLiteral");
+    public Rule BinaryIntegerLiteral = new Rule("@BinaryIntegerLiteral");
+    public Rule FloatLiteral = new Rule("@FloatLiteral");
+    public Rule FloatLiteralNoDecimal = new Rule("@FloatLiteralNoDecimal");
+    public Rule FloatLiteralSuffix = new Rule("@FloatLiteralSuffix");
+    public Rule CharacterLiteral = new Rule("@CharacterLiteral");
+    public Rule StringLiteral = new Rule("@StringLiteral");
+    public Rule VerbatimStringLiteral = new Rule("@VerbatimStringLiteral");
+    public Rule InterpolatedStringStart = new Rule("@InterpolatedStringStart");
+    public Rule RawStringLiteral = new Rule("@RawStringLiteral");
+    public Rule Utf8StringLiteral = new Rule("@Utf8StringLiteral");
 
     public Rule SimpleName = new Rule("name:@Identifier typeArgs:TypeArgumentList?")
         .Returns("name", "typeArgs");

@@ -8682,6 +8682,9 @@ namespace CDTk
         private readonly Dictionary<Map, string> _namesByMap = new Dictionary<Map, string>();
         private readonly Dictionary<string, Func<Model>> _modelFactoriesByName = new Dictionary<string, Func<Model>>(StringComparer.Ordinal);
         private readonly Dictionary<string, Model> _modelInstanceCache = new Dictionary<string, Model>(StringComparer.Ordinal);
+        
+        // Typed maps support (new architecture)
+        private readonly Dictionary<string, object> _typedMapsByName = new Dictionary<string, object>(StringComparer.Ordinal);
 
         // Shortcuts for model constructors - will be populated by compiler before models are created
         /// <summary>Shortcut providing access to all tokens. Available for model constructors.</summary>
@@ -8732,10 +8735,11 @@ namespace CDTk
         {
             var type = GetType();
             
-            // Discover Map fields
+            // Discover Map fields (both old string-based and new typed maps)
             var fields = type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
             foreach (var field in fields)
             {
+                // Old string-based Map
                 if (field.FieldType == typeof(Map))
                 {
                     var map = field.GetValue(this) as Map;
@@ -8746,6 +8750,27 @@ namespace CDTk
                         map.DeclaringType = type;
                         _mapsByName[mapName] = map;
                         _namesByMap[map] = mapName;
+                    }
+                }
+                // New typed Map<TNode, TOutput>
+                else if (field.FieldType.IsGenericType && 
+                         field.FieldType.GetGenericTypeDefinition() == typeof(Map<,>))
+                {
+                    var typedMap = field.GetValue(this);
+                    if (typedMap != null)
+                    {
+                        var mapName = field.Name;
+                        
+                        // Set Name and DeclaringType properties via reflection
+                        var nameProperty = field.FieldType.GetProperty("Name", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                        var declaringTypeProperty = field.FieldType.GetProperty("DeclaringType", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                        var parentMapSetProperty = field.FieldType.GetProperty("ParentMapSet", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                        
+                        nameProperty?.SetValue(typedMap, mapName);
+                        declaringTypeProperty?.SetValue(typedMap, type);
+                        parentMapSetProperty?.SetValue(typedMap, this);
+                        
+                        _typedMapsByName[mapName] = typedMap;
                     }
                 }
             }
@@ -8803,12 +8828,30 @@ namespace CDTk
         /// Transform an AstNode using the maps in this set.
         /// Uses reference-based identity matching: map name must match node.Type.
         /// Per CDTk spec: Falls back to Fallback map if no specific map matches (cdtk-spec.txt line 169).
+        /// Supports both old string-based Maps and new typed Map<TNode, TOutput> (with string output).
         /// </summary>
         internal string? Transform(AstNode node)
         {
             if (node is null) return null;
 
-            // Try exact name match using reference-based identity
+            // Try typed maps first (new architecture)
+            if (_typedMapsByName.TryGetValue(node.Type, out var typedMapObj))
+            {
+                // Invoke GenerateString method via reflection
+                var generateStringMethod = typedMapObj.GetType().GetMethod("GenerateString", 
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                
+                if (generateStringMethod != null)
+                {
+                    var result = generateStringMethod.Invoke(typedMapObj, new object[] { node });
+                    if (result is string str)
+                    {
+                        return str;
+                    }
+                }
+            }
+
+            // Try exact name match using reference-based identity (old architecture)
             if (_mapsByName.TryGetValue(node.Type, out var map))
             {
                 return map.Generate(node, this);
@@ -9274,6 +9317,19 @@ namespace CDTk
                 {
                     vars[key] = string.Join(", ", ss);
                 }
+                // Check for List<AstNode> first (more specific than IEnumerable<AstNode>)
+                else if (v is List<AstNode> nodeList)
+                {
+                    // Recursively transform child nodes if MapSet is available
+                    if (mapSet != null)
+                    {
+                        vars[key] = string.Join("\n", nodeList.Select(c => mapSet.Transform(c) ?? c.Type));
+                    }
+                    else
+                    {
+                        vars[key] = string.Join(", ", nodeList.Select(c => c.Type));
+                    }
+                }
                 else if (v is AstNode child)
                 {
                     // Recursively transform child nodes if MapSet is available
@@ -9286,7 +9342,7 @@ namespace CDTk
                         vars[key] = child.Type;
                     }
                 }
-                else if (v is IEnumerable<AstNode> children)
+                else if (v is IEnumerable<AstNode> children && !(v is string))
                 {
                     // Recursively transform child nodes if MapSet is available
                     if (mapSet != null)
@@ -9298,8 +9354,62 @@ namespace CDTk
                         vars[key] = string.Join(", ", children.Select(c => c.Type));
                     }
                 }
+                else if (v.GetType().IsGenericType && v.GetType().GetGenericTypeDefinition() == typeof(List<>))
+                {
+                    // Handle any List<T> that contains AstNodes  
+                    // This is a fallback for when the typed check doesn't match
+                    var elementType = v.GetType().GetGenericArguments()[0];
+                    if (typeof(AstNode).IsAssignableFrom(elementType))
+                    {
+                        var items = v as System.Collections.IEnumerable;
+                        if (items != null && mapSet != null)
+                        {
+                            var transformedItems = new List<string>();
+                            foreach (var item in items)
+                            {
+                                if (item is AstNode astNode)
+                                {
+                                    transformedItems.Add(mapSet.Transform(astNode) ?? astNode.Type);
+                                }
+                            }
+                            vars[key] = string.Join("\n", transformedItems);
+                        }
+                        else
+                        {
+                            vars[key] = v.ToString() ?? "";
+                        }
+                    }
+                    else
+                    {
+                        vars[key] = v.ToString() ?? "";
+                    }
+                }
                 else
                 {
+                    // Last resort - check if it's any collection of AstNode
+                    if (v is System.Collections.IEnumerable enumerable && !(v is string))
+                    {
+                        var astNodeList = new List<AstNode>();
+                        foreach (var item in enumerable)
+                        {
+                            if (item is AstNode astNode)
+                            {
+                                astNodeList.Add(astNode);
+                            }
+                        }
+                        if (astNodeList.Count > 0)
+                        {
+                            if (key == "stmts")
+                            {
+                                Console.WriteLine($"FALLBACK: Found {astNodeList.Count} AstNodes in enumerable for key '{key}', mapSet={mapSet != null}");
+                            }
+                            if (mapSet != null)
+                            {
+                                vars[key] = string.Join("\n", astNodeList.Select(n => mapSet.Transform(n) ?? n.Type));
+                                continue;
+                            }
+                        }
+                    }
                     vars[key] = v.ToString() ?? "";
                 }
             }
@@ -9311,7 +9421,163 @@ namespace CDTk
                 result = result.Replace($"{{{kv.Key}}}", kv.Value);
             }
 
+            // Replace any remaining placeholders (fields that don't exist in the AST node) with empty string
+            // This handles cases where optional fields in the grammar cause field shifting
+            result = System.Text.RegularExpressions.Regex.Replace(result, @"\{[a-zA-Z_][a-zA-Z0-9_]*\}", "");
+
             return result;
+        }
+    }
+
+    // ============================================================
+    // Typed Map API - Semantic, Rule-Driven Mapping Engine
+    // ============================================================
+
+    /// <summary>
+    /// Generic typed map for semantic transformations.
+    /// Replaces string templates with typed transformations, semantic model hooks, and arbitrary output types.
+    /// Supports: .Using(model => model.Transform) and .Emit(node => output)
+    /// TNode is expected to be AstNode, but we don't constrain it since AstNode is sealed.
+    /// </summary>
+    public sealed class Map<TNode, TOutput>
+    {
+        /// <summary>Internal: The name assigned to this map through field discovery.</summary>
+        internal string? Name { get; set; }
+
+        /// <summary>Internal: The declaring module type (for diagnostics and validation).</summary>
+        internal Type? DeclaringType { get; set; }
+
+        /// <summary>Optional semantic transformation function from model.</summary>
+        private Func<TNode, TNode>? _semanticTransform;
+
+        /// <summary>Emission function that generates output from the node.</summary>
+        private Func<TNode, TOutput>? _emitFunction;
+
+        /// <summary>Reference to the model accessor function.</summary>
+        private Func<Model, Func<TNode, TNode>>? _modelAccessor;
+
+        /// <summary>Cached model instance for lazy initialization.</summary>
+        private Model? _cachedModel;
+
+        /// <summary>Reference to the parent MapSet for model access.</summary>
+        internal MapSet? ParentMapSet { get; set; }
+
+        /// <summary>
+        /// Specify semantic transformation from model.
+        /// Example: .Using(model => model.NormalizeExpression)
+        /// </summary>
+        public Map<TNode, TOutput> Using(Func<Model, Func<TNode, TNode>> modelAccessor)
+        {
+            _modelAccessor = modelAccessor ?? throw new ArgumentNullException(nameof(modelAccessor));
+            return this;
+        }
+
+        /// <summary>
+        /// Specify emission function that generates output.
+        /// Example: .Emit(node => new WasmInstruction(OpCode.I32Const, node.Value))
+        /// </summary>
+        public Map<TNode, TOutput> Emit(Func<TNode, TOutput> emitFunction)
+        {
+            _emitFunction = emitFunction ?? throw new ArgumentNullException(nameof(emitFunction));
+            return this;
+        }
+
+        /// <summary>
+        /// Generate output for the given AST node.
+        /// Applies semantic transformation if specified, then emits output.
+        /// </summary>
+        internal TOutput? Generate(AstNode node)
+        {
+            if (node == null) throw new ArgumentNullException(nameof(node));
+            if (!(node is TNode typedNode))
+            {
+                throw new InvalidOperationException($"Map<{typeof(TNode).Name}, {typeof(TOutput).Name}> cannot process node of type {node.GetType().Name}");
+            }
+
+            // Apply semantic transformation if specified
+            if (_modelAccessor != null && ParentMapSet != null)
+            {
+                // Lazy initialize model
+                if (_semanticTransform == null)
+                {
+                    var model = GetOrCreateModel();
+                    if (model != null)
+                    {
+                        _semanticTransform = _modelAccessor(model);
+                    }
+                }
+
+                if (_semanticTransform != null)
+                {
+                    typedNode = _semanticTransform(typedNode);
+                }
+            }
+
+            // Emit output
+            if (_emitFunction != null)
+            {
+                return _emitFunction(typedNode);
+            }
+
+            return default(TOutput);
+        }
+
+        /// <summary>
+        /// Get or create the model instance for semantic transformations.
+        /// 
+        /// Integration point: This method should retrieve models from the parent MapSet's
+        /// model cache using the model name derived from the modelAccessor.
+        /// 
+        /// TODO: Implement model resolution:
+        /// 1. Extract model name from modelAccessor expression
+        /// 2. Call ParentMapSet.GetModel(modelName)
+        /// 3. Cache the result in _cachedModel
+        /// 
+        /// For now, returns null - semantic transformations via .Using() are not yet active.
+        /// Maps can still use .Emit() without .Using() for basic typed emission.
+        /// </summary>
+        private Model? GetOrCreateModel()
+        {
+            // Placeholder: Model integration to be completed when .Using() is needed
+            // This doesn't affect .Emit()-only maps which are fully functional
+            return _cachedModel;
+        }
+
+        /// <summary>
+        /// Backward compatibility: Generate string output if TOutput is string.
+        /// This allows typed maps to integrate with existing string-based Transform() method.
+        /// </summary>
+        internal string? GenerateString(AstNode node)
+        {
+            if (typeof(TOutput) == typeof(string))
+            {
+                var result = Generate(node);
+                return result as string;
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Factory for creating typed maps with fluent API.
+    /// Example: TypedMap.For&lt;ExpressionNode&gt;().Using(m => m.Transform).Emit(n => output)
+    /// </summary>
+    public static class TypedMap
+    {
+        /// <summary>
+        /// Create a typed map for AstNode with string output (default).
+        /// </summary>
+        public static Map<AstNode, string> For()
+        {
+            return new Map<AstNode, string>();
+        }
+
+        /// <summary>
+        /// Create a typed map for AstNode with custom output type.
+        /// </summary>
+        public static Map<AstNode, TOutput> For<TOutput>()
+        {
+            return new Map<AstNode, TOutput>();
         }
     }
 
@@ -13425,12 +13691,12 @@ namespace CDTk
                 }
                 
                 // Map items to fields
-                // For now, use a simple strategy: assign non-literal terminals to fields in order
-                var fieldIndex = 0;
+                // Strategy: assign non-literal terminals to fields in order
+                // If there are more items than fields, collect remaining items into the last field as a list (for repetitions)
+                var nonLiteralItems = new List<AstNode>();
+                
                 foreach (var item in items)
                 {
-                    if (fieldIndex >= fieldNames.Count) break;
-                    
                     // Skip literal terminals (they don't get assigned to fields)
                     // Literals have lexeme that matches common operators
                     var isLiteralOperator = item.Type == "Plus" || item.Type == "Minus" || 
@@ -13447,8 +13713,35 @@ namespace CDTk
                         continue;
                     }
                     
-                    target.Fields[fieldNames[fieldIndex]] = item;
-                    fieldIndex++;
+                    nonLiteralItems.Add(item);
+                }
+                
+                // Now assign non-literal items to fields
+                // Heuristic: If we have exactly one field name, treat it as a potential repetition pattern
+                // This handles rules like "members:ClassMemberDeclaration+" which should always produce a list
+                if (fieldNames.Count == 1)
+                {
+                    // Single field - could be repetition or single item
+                    // Always use a list for consistency so template substitution works uniformly
+                    if (nonLiteralItems.Count > 1)
+                    {
+                        // Multiple items - definitely a repetition, assign as list
+                        target.Fields[fieldNames[0]] = nonLiteralItems;
+                    }
+                    else if (nonLiteralItems.Count == 1)
+                    {
+                        // Single item - assign directly (not as list) to avoid breaking single-item rules
+                        target.Fields[fieldNames[0]] = nonLiteralItems[0];
+                    }
+                    // If Count == 0, field remains unset (optional pattern matched nothing)
+                }
+                else
+                {
+                    // Multiple field names - non-repetition case: assign items one-to-one
+                    for (int i = 0; i < nonLiteralItems.Count && i < fieldNames.Count; i++)
+                    {
+                        target.Fields[fieldNames[i]] = nonLiteralItems[i];
+                    }
                 }
             }
             else
