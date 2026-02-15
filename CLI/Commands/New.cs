@@ -65,6 +65,10 @@ namespace " + name + @"
     {
         static void Main()
         {
+            // Your code here
+            Console.WriteLine(""Hello from CRAB!"");
+            Console.WriteLine(""Press any key to exit..."");
+            Console.ReadKey();
         }
         
         int Add(int x, int y)

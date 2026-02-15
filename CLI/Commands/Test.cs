@@ -306,39 +306,87 @@ class Test : Command
             
             string sourceCode = projectName switch
             {
-                "HelloWorld" => @"class Test {
-    int GetValue() {
-        return 42;
+                "HelloWorld" => @"using System;
+
+class Program {
+    static void Main() {
+        Console.WriteLine(""Hello from CRAB!"");
+        Console.WriteLine(""This is a test program compiled to WebAssembly."");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }",
-                "Calculator" => @"class Calculator {
-    int Add(int a, int b) {
+                "Calculator" => @"using System;
+
+class Program {
+    static void Main() {
+        var calc = new Calculator();
+        Console.WriteLine(""Calculator Test"");
+        Console.WriteLine(""5 + 3 = "" + calc.Add(5, 3));
+        Console.WriteLine(""4 * 7 = "" + calc.Multiply(4, 7));
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
+    }
+}
+
+class Calculator {
+    public int Add(int a, int b) {
         return a + b;
     }
     
-    int Multiply(int a, int b) {
+    public int Multiply(int a, int b) {
         return a * b;
     }
 }",
-                "ClassHierarchy" => @"class Base {
-    int GetBase() {
+                "ClassHierarchy" => @"using System;
+
+class Program {
+    static void Main() {
+        var b = new Base();
+        var d = new Derived();
+        Console.WriteLine(""Class Hierarchy Test"");
+        Console.WriteLine(""Base value: "" + b.GetBase());
+        Console.WriteLine(""Derived value: "" + d.GetValue());
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
+    }
+}
+
+class Base {
+    public int GetBase() {
         return 10;
     }
 }
 
-class Derived {
-    int GetValue() {
+class Derived : Base {
+    public int GetValue() {
         return 20;
     }
 }",
-                "GenericCollections" => @"class Container {
-    int GetData() {
+                "GenericCollections" => @"using System;
+
+class Program {
+    static void Main() {
+        var container = new Container();
+        Console.WriteLine(""Container Test"");
+        Console.WriteLine(""Data: "" + container.GetData());
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
+    }
+}
+
+class Container {
+    public int GetData() {
         return 100;
     }
 }",
-                _ => @"class Program {
-    int Main() {
-        return 0;
+                _ => @"using System;
+
+class Program {
+    static void Main() {
+        Console.WriteLine(""Test Program"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }"
             };
