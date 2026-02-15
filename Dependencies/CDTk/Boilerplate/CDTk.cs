@@ -9305,6 +9305,18 @@ namespace CDTk
                     continue;
                 }
 
+                // DEBUG
+                if (key == "stmts" && v is AstNode stmtsNode && stmtsNode.Type == "Statements")
+                {
+                    foreach (var f in stmtsNode.Fields)
+                    {
+                        if (f.Value is List<AstNode> list)
+                        {
+                            Console.WriteLine($"DEBUG: Statements node has field '{f.Key}' with List<AstNode>[{list.Count}]");
+                        }
+                    }
+                }
+
                 if (v is string s)
                 {
                     vars[key] = s;
@@ -9316,6 +9328,19 @@ namespace CDTk
                 else if (v is IEnumerable<string> ss)
                 {
                     vars[key] = string.Join(", ", ss);
+                }
+                // Check for List<AstNode> first (more specific than IEnumerable<AstNode>)
+                else if (v is List<AstNode> nodeList)
+                {
+                    // Recursively transform child nodes if MapSet is available
+                    if (mapSet != null)
+                    {
+                        vars[key] = string.Join("\n", nodeList.Select(c => mapSet.Transform(c) ?? c.Type));
+                    }
+                    else
+                    {
+                        vars[key] = string.Join(", ", nodeList.Select(c => c.Type));
+                    }
                 }
                 else if (v is AstNode child)
                 {
@@ -9329,7 +9354,7 @@ namespace CDTk
                         vars[key] = child.Type;
                     }
                 }
-                else if (v is IEnumerable<AstNode> children)
+                else if (v is IEnumerable<AstNode> children && !(v is string))
                 {
                     // Recursively transform child nodes if MapSet is available
                     if (mapSet != null)
@@ -9339,6 +9364,36 @@ namespace CDTk
                     else
                     {
                         vars[key] = string.Join(", ", children.Select(c => c.Type));
+                    }
+                }
+                else if (v.GetType().IsGenericType && v.GetType().GetGenericTypeDefinition() == typeof(List<>))
+                {
+                    // Handle any List<T> that contains AstNodes  
+                    // This is a fallback for when the typed check doesn't match
+                    var elementType = v.GetType().GetGenericArguments()[0];
+                    if (typeof(AstNode).IsAssignableFrom(elementType))
+                    {
+                        var items = v as System.Collections.IEnumerable;
+                        if (items != null && mapSet != null)
+                        {
+                            var transformedItems = new List<string>();
+                            foreach (var item in items)
+                            {
+                                if (item is AstNode astNode)
+                                {
+                                    transformedItems.Add(mapSet.Transform(astNode) ?? astNode.Type);
+                                }
+                            }
+                            vars[key] = string.Join("\n", transformedItems);
+                        }
+                        else
+                        {
+                            vars[key] = v.ToString() ?? "";
+                        }
+                    }
+                    else
+                    {
+                        vars[key] = v.ToString() ?? "";
                     }
                 }
                 else

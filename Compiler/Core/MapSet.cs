@@ -3,6 +3,405 @@ using CDTk;
 namespace CRAB;
 
 /// <summary>
+/// Static helper class for WASM code emission.
+/// Used by typed Maps to generate WASM instructions from AST nodes.
+/// All methods are static so they can be called from field initializers.
+/// </summary>
+public static class WasmEmit
+{
+    /// <summary>
+    /// Emit WASM code for an expression AST node.
+    /// Returns WAT text format code.
+    /// </summary>
+    public static string EmitExpression(object? exprNode)
+    {
+        if (exprNode == null) return "";
+        
+        // Handle List<AstNode> - take the first element
+        if (exprNode is List<object> list && list.Count > 0)
+        {
+            exprNode = list[0];
+        }
+        
+        if (!(exprNode is AstNode node))
+        {
+            // Might be a literal value
+            return exprNode?.ToString() ?? "";
+        }
+        
+        // Dispatch based on node type
+        return node.Type switch
+        {
+            // Literals
+            "DecimalIntegerLiteral" or "HexIntegerLiteral" or "BinaryIntegerLiteral" => EmitIntegerLiteral(node),
+            "FloatLiteral" => EmitFloatLiteral(node),
+            "DoubleLiteral" => EmitDoubleLiteral(node),
+            "TrueLiteral" => "i32.const 1",
+            "FalseLiteral" => "i32.const 0",
+            
+            // Binary operations
+            "AdditiveExpression" => EmitBinaryExpression(node, "+"),
+            "MultiplicativeExpression" => EmitBinaryExpression(node, "*"),
+            "RelationalExpression" => EmitBinaryExpression(node, "<"),
+            "EqualityExpression" => EmitBinaryExpression(node, "=="),
+            
+            // Identifier (variable access)
+            "Identifier" => EmitIdentifier(node),
+            
+            // Parenthesized expression - unwrap
+            "ParenthesizedExpression" => node.Fields.ContainsKey("expr") ? EmitExpression(node.Fields["expr"]) : "",
+            
+            // Expression dispatchers - pass through to child
+            "Expression" or "NonAssignmentExpression" or "UnaryExpression" or 
+            "PrimaryExpression" or "PrimaryNoArrayCreationExpression" =>
+                node.Fields.ContainsKey("expr") ? EmitExpression(node.Fields["expr"]) : 
+                (node.Fields.ContainsKey("literal") ? EmitExpression(node.Fields["literal"]) : ""),
+            
+            // Unknown - comment
+            _ => $";; TODO: Emit expression {node.Type}\ni32.const 0"
+        };
+    }
+    
+    /// <summary>
+    /// Emit integer literal.
+    /// </summary>
+    public static string EmitIntegerLiteral(AstNode node)
+    {
+        var lexeme = GetField(node, "lexeme") ?? "0";
+        lexeme = lexeme.Replace("_", "");
+        
+        if (lexeme.StartsWith("0x") || lexeme.StartsWith("0X"))
+        {
+            var value = Convert.ToInt32(lexeme, 16);
+            return $"i32.const {value}";
+        }
+        
+        if (lexeme.StartsWith("0b") || lexeme.StartsWith("0B"))
+        {
+            var value = Convert.ToInt32(lexeme.Substring(2), 2);
+            return $"i32.const {value}";
+        }
+        
+        if (int.TryParse(lexeme, out var intValue))
+        {
+            return $"i32.const {intValue}";
+        }
+        
+        return "i32.const 0";
+    }
+    
+    /// <summary>
+    /// Emit float literal.
+    /// </summary>
+    private static string EmitFloatLiteral(AstNode node)
+    {
+        var lexeme = GetField(node, "lexeme") ?? "0.0";
+        lexeme = lexeme.Replace("_", "").TrimEnd('f', 'F');
+        
+        if (float.TryParse(lexeme, out var value))
+        {
+            return $"f32.const {value}";
+        }
+        
+        return "f32.const 0.0";
+    }
+    
+    /// <summary>
+    /// Emit double literal.
+    /// </summary>
+    private static string EmitDoubleLiteral(AstNode node)
+    {
+        var lexeme = GetField(node, "lexeme") ?? "0.0";
+        lexeme = lexeme.Replace("_", "").TrimEnd('d', 'D');
+        
+        if (double.TryParse(lexeme, out var value))
+        {
+            return $"f64.const {value}";
+        }
+        
+        return "f64.const 0.0";
+    }
+    
+    /// <summary>
+    /// Emit identifier (variable access).
+    /// </summary>
+    public static string EmitIdentifier(AstNode node)
+    {
+        var name = GetField(node, "lexeme") ?? "unknown";
+        return $"local.get ${name}";
+    }
+    
+    /// <summary>
+    /// Emit binary expression (a + b, a * b, etc).
+    /// </summary>
+    public static string EmitBinaryExpression(AstNode node, string defaultOp)
+    {
+        // Get left and right operands
+        var left = node.Fields.ContainsKey("left") ? node.Fields["left"] : null;
+        var right = node.Fields.ContainsKey("right") ? node.Fields["right"] : null;
+        var op = GetField(node, "op") ?? defaultOp;
+        
+        // Emit left operand
+        var leftCode = EmitExpression(left);
+        
+        // Emit right operand
+        var rightCode = EmitExpression(right);
+        
+        // Map operator to WASM instruction
+        var opCode = MapOperator(op);
+        
+        return $"{leftCode}\n{rightCode}\n{opCode}";
+    }
+    
+    /// <summary>
+    /// Map C# operator to WASM opcode.
+    /// </summary>
+    public static string MapOperator(string op)
+    {
+        return op switch
+        {
+            "+" => "i32.add",
+            "-" => "i32.sub",
+            "*" => "i32.mul",
+            "/" => "i32.div_s",
+            "%" => "i32.rem_s",
+            "&" => "i32.and",
+            "|" => "i32.or",
+            "^" => "i32.xor",
+            "==" => "i32.eq",
+            "!=" => "i32.ne",
+            "<" => "i32.lt_s",
+            ">" => "i32.gt_s",
+            "<=" => "i32.le_s",
+            ">=" => "i32.ge_s",
+            "<<" => "i32.shl",
+            ">>" => "i32.shr_s",
+            "&&" => "i32.and",
+            "||" => "i32.or",
+            _ => "nop"
+        };
+    }
+    
+    /// <summary>
+    /// Emit statement code.
+    /// </summary>
+    public static string EmitStatement(object? stmtNode)
+    {
+        if (stmtNode == null)
+        {
+            return "";
+        }
+        
+        // Handle List<object> - process first element
+        if (stmtNode is List<object> list)
+        {
+            if (list.Count > 0)
+            {
+                return EmitStatement(list[0]);
+            }
+            return "";
+        }
+        
+        if (!(stmtNode is AstNode node))
+        {
+            return "";  // Unknown type
+        }
+        
+        return node.Type switch
+        {
+            "ReturnStatement" => EmitReturnStatement(node),
+            "ExpressionStatement" => node.Fields.ContainsKey("expr") ? EmitExpression(node.Fields["expr"]) : "",
+            "Block" => EmitBlock(node),
+            "EmptyStatement" => "nop",
+            
+            // Statement dispatchers - pass through to child
+            "Statement" or "EmbeddedStatement" or "JumpStatement" or "SelectionStatement" or "IterationStatement" =>
+                node.Fields.ContainsKey("stmt") ? EmitStatement(node.Fields["stmt"]) : "",
+            
+            _ => $";; TODO: Emit {node.Type}\nnop"
+        };
+    }
+    
+    /// <summary>
+    /// Emit return statement.
+    /// </summary>
+    private static string EmitReturnStatement(AstNode node)
+    {
+        if (node.Fields.ContainsKey("expr") && node.Fields["expr"] != null)
+        {
+            var expr = node.Fields["expr"];
+            
+            // Handle list of expressions (when there are multiple)
+            if (expr is List<object> list && list.Count > 0)
+            {
+                expr = list[0];
+            }
+            
+            var exprCode = EmitExpression(expr);
+            if (!string.IsNullOrWhiteSpace(exprCode))
+            {
+                return exprCode + "\nreturn";
+            }
+        }
+        return "return";
+    }
+    
+    /// <summary>
+    /// Emit block statement.
+    /// </summary>
+    private static string EmitBlock(AstNode node)
+    {
+        if (node.Fields.ContainsKey("stmts"))
+        {
+            return EmitStatementList(node.Fields["stmts"]);
+        }
+        return "";
+    }
+    
+    /// <summary>
+    /// Emit a list of statements.
+    /// </summary>
+    public static string EmitStatementList(object? stmtsNode)
+    {
+        if (stmtsNode == null)
+        {
+            return "";
+        }
+        
+        // Handle List<object> directly
+        if (stmtsNode is List<object> stmtList)
+        {
+            return string.Join("\n", stmtList.Select(EmitStatement));
+        }
+        
+        // Handle single AstNode
+        if (!(stmtsNode is AstNode node))
+        {
+            return "";
+        }
+        
+        // If it's a Statements node, process all members
+        if (node.Type == "Statements" && node.Fields.ContainsKey("stmts"))
+        {
+            var stmts = node.Fields["stmts"];
+            if (stmts is List<object> innerList)
+            {
+                return string.Join("\n", innerList.Select(EmitStatement));
+            }
+            return EmitStatement(stmts);
+        }
+        
+        // Single statement
+        return EmitStatement(stmtsNode);
+    }
+    
+    /// <summary>
+    /// Emit parameter list for function.
+    /// </summary>
+    public static string EmitParameters(object? paramsNode)
+    {
+        if (paramsNode == null || !(paramsNode is AstNode node))
+        {
+            return "";
+        }
+        
+        if (node.Type == "FormalParameterList")
+        {
+            var results = new List<string>();
+            
+            // Try to find fixed parameters
+            if (node.Fields.ContainsKey("fixedParams"))
+            {
+                var fixedParams = node.Fields["fixedParams"];
+                if (fixedParams is AstNode fixedNode && fixedNode.Type == "FixedParameters")
+                {
+                    if (fixedNode.Fields.ContainsKey("parameters"))
+                    {
+                        var parameters = fixedNode.Fields["parameters"];
+                        if (parameters is List<object> paramList)
+                        {
+                            foreach (var param in paramList)
+                            {
+                                results.Add(EmitParameter(param));
+                            }
+                        }
+                        else
+                        {
+                            results.Add(EmitParameter(parameters));
+                        }
+                    }
+                }
+            }
+            
+            return string.Join("\n  ", results);
+        }
+        
+        return "";
+    }
+    
+    /// <summary>
+    /// Emit single parameter.
+    /// </summary>
+    private static string EmitParameter(object? paramNode)
+    {
+        if (paramNode == null || !(paramNode is AstNode node))
+        {
+            return "";
+        }
+        
+        if (node.Type == "FixedParameter")
+        {
+            var name = GetField(node, "name") ?? "param";
+            var typeStr = GetField(node, "type") ?? "i32";
+            var wasmType = MapCSharpTypeToWasm(typeStr);
+            
+            return $"(param ${name} {wasmType})";
+        }
+        
+        return "";
+    }
+    
+    /// <summary>
+    /// Map C# type name to WASM type.
+    /// </summary>
+    private static string MapCSharpTypeToWasm(string csharpType)
+    {
+        return csharpType switch
+        {
+            "int" or "uint" or "byte" or "sbyte" or "short" or "ushort" or "bool" or "char" => "i32",
+            "long" or "ulong" => "i64",
+            "float" => "f32",
+            "double" => "f64",
+            "void" => "",
+            _ => "i32" // Default
+        };
+    }
+    
+    /// <summary>
+    /// Helper to safely get a field from an AST node.
+    /// </summary>
+    private static string? GetField(AstNode? node, string fieldName)
+    {
+        if (node == null) return null;
+        
+        if (node.Fields.ContainsKey(fieldName))
+        {
+            var value = node.Fields[fieldName];
+            
+            // If it's an AST node, try to get its lexeme
+            if (value is AstNode astNode && astNode.Fields.ContainsKey("lexeme"))
+            {
+                return astNode.Fields["lexeme"]?.ToString();
+            }
+            
+            return value?.ToString();
+        }
+        
+        return null;
+    }
+}
+
+/// <summary>
 /// WASM MapSet: Translates C# AST to WebAssembly text format (WAT).
 /// 
 /// Maps are organized by category:
@@ -374,8 +773,22 @@ public class WASM : MapSet
     /// Return statement - supports optional expression
     /// Outputs (return) for void returns, (return expr) for value returns
     /// The expr field exists for all alternatives except void return
+    /// TYPED MAP: Uses WasmEmit helper to recursively emit expression
     /// </summary>
-    public Map ReturnStatement = "(return {expr})";
+    public Map<AstNode, string> ReturnStatement = TypedMap.For<string>()
+        .Emit(node =>
+        {
+            // Check if there's an expression to return
+            if (node.Fields.ContainsKey("expr") && node.Fields["expr"] != null)
+            {
+                var exprOutput = WasmEmit.EmitExpression(node.Fields["expr"]);
+                if (!string.IsNullOrWhiteSpace(exprOutput))
+                {
+                    return exprOutput + "\nreturn";
+                }
+            }
+            return "return";
+        });
     
     /// <summary>Throw statement</summary>
     public Map ThrowStatement = @";; throw {expr}
@@ -445,11 +858,13 @@ public class WASM : MapSet
     /// <summary>Shift expression</summary>
     public Map ShiftExpression = "({op} {left} {right})";
     
-    /// <summary>Additive expression</summary>
-    public Map AdditiveExpression = "({op} {left} {right})";
+    /// <summary>Additive expression - TYPED MAP</summary>
+    public Map<AstNode, string> AdditiveExpression = TypedMap.For<string>()
+        .Emit(node => WasmEmit.EmitBinaryExpression(node, "+"));
     
-    /// <summary>Multiplicative expression</summary>
-    public Map MultiplicativeExpression = "({op} {left} {right})";
+    /// <summary>Multiplicative expression - TYPED MAP</summary>
+    public Map<AstNode, string> MultiplicativeExpression = TypedMap.For<string>()
+        .Emit(node => WasmEmit.EmitBinaryExpression(node, "*"));
     
     /// <summary>Switch expression (C# 8+)</summary>
     public Map SwitchExpression = @"(block $switch_expr
@@ -627,8 +1042,9 @@ public class WASM : MapSet
     /// Each literal type (TrueLiteral, DecimalIntegerLiteral, etc.) has its own Map below.
     /// </summary>
     
-    /// <summary>Integer literal (decimal)</summary>
-    public Map DecimalIntegerLiteral = "(i32.const {lexeme})";
+    /// <summary>Integer literal (decimal) - Typed implementation</summary>
+    public Map<AstNode, string> DecimalIntegerLiteral = TypedMap.For<string>()
+        .Emit(node => WasmEmit.EmitIntegerLiteral(node));
     
     /// <summary>Hexadecimal integer literal</summary>
     public Map HexIntegerLiteral = "(i32.const {lexeme})";
@@ -1822,42 +2238,205 @@ public class WASM : MapSet
     // WASM IR EMISSION HELPERS (for Typed Map API)
     // ============================================================
     
+    // ============================================================
+    // HELPER METHODS FOR TYPED MAP EMITTERS
+    // ============================================================
+    
     /// <summary>
-    /// Helper method to emit WASM instruction for a literal value.
-    /// Demonstrates how typed Maps can generate WasmInstruction objects.
+    /// Emit WASM instructions for an expression AST node.
+    /// This is the core expression emitter that recursively processes all expression types.
     /// </summary>
-    private WasmInstruction EmitLiteral(AstNode node)
+    private WasmInstructionSequence EmitExpression(object? exprNode)
     {
-        var value = node["value"] as string ?? "0";
+        var seq = new WasmInstructionSequence();
         
-        // Try to parse as int
-        if (int.TryParse(value, out var intValue))
+        if (exprNode == null)
         {
-            return new WasmInstruction(OpCode.I32Const, intValue) { Comment = $"literal {value}" };
+            return seq; // Empty expression
         }
         
-        // Try to parse as long
-        if (long.TryParse(value, out var longValue))
+        if (!(exprNode is AstNode node))
         {
-            return new WasmInstruction(OpCode.I64Const, longValue) { Comment = $"literal {value}" };
+            // Not an AST node - might be a token value
+            return seq;
         }
         
-        // Try to parse as float
-        if (value.EndsWith("f") && float.TryParse(value.TrimEnd('f'), out var floatValue))
+        // Dispatch based on node type
+        switch (node.Type)
         {
-            return new WasmInstruction(OpCode.F32Const, floatValue) { Comment = $"literal {value}" };
+            // Literals
+            case "DecimalIntegerLiteral":
+            case "HexIntegerLiteral":
+            case "BinaryIntegerLiteral":
+                seq.Add(EmitIntegerLiteral(node));
+                break;
+                
+            case "FloatLiteral":
+                seq.Add(EmitFloatLiteral(node));
+                break;
+                
+            case "DoubleLiteral":
+                seq.Add(EmitDoubleLiteral(node));
+                break;
+                
+            case "TrueLiteral":
+                seq.Add(new WasmInstruction(OpCode.I32Const, 1));
+                break;
+                
+            case "FalseLiteral":
+                seq.Add(new WasmInstruction(OpCode.I32Const, 0));
+                break;
+                
+            // Binary operations
+            case "AdditiveExpression":
+            case "MultiplicativeExpression":
+            case "ShiftExpression":
+            case "RelationalExpression":
+            case "EqualityExpression":
+            case "BitwiseAndExpression":
+            case "BitwiseXorExpression":
+            case "BitwiseOrExpression":
+            case "LogicalAndExpression":
+            case "LogicalOrExpression":
+                seq.AddRange(EmitBinaryExpression(node).Instructions);
+                break;
+                
+            // Identifier (variable access)
+            case "Identifier":
+                seq.Add(EmitIdentifier(node));
+                break;
+                
+            // Parenthesized expression
+            case "ParenthesizedExpression":
+                if (node.Fields.ContainsKey("expr"))
+                {
+                    seq.AddRange(EmitExpression(node.Fields["expr"]).Instructions);
+                }
+                break;
+                
+            // Expression dispatchers
+            case "Expression":
+            case "NonAssignmentExpression":
+            case "UnaryExpression":
+            case "PrimaryExpression":
+            case "PrimaryNoArrayCreationExpression":
+                // These are dispatcher nodes - emit their child
+                if (node.Fields.ContainsKey("expr"))
+                {
+                    seq.AddRange(EmitExpression(node.Fields["expr"]).Instructions);
+                }
+                break;
+                
+            default:
+                // Unknown expression type - emit comment
+                seq.Add(new WasmInstruction(OpCode.Nop) { Comment = $"TODO: Emit {node.Type}" });
+                break;
         }
         
-        // Try to parse as double
-        if (double.TryParse(value, out var doubleValue))
+        return seq;
+    }
+    
+    /// <summary>
+    /// Emit integer literal instruction.
+    /// </summary>
+    private WasmInstruction EmitIntegerLiteral(AstNode node)
+    {
+        var lexeme = GetField(node, "lexeme") ?? "0";
+        
+        // Remove underscores (C# allows 1_000_000)
+        lexeme = lexeme.Replace("_", "");
+        
+        // Handle hex
+        if (lexeme.StartsWith("0x") || lexeme.StartsWith("0X"))
         {
-            return new WasmInstruction(OpCode.F64Const, doubleValue) { Comment = $"literal {value}" };
+            var value = Convert.ToInt32(lexeme, 16);
+            return new WasmInstruction(OpCode.I32Const, value);
         }
         
-        // Invalid literal - throw exception with diagnostic information
-        throw new InvalidOperationException(
-            $"Invalid literal value '{value}' in AST node '{node.Type}'. " +
-            $"Expected numeric literal (int, long, float, double).");
+        // Handle binary
+        if (lexeme.StartsWith("0b") || lexeme.StartsWith("0B"))
+        {
+            var value = Convert.ToInt32(lexeme.Substring(2), 2);
+            return new WasmInstruction(OpCode.I32Const, value);
+        }
+        
+        // Handle decimal
+        if (int.TryParse(lexeme, out var intValue))
+        {
+            return new WasmInstruction(OpCode.I32Const, intValue);
+        }
+        
+        // Fallback
+        return new WasmInstruction(OpCode.I32Const, 0) { Comment = $"Invalid literal: {lexeme}" };
+    }
+    
+    /// <summary>
+    /// Emit float literal instruction.
+    /// </summary>
+    private WasmInstruction EmitFloatLiteral(AstNode node)
+    {
+        var lexeme = GetField(node, "lexeme") ?? "0.0";
+        lexeme = lexeme.Replace("_", "").TrimEnd('f', 'F');
+        
+        if (float.TryParse(lexeme, out var value))
+        {
+            return new WasmInstruction(OpCode.F32Const, value);
+        }
+        
+        return new WasmInstruction(OpCode.F32Const, 0.0f);
+    }
+    
+    /// <summary>
+    /// Emit double literal instruction.
+    /// </summary>
+    private WasmInstruction EmitDoubleLiteral(AstNode node)
+    {
+        var lexeme = GetField(node, "lexeme") ?? "0.0";
+        lexeme = lexeme.Replace("_", "").TrimEnd('d', 'D');
+        
+        if (double.TryParse(lexeme, out var value))
+        {
+            return new WasmInstruction(OpCode.F64Const, value);
+        }
+        
+        return new WasmInstruction(OpCode.F64Const, 0.0);
+    }
+    
+    /// <summary>
+    /// Emit identifier (variable access).
+    /// </summary>
+    private WasmInstruction EmitIdentifier(AstNode node)
+    {
+        var name = GetField(node, "lexeme") ?? "unknown";
+        
+        // For now, we'll use parameter indices
+        // In a full implementation, this would look up the variable in a symbol table
+        // and determine if it's a local or parameter
+        return new WasmInstruction(OpCode.LocalGet, "$" + name);
+    }
+    
+    /// <summary>
+    /// Emit binary expression (a + b, a * b, etc).
+    /// </summary>
+    private WasmInstructionSequence EmitBinaryExpression(AstNode node)
+    {
+        var seq = new WasmInstructionSequence();
+        
+        // Get left and right operands
+        var left = node.Fields.ContainsKey("left") ? node.Fields["left"] : null;
+        var right = node.Fields.ContainsKey("right") ? node.Fields["right"] : null;
+        var op = GetField(node, "op") ?? "+";
+        
+        // Emit left operand
+        seq.AddRange(EmitExpression(left).Instructions);
+        
+        // Emit right operand
+        seq.AddRange(EmitExpression(right).Instructions);
+        
+        // Emit operator
+        seq.Add(EmitBinaryOp(op));
+        
+        return seq;
     }
     
     /// <summary>
@@ -1882,10 +2461,16 @@ public class WASM : MapSet
             (">", "i32") => OpCode.I32GtS,
             ("<=", "i32") => OpCode.I32LeS,
             (">=", "i32") => OpCode.I32GeS,
+            ("<<", "i32") => OpCode.I32Shl,
+            (">>", "i32") => OpCode.I32ShrS,
+            ("&&", "i32") => OpCode.I32And,
+            ("||", "i32") => OpCode.I32Or,
             
             ("+", "i64") => OpCode.I64Add,
             ("-", "i64") => OpCode.I64Sub,
             ("*", "i64") => OpCode.I64Mul,
+            ("/", "i64") => OpCode.I64DivS,
+            ("%", "i64") => OpCode.I64RemS,
             
             ("+", "f32") => OpCode.F32Add,
             ("-", "f32") => OpCode.F32Sub,
@@ -1901,6 +2486,155 @@ public class WASM : MapSet
         };
         
         return new WasmInstruction(opCode) { Comment = $"operator {op}" };
+    }
+    
+    /// <summary>
+    /// Emit statement instruction sequence.
+    /// </summary>
+    private WasmInstructionSequence EmitStatement(object? stmtNode)
+    {
+        var seq = new WasmInstructionSequence();
+        
+        if (stmtNode == null || !(stmtNode is AstNode node))
+        {
+            return seq;
+        }
+        
+        switch (node.Type)
+        {
+            case "ReturnStatement":
+                seq.AddRange(EmitReturnStatement(node).Instructions);
+                break;
+                
+            case "ExpressionStatement":
+                if (node.Fields.ContainsKey("expr"))
+                {
+                    seq.AddRange(EmitExpression(node.Fields["expr"]).Instructions);
+                }
+                break;
+                
+            case "Block":
+                if (node.Fields.ContainsKey("stmts"))
+                {
+                    seq.AddRange(EmitStatementList(node.Fields["stmts"]).Instructions);
+                }
+                break;
+                
+            case "EmptyStatement":
+                seq.Add(new WasmInstruction(OpCode.Nop));
+                break;
+                
+            // Statement dispatchers
+            case "Statement":
+            case "EmbeddedStatement":
+                if (node.Fields.ContainsKey("stmt"))
+                {
+                    seq.AddRange(EmitStatement(node.Fields["stmt"]).Instructions);
+                }
+                break;
+                
+            default:
+                seq.Add(new WasmInstruction(OpCode.Nop) { Comment = $"TODO: Emit {node.Type}" });
+                break;
+        }
+        
+        return seq;
+    }
+    
+    /// <summary>
+    /// Emit return statement.
+    /// </summary>
+    private WasmInstructionSequence EmitReturnStatement(AstNode node)
+    {
+        var seq = new WasmInstructionSequence();
+        
+        // Check if there's an expression to return
+        if (node.Fields.ContainsKey("expr"))
+        {
+            var expr = node.Fields["expr"];
+            if (expr != null)
+            {
+                // Emit the expression value
+                seq.AddRange(EmitExpression(expr).Instructions);
+            }
+        }
+        
+        // Emit return instruction
+        seq.Add(new WasmInstruction(OpCode.Return));
+        
+        return seq;
+    }
+    
+    /// <summary>
+    /// Emit a list of statements.
+    /// </summary>
+    private WasmInstructionSequence EmitStatementList(object? stmtsNode)
+    {
+        var seq = new WasmInstructionSequence();
+        
+        if (stmtsNode == null || !(stmtsNode is AstNode node))
+        {
+            return seq;
+        }
+        
+        // If it's a Statements node, process all members
+        if (node.Type == "Statements" && node.Fields.ContainsKey("stmts"))
+        {
+            var stmts = node.Fields["stmts"];
+            if (stmts is List<object> stmtList)
+            {
+                foreach (var stmt in stmtList)
+                {
+                    seq.AddRange(EmitStatement(stmt).Instructions);
+                }
+            }
+            else
+            {
+                seq.AddRange(EmitStatement(stmts).Instructions);
+            }
+        }
+        else
+        {
+            // Single statement
+            seq.AddRange(EmitStatement(stmtsNode).Instructions);
+        }
+        
+        return seq;
+    }
+    
+    /// <summary>
+    /// Map C# type name to WASM type.
+    /// </summary>
+    private WasmType MapCSharpTypeToWasm(object? typeNode)
+    {
+        if (typeNode == null) return WasmType.Void;
+        
+        var typeName = GetField(typeNode as AstNode, "lexeme") ?? "void";
+        
+        return WasmTypeExtensions.FromCSharpType(typeName);
+    }
+    
+    /// <summary>
+    /// Helper to safely get a field from an AST node.
+    /// </summary>
+    private string? GetField(AstNode? node, string fieldName)
+    {
+        if (node == null) return null;
+        
+        if (node.Fields.ContainsKey(fieldName))
+        {
+            var value = node.Fields[fieldName];
+            
+            // If it's an AST node, try to get its lexeme
+            if (value is AstNode astNode && astNode.Fields.ContainsKey("lexeme"))
+            {
+                return astNode.Fields["lexeme"]?.ToString();
+            }
+            
+            return value?.ToString();
+        }
+        
+        return null;
     }
     
     /// <summary>
