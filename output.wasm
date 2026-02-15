@@ -3,16 +3,14 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class Test
-(type $Test (struct
-(func $GetFive
+;; class A
+(type $A (struct
+(func $M
 (block
-nop
 
-)
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )
-  (result i32)
+  (result )
 
 )
 ))
