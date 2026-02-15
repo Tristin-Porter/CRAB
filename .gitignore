@@ -9,3 +9,9 @@ tests/
 *.wasm
 *.wat
 
+# Test command generated projects
+HelloWorld/
+Calculator/
+ClassHierarchy/
+GenericCollections/
+

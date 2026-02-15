@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Solution Version="1.0">
-  <Properties>
-    <Name>ClassHierarchy</Name>
-  </Properties>
-  <Project Path="ClassHierarchy.csproj" Name="ClassHierarchy" Type="C#" Id="{89989819-3B0A-4EE1-933F-A4ED2B228DE4}" />
-</Solution>

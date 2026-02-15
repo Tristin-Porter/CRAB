@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Solution Version="1.0">
-  <Properties>
-    <Name>Calculator</Name>
-  </Properties>
-  <Project Path="Calculator.csproj" Name="Calculator" Type="C#" Id="{B1032D0D-95A5-45C3-B7B2-99E6337CDCFF}" />
-</Solution>
