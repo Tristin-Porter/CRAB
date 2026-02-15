@@ -5,21 +5,16 @@
   ;; Generated members
 ;; class Test
 (type $Test (struct
-(func $NoParams
+(func $M
 (block
-(return)
+(return ;; TODO: Add map for this construct
+nop
+
+)
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )
   (result i32)
 
-)
-(func $WithParams
-(param $ ), 
-  (result i32)
-(block
-(return)
-  ;; Deallocation instructions inserted here based on AutomaticModel analysis
-)
 )
 ))
 )

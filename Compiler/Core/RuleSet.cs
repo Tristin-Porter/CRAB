@@ -636,8 +636,12 @@ public class Rules : RuleSet
     // EXPRESSIONS - Fixed left recursion
     // ============================================================
 
-    public Rule Expression = new Rule("expr:NonAssignmentExpression | expr:AssignmentExpression")
-        .Returns("expr");
+    // Expression dispatcher - uses string syntax with labeled alternatives
+    // "expr:NonAssignmentExpression | expr:AssignmentExpression" creates an Expression AST node
+    // with an 'expr' field containing whichever alternative matched.
+    // The Map uses {expr} to pass through to the child node.
+    // NOTE: String syntax with labels automatically populates fields; .Returns() not needed here.
+    public Rule Expression = "expr:NonAssignmentExpression | expr:AssignmentExpression";
 
     // ASSIGNMENT EXPRESSIONS
     public Rule AssignmentExpression = new Rule("left:UnaryExpressionBase op:AssignmentOperator right:Expression")
@@ -770,7 +774,25 @@ public class Rules : RuleSet
     // PRIMARY EXPRESSION - Core items without suffixes
     public Rule PrimaryExpressionCore = "expr:Literal | expr:SimpleName | expr:ParenthesizedExpression | expr:ThisAccessExpression | expr:BaseAccessExpression | expr:ObjectCreationExpression | expr:DelegateCreationExpression | expr:AnonymousObjectCreationExpression | expr:ArrayCreationExpression | expr:ImplicitArrayCreationExpression | expr:TypeofExpression | expr:LambdaExpression | expr:QueryExpression | expr:StackallocExpression | expr:TupleExpression | expr:CollectionExpression";
 
-    public Rule Literal = "lit:@KwTrue | lit:@KwFalse | lit:@KwNull | lit:@DecimalIntegerLiteral | lit:@HexIntegerLiteral | lit:@BinaryIntegerLiteral | lit:@FloatLiteral | lit:@FloatLiteralNoDecimal | lit:@FloatLiteralSuffix | lit:@CharacterLiteral | lit:@StringLiteral | lit:@VerbatimStringLiteral | lit:@InterpolatedStringStart | lit:@RawStringLiteral | lit:@Utf8StringLiteral";
+    // Literal dispatcher - creates specific literal type nodes
+    public Rule Literal = "TrueLiteral | FalseLiteral | NullLiteral | DecimalIntegerLiteral | HexIntegerLiteral | BinaryIntegerLiteral | FloatLiteral | FloatLiteralNoDecimal | FloatLiteralSuffix | CharacterLiteral | StringLiteral | VerbatimStringLiteral | InterpolatedStringStart | RawStringLiteral | Utf8StringLiteral";
+
+    // Literal type rules - Each creates its own AST node type
+    public Rule TrueLiteral = new Rule("@KwTrue");
+    public Rule FalseLiteral = new Rule("@KwFalse");
+    public Rule NullLiteral = new Rule("@KwNull");
+    public Rule DecimalIntegerLiteral = new Rule("@DecimalIntegerLiteral");
+    public Rule HexIntegerLiteral = new Rule("@HexIntegerLiteral");
+    public Rule BinaryIntegerLiteral = new Rule("@BinaryIntegerLiteral");
+    public Rule FloatLiteral = new Rule("@FloatLiteral");
+    public Rule FloatLiteralNoDecimal = new Rule("@FloatLiteralNoDecimal");
+    public Rule FloatLiteralSuffix = new Rule("@FloatLiteralSuffix");
+    public Rule CharacterLiteral = new Rule("@CharacterLiteral");
+    public Rule StringLiteral = new Rule("@StringLiteral");
+    public Rule VerbatimStringLiteral = new Rule("@VerbatimStringLiteral");
+    public Rule InterpolatedStringStart = new Rule("@InterpolatedStringStart");
+    public Rule RawStringLiteral = new Rule("@RawStringLiteral");
+    public Rule Utf8StringLiteral = new Rule("@Utf8StringLiteral");
 
     public Rule SimpleName = new Rule("name:@Identifier typeArgs:TypeArgumentList?")
         .Returns("name", "typeArgs");

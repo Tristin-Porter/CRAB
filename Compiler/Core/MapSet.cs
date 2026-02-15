@@ -325,11 +325,10 @@ public class WASM : MapSet
     public Map GotoStatement = "(br ${target})";
     
     /// <summary>
-    /// Return statement
-    /// NOTE: Expression support is simplified - outputs (return) for both `return;` and `return expr;`
-    /// Full expression lowering needs to be implemented separately for proper `(return {expr})` support
+    /// Return statement - supports optional expression
+    /// Outputs (return) for void returns, (return expr) for value returns
     /// </summary>
-    public Map ReturnStatement = "(return)";
+    public Map ReturnStatement = "(return {expr})";
     
     /// <summary>Throw statement</summary>
     public Map ThrowStatement = @";; throw {expr}
@@ -575,8 +574,11 @@ public class WASM : MapSet
     // LITERALS
     // ============================================================
     
-    /// <summary>Literal dispatcher</summary>
-    public Map Literal = "{value}";
+    /// <summary>
+    /// Literal dispatcher - passes through to specific literal type.
+    /// No Map needed because Literal rule is a pure dispatcher that doesn't create its own AST node.
+    /// Each literal type (TrueLiteral, DecimalIntegerLiteral, etc.) has its own Map below.
+    /// </summary>
     
     /// <summary>Integer literal (decimal)</summary>
     public Map DecimalIntegerLiteral = "(i32.const {value})";

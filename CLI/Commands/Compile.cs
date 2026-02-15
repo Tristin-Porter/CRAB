@@ -157,9 +157,10 @@ class Compile : Command
                 if (verbose) System.Console.WriteLine("\n[5/6] WebAssembly generation complete...");
                 wasmText = result.Output ?? "";
                 
-                // WORKAROUND: Fix method declarations affected by CDTk field-shifting bug
-                // See MapSet.cs MethodDeclaration Map for details
-                wasmText = FixMethodDeclarations(wasmText);
+                // WORKAROUND NOTE: FixMethodDeclarations() was previously called here to work around
+                // a CDTk field-shifting bug, but the method is not yet implemented.
+                // See MapSet.cs MethodDeclaration Map for details on the issue.
+                // For now, we proceed without this fix.
                 
                 if (string.IsNullOrWhiteSpace(wasmText))
                 {
