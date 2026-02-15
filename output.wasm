@@ -5,13 +5,18 @@
   ;; Generated members
 ;; class Test
 (type $Test (struct
-(func $Add
-  ;; Parameters and body
-  (result i32)
-(param $(block
+(func $NoParams
+(block
 (return)
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
-) {type}), (block
+)
+  (result i32)
+
+)
+(func $WithParams
+(param $ ), 
+  (result i32)
+(block
 (return)
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )

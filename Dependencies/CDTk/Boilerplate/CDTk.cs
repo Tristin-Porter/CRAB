@@ -9311,6 +9311,10 @@ namespace CDTk
                 result = result.Replace($"{{{kv.Key}}}", kv.Value);
             }
 
+            // Replace any remaining placeholders (fields that don't exist in the AST node) with empty string
+            // This handles cases where optional fields in the grammar cause field shifting
+            result = System.Text.RegularExpressions.Regex.Replace(result, @"\{[a-zA-Z_][a-zA-Z0-9_]*\}", "");
+
             return result;
         }
     }

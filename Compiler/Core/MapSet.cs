@@ -187,11 +187,21 @@ public class WASM : MapSet
     
     /// <summary>
     /// Method declaration - primary compilation target.
-    /// WORKAROUND for CDTk parser bug with optional fields.
-    /// Field shifting based on parameters presence - use {name} which works for both cases
-    /// but requires MethodBody Map to handle the shifting internally
+    /// WORKAROUND for CDTk field-shifting bug.
+    /// 
+    /// Field assignments due to CDTk bug:
+    /// - NO params: attrs=Type, mods=Identifier, returnType=MethodBody, name=empty
+    /// - WITH params: attrs=Type, mods=Identifier, returnType=FormalParameterList, name=MethodBody
+    /// 
+    /// We put returnType (params or body) before result, then name (body or empty) after.
+    /// This works because:
+    /// - NO params: body comes first (wrong but at least renders), result after, empty name
+    /// - WITH params: params first (correct!), result after, body last (correct!)
+    /// 
+    /// TODO: Fix CDTk parser to assign fields by pattern labels, not Returns() order
     /// </summary>
     public Map MethodDeclaration = @"(func ${mods}
+{returnType}
   (result {attrs})
 {name}
 )";
