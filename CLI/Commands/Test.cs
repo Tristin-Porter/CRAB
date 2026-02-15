@@ -238,14 +238,40 @@ class Test : Command
 
             if (verbose || debugMode) System.Console.WriteLine();
 
-            // Save WASM/WAT file if requested
+            // Save WASM/WAT/JS/HTML files if requested
             if (saveOutputs && saveDir != null)
             {
                 string wasmSaveDir = Path.Combine(saveDir, "wasm");
+                string binDir = Path.Combine(projectPath, "bin");
+                
+                // Copy the main output file (WASM or WAT)
                 string watDest = Path.Combine(wasmSaveDir, Path.GetFileName(outputFile));
                 File.Copy(outputFile, watDest, overwrite: true);
-                
                 LogInfo($"Saved WASM/WAT output to {watDest}");
+                
+                // Also copy JS and HTML files if they exist
+                string jsSource = Path.Combine(binDir, "output.js");
+                string htmlSource = Path.Combine(binDir, "index.html");
+                
+                if (File.Exists(jsSource))
+                {
+                    string jsDest = Path.Combine(wasmSaveDir, "output.js");
+                    File.Copy(jsSource, jsDest, overwrite: true);
+                    LogInfo($"Saved JS wrapper to {jsDest}");
+                    
+                    if (verbose || debugMode)
+                        System.Console.WriteLine($"Saved output.js to {wasmSaveDir}");
+                }
+                
+                if (File.Exists(htmlSource))
+                {
+                    string htmlDest = Path.Combine(wasmSaveDir, "index.html");
+                    File.Copy(htmlSource, htmlDest, overwrite: true);
+                    LogInfo($"Saved HTML runner to {htmlDest}");
+                    
+                    if (verbose || debugMode)
+                        System.Console.WriteLine($"Saved index.html to {wasmSaveDir}");
+                }
                 
                 if (verbose || debugMode)
                     System.Console.WriteLine($"Saved {Path.GetFileName(outputFile)} to {wasmSaveDir}");
