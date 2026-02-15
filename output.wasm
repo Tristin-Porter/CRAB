@@ -3,9 +3,20 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class Test
-(type $Test (struct
-(func $M
+;; class Calculator
+(type $Calculator (struct
+(func $Add
+(param $ ), 
+  (result i32)
+(block
+(return ;; TODO: Add map for this construct
+nop
+
+)
+  ;; Deallocation instructions inserted here based on AutomaticModel analysis
+)
+)
+(func $GetFive
 (block
 (return ;; TODO: Add map for this construct
 nop
@@ -15,6 +26,17 @@ nop
 )
   (result i32)
 
+)
+(func $Subtract
+(param $ ), 
+  (result i32)
+(block
+(return ;; TODO: Add map for this construct
+nop
+
+)
+  ;; Deallocation instructions inserted here based on AutomaticModel analysis
+)
 )
 ))
 )
