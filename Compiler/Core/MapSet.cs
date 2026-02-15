@@ -683,8 +683,8 @@ public class WASM : MapSet
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )";
     
-    /// <summary>Statements list</summary>
-    public Map Statements = "{stmts}";
+    /// <summary>Statements list - returns statement type for now, post-processing will handle lists</summary>
+    public Map Statements = "Statement";
     
     /// <summary>Empty statement (no-op)</summary>
     public Map EmptyStatement = "(nop)";

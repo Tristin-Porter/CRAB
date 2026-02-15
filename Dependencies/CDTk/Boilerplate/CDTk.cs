@@ -9305,18 +9305,6 @@ namespace CDTk
                     continue;
                 }
 
-                // DEBUG
-                if (key == "stmts" && v is AstNode stmtsNode && stmtsNode.Type == "Statements")
-                {
-                    foreach (var f in stmtsNode.Fields)
-                    {
-                        if (f.Value is List<AstNode> list)
-                        {
-                            Console.WriteLine($"DEBUG: Statements node has field '{f.Key}' with List<AstNode>[{list.Count}]");
-                        }
-                    }
-                }
-
                 if (v is string s)
                 {
                     vars[key] = s;
@@ -9398,6 +9386,30 @@ namespace CDTk
                 }
                 else
                 {
+                    // Last resort - check if it's any collection of AstNode
+                    if (v is System.Collections.IEnumerable enumerable && !(v is string))
+                    {
+                        var astNodeList = new List<AstNode>();
+                        foreach (var item in enumerable)
+                        {
+                            if (item is AstNode astNode)
+                            {
+                                astNodeList.Add(astNode);
+                            }
+                        }
+                        if (astNodeList.Count > 0)
+                        {
+                            if (key == "stmts")
+                            {
+                                Console.WriteLine($"FALLBACK: Found {astNodeList.Count} AstNodes in enumerable for key '{key}', mapSet={mapSet != null}");
+                            }
+                            if (mapSet != null)
+                            {
+                                vars[key] = string.Join("\n", astNodeList.Select(n => mapSet.Transform(n) ?? n.Type));
+                                continue;
+                            }
+                        }
+                    }
                     vars[key] = v.ToString() ?? "";
                 }
             }

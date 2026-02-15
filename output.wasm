@@ -8,15 +8,13 @@
 (func $Add
   (result i32)
 (block
-System.Collections.Generic.List`1[CDTk.AstNode]
-return
+Statement
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )
 )
 (func $GetFive
 (block
-System.Collections.Generic.List`1[CDTk.AstNode]
-return
+Statement
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )
   (result i32)
