@@ -913,16 +913,21 @@ public class WASM : MapSet
     /// - WITH params: params first (correct!), result after, body last (correct!)
     /// 
     /// TODO: Fix CDTk parser to assign fields by pattern labels, not Returns() order
-    /// </summary>
-    /// <summary>
-    /// Method declaration - lowered to WASM function.
+    /// 
+    /// Additional context for OOP implementation:
     /// For virtual methods, a vtable dispatch mechanism should be added by semantic analysis.
     /// For interface methods, interface dispatch tables should be generated.
+    /// Once CDTk parser is fixed, the proper structure should be:
+    ///   (func ${name}
+    ///     (param {parameters})
+    ///     (result {returnType})
+    ///   {body}
+    ///   )
     /// </summary>
-    public Map MethodDeclaration = @"(func ${name}
-  (param {parameters})
-  (result {returnType})
-{body}
+    public Map MethodDeclaration = @"(func ${mods}
+{returnType}
+  (result {attrs})
+{name}
 )";
     
     /// <summary>Field declaration - TODO: properly handle multiple declarators</summary>
