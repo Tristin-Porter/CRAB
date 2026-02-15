@@ -117,7 +117,8 @@ public class Rules : RuleSet
     public Rule InterfaceMemberDeclarations = new Rule("members:InterfaceMemberDeclaration+")
         .Returns("members");
 
-    public Rule InterfaceMemberDeclaration = new Rule("member:InterfaceMethodDeclaration | member:InterfacePropertyDeclaration | member:InterfaceEventDeclaration | member:InterfaceIndexerDeclaration")
+    // C# 11: Interfaces can now have static abstract members, operators, etc.
+    public Rule InterfaceMemberDeclaration = new Rule("member:InterfaceMethodDeclaration | member:InterfacePropertyDeclaration | member:InterfaceEventDeclaration | member:InterfaceIndexerDeclaration | member:InterfaceOperatorDeclaration | member:InterfaceConversionOperatorDeclaration")
         .Returns("member");
 
     // ENUM DECLARATION
@@ -307,6 +308,13 @@ public class Rules : RuleSet
 
     public Rule InterfaceIndexerDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? type:Type @KwThis @OpenBracket parameters:FormalParameterList @CloseBracket accessors:AccessorDeclarations")
         .Returns("attrs", "mods", "type", "parameters", "accessors");
+
+    // C# 11: Static abstract operators in interfaces
+    public Rule InterfaceOperatorDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? returnType:Type @KwOperator op:OverloadableOperator @OpenParen parameters:FormalParameterList @CloseParen body:InterfaceMethodBody")
+        .Returns("attrs", "mods", "returnType", "op", "parameters", "body");
+
+    public Rule InterfaceConversionOperatorDeclaration = new Rule("attrs:AttributeSections? mods:Modifiers? kind:(@KwImplicit | @KwExplicit) @KwOperator type:Type @OpenParen parameter:FormalParameter @CloseParen body:InterfaceMethodBody")
+        .Returns("attrs", "mods", "kind", "type", "parameter", "body");
 
     // ============================================================
     // FORMAL PARAMETERS
