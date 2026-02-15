@@ -433,8 +433,9 @@ class Program
 
         int total = 0;
         int passed = 0;
-        var results = new List<(string arch, string format, bool success, string message)>();
+        var results = new List<(string arch, string format, bool success, string message, long compileTimeMs)>();
 
+        // Test native architectures
         foreach (var arch in architectures)
         {
             foreach (var format in formats)
@@ -452,6 +453,7 @@ class Program
                 
                 LogDebug($"Testing {arch}/{format}");
 
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     var compileCommand = new Compile();
@@ -473,12 +475,13 @@ class Program
 
                         compileCommand.Execute(new[] { outputFile }, compileFlags);
                         
+                        sw.Stop();
                         System.Console.SetOut(originalOut);
-                        System.Console.WriteLine("✅ PASS");
+                        System.Console.WriteLine($"✅ PASS ({sw.ElapsedMilliseconds}ms)");
                         passed++;
-                        results.Add((arch, format, true, "Success"));
+                        results.Add((arch, format, true, "Success", sw.ElapsedMilliseconds));
                         
-                        LogInfo($"Test {arch}/{format} PASSED");
+                        LogInfo($"Test {arch}/{format} PASSED in {sw.ElapsedMilliseconds}ms");
                         
                         // Save output if requested
                         if (saveDir != null && File.Exists(outputFileName))
@@ -493,16 +496,18 @@ class Program
                     }
                     catch
                     {
+                        sw.Stop();
                         System.Console.SetOut(originalOut);
                         throw;
                     }
                 }
                 catch (Exception ex)
                 {
-                    System.Console.WriteLine("❌ FAIL");
-                    results.Add((arch, format, false, ex.Message));
+                    sw.Stop();
+                    System.Console.WriteLine($"❌ FAIL ({sw.ElapsedMilliseconds}ms)");
+                    results.Add((arch, format, false, ex.Message, sw.ElapsedMilliseconds));
                     
-                    LogInfo($"Test {arch}/{format} FAILED: {ex.Message}");
+                    LogInfo($"Test {arch}/{format} FAILED in {sw.ElapsedMilliseconds}ms: {ex.Message}");
                     LogDebug($"Exception for {arch}/{format}: {ex}");
                     
                     if (verbose || debug)
@@ -521,11 +526,102 @@ class Program
             }
         }
         
+        // Test WASM format
+        System.Console.WriteLine();
+        System.Console.WriteLine("  Testing WASM Output:");
+        total++;
+        string wasmTestName = "WASM (wasm)";
+        System.Console.Write($"  Testing {wasmTestName,-25} ");
+        
+        LogDebug("Testing WASM format");
+        
+        var wasmSw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            // Read WAT file
+            string watContent = File.ReadAllText(outputFile);
+            
+            // Use BadgerCompiler directly for WASM
+            byte[] wasmBinary = Badger.BadgerCompiler.Compile(watContent, "wasm", "wasm");
+            
+            wasmSw.Stop();
+            System.Console.WriteLine($"✅ PASS ({wasmSw.ElapsedMilliseconds}ms)");
+            passed++;
+            results.Add(("wasm", "wasm", true, "Success", wasmSw.ElapsedMilliseconds));
+            
+            LogInfo($"Test WASM format PASSED in {wasmSw.ElapsedMilliseconds}ms");
+            LogInfo($"Generated {wasmBinary.Length} bytes of WASM binary");
+            
+            // Save WASM and JS if requested
+            if (saveDir != null)
+            {
+                string wasmSaveDir = Path.Combine(saveDir, "wasm");
+                
+                // Save WASM binary
+                string wasmPath = Path.Combine(wasmSaveDir, "output.wasm");
+                File.WriteAllBytes(wasmPath, wasmBinary);
+                
+                // Copy JS wrapper if it exists
+                if (File.Exists("output.js"))
+                {
+                    string jsPath = Path.Combine(wasmSaveDir, "output.js");
+                    File.Copy("output.js", jsPath, overwrite: true);
+                    
+                    LogInfo($"Saved WASM binary ({wasmBinary.Length} bytes) and JS wrapper to {wasmSaveDir}");
+                    
+                    if (verbose || debug)
+                    {
+                        System.Console.WriteLine($"    Saved {wasmBinary.Length} bytes to {wasmPath}");
+                        System.Console.WriteLine($"    Saved JS wrapper to {jsPath}");
+                    }
+                }
+            }
+            
+            // Cleanup output.js if not saving
+            if (saveDir == null && File.Exists("output.js"))
+            {
+                File.Delete("output.js");
+            }
+        }
+        catch (Exception ex)
+        {
+            wasmSw.Stop();
+            System.Console.WriteLine($"❌ FAIL ({wasmSw.ElapsedMilliseconds}ms)");
+            results.Add(("wasm", "wasm", false, ex.Message, wasmSw.ElapsedMilliseconds));
+            
+            LogInfo($"Test WASM format FAILED in {wasmSw.ElapsedMilliseconds}ms: {ex.Message}");
+            LogDebug($"Exception for WASM: {ex}");
+            
+            if (verbose || debug)
+                System.Console.WriteLine($"    Error: {ex.Message}");
+        }
+        
         LogInfo($"Comprehensive tests completed: {passed}/{total} passed");
         
         // Set out parameters
         testsPassed = passed;
         testsTotal = total;
+        
+        // Performance summary
+        if (debug)
+        {
+            System.Console.WriteLine();
+            System.Console.WriteLine("Performance Summary:");
+            System.Console.WriteLine("  Format           Average Time    Min Time    Max Time");
+            System.Console.WriteLine("  " + new string('-', 60));
+            
+            var successResults = results.Where(r => r.success).ToList();
+            if (successResults.Any())
+            {
+                var avgTime = successResults.Average(r => r.compileTimeMs);
+                var minTime = successResults.Min(r => r.compileTimeMs);
+                var maxTime = successResults.Max(r => r.compileTimeMs);
+                
+                System.Console.WriteLine($"  All formats      {avgTime,10:F1}ms    {minTime,7}ms    {maxTime,7}ms");
+                
+                LogDebug($"Performance: Avg={avgTime:F1}ms, Min={minTime}ms, Max={maxTime}ms");
+            }
+        }
         
         // Report saved outputs
         if (saveDir != null)
@@ -533,10 +629,10 @@ class Program
             System.Console.WriteLine();
             System.Console.WriteLine($"Saved outputs to: {saveDir}");
             System.Console.WriteLine($"  - WASM files in: {Path.Combine(saveDir, "wasm")}");
-            System.Console.WriteLine($"  - {passed} binaries in: {Path.Combine(saveDir, "binaries")}");
+            System.Console.WriteLine($"  - {passed - 1} binaries in: {Path.Combine(saveDir, "binaries")}"); // -1 for WASM
             System.Console.WriteLine($"  - Logs in: {Path.Combine(saveDir, "logs")}");
             
-            LogInfo($"Saved {passed} binaries to {saveDir}");
+            LogInfo($"Saved {passed} outputs to {saveDir}");
         }
 
         // Try to run on the appropriate architecture for the current platform
