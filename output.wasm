@@ -3,17 +3,8 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class Calculator
-(type $Calculator (struct
-(func $Add
-  (result i32)
-(block
-nop
-
-)
-  ;; Deallocation instructions inserted here based on AutomaticModel analysis
-)
-)
+;; class Test
+(type $Test (struct
 (func $GetFive
 (block
 nop
