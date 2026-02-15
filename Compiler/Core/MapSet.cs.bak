@@ -100,6 +100,7 @@ public static class WasmEmit
         // For debugging complex expressions
         if (node.Type == "Sequence" && node.Fields.Count > 0)
         {
+            System.Console.WriteLine($"DEBUG Sequence dispatcher: fields={string.Join(", ", node.Fields.Keys)}");
             foreach (var kvp in node.Fields)
             {
                 var value = kvp.Value;
@@ -116,6 +117,8 @@ public static class WasmEmit
                 var right = node.Fields["right"];
                 if (right is AstNode rightNode && rightNode.Type.EndsWith("Operator"))
                 {
+                    System.Console.WriteLine($"DEBUG: Sequence has operator on right - CDTk parsing issue!");
+                    System.Console.WriteLine($"DEBUG: Need to check for expr field instead");
                 }
                 
                 // This is a binary operation embedded in a sequence
@@ -132,6 +135,7 @@ public static class WasmEmit
         // this is CDTk creating a weird structure for binary operations
         if (node.Type == "Expression" && node.Fields.ContainsKey("left") && node.Fields.ContainsKey("right") && !node.Fields.ContainsKey("expr"))
         {
+            System.Console.WriteLine($"DEBUG: Expression has left/right instead of expr - CDTk parsing bug");
             
             var left = node.Fields["left"];
             var right = node.Fields["right"];
@@ -143,29 +147,39 @@ public static class WasmEmit
                 var seqLeft = leftSeq.Fields["left"];   // First operand
                 var seqRight = leftSeq.Fields["right"]; // Operator
                 
+                System.Console.WriteLine($"DEBUG: Found Sequence structure - reconstructing binary operation");
                 var seqLeftNode = seqLeft as AstNode;
                 var rightExprNode = right as AstNode;
+                System.Console.WriteLine($"DEBUG: seqLeft type={seqLeftNode?.Type}, fields={string.Join(", ", seqLeftNode?.Fields.Keys.ToArray() ?? Array.Empty<string>())}");
+                System.Console.WriteLine($"DEBUG: right type={rightExprNode?.Type}, fields={string.Join(", ", rightExprNode?.Fields.Keys.ToArray() ?? Array.Empty<string>())}");
                 
                 // Extract the operator
                 string op = "+";  // default
                 if (seqRight is AstNode opNode && opNode.Fields.ContainsKey("lexeme"))
                 {
                     op = opNode.Fields["lexeme"]?.ToString() ?? "+";
+                    System.Console.WriteLine($"DEBUG: Operator = {op}");
                 }
                 
                 // Emit: left_operand right_operand operator_instruction
+                System.Console.WriteLine($"DEBUG: About to emit seqLeft");
                 var leftCode = EmitExpression(seqLeft);
+                System.Console.WriteLine($"DEBUG: leftCode = '{leftCode}'");
                 
+                System.Console.WriteLine($"DEBUG: About to emit right");
                 var rightCode = EmitExpression(right);
+                System.Console.WriteLine($"DEBUG: rightCode = '{rightCode}'");
                 
                 var opCode = MapOperator(op);
                 
+                System.Console.WriteLine($"DEBUG: Emitting binary op: leftCode={leftCode}, rightCode={rightCode}, opCode={opCode}");
                 return $"{leftCode}\n{rightCode}\n{opCode}";
             }
             
             // Fallback: just use the right field
             if (right is AstNode rightNode && (rightNode.Type.EndsWith("Expression") || rightNode.Type == "Sequence"))
             {
+                System.Console.WriteLine($"DEBUG: Using right field ({rightNode.Type}) as fallback");
                 return EmitExpression(right);
             }
         }
@@ -297,6 +311,8 @@ public static class WasmEmit
     public static string EmitBinaryExpression(AstNode node, string defaultOp)
     {
         // DEBUG: Print node structure
+        System.Console.WriteLine($"DEBUG EmitBinaryExpression: node.Type={node.Type}");
+        System.Console.WriteLine($"DEBUG EmitBinaryExpression: fields={string.Join(", ", node.Fields.Keys)}");
         foreach (var kvp in node.Fields)
         {
             var value = kvp.Value;
@@ -440,13 +456,35 @@ public static class WasmEmit
     /// </summary>
     private static string EmitReturnStatement(AstNode node)
     {
+        System.Console.WriteLine($"DEBUG EmitReturnStatement: node.Type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
+        
         if (node.Fields.ContainsKey("expr") && node.Fields["expr"] != null)
         {
             var expr = node.Fields["expr"];
             
+            System.Console.WriteLine($"DEBUG EmitReturnStatement: expr type={expr?.GetType().Name}");
+            
             // Handle list of expressions (CDTk may return List<AstNode>)
             if (expr is List<AstNode> astList)
             {
+                System.Console.WriteLine($"DEBUG EmitReturnStatement: expr is List<AstNode> with {astList.Count} items");
+                for (int i = 0; i < astList.Count; i++)
+                {
+                    var item = astList[i];
+                    System.Console.WriteLine($"  [{i}] Type={item.Type}, fields={string.Join(", ", item.Fields.Keys)}");
+                    // Show all fields for Expression node
+                    if (item.Type == "Expression")
+                    {
+                        foreach (var kvp in item.Fields)
+                        {
+                            if (kvp.Value is AstNode an)
+                                System.Console.WriteLine($"      {kvp.Key} = AstNode({an.Type})");
+                            else
+                                System.Console.WriteLine($"      {kvp.Key} = {kvp.Value?.GetType().Name}");
+                        }
+                    }
+                }
+                
                 if (astList.Count > 0)
                 {
                     // Try to find the actual expression (not the return keyword or semicolon)
@@ -454,6 +492,7 @@ public static class WasmEmit
                     {
                         if (item.Type != "KwReturn" && item.Type != "Semicolon")
                         {
+                            System.Console.WriteLine($"DEBUG EmitReturnStatement: Found non-keyword item: {item.Type}");
                             expr = item;
                             break;
                         }
