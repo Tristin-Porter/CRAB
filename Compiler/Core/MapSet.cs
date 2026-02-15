@@ -474,7 +474,7 @@ public static class WasmEmit
     /// <summary>
     /// Map C# type name to WASM type.
     /// </summary>
-    private static string MapCSharpTypeToWasm(string csharpType)
+    public static string MapCSharpTypeToWasm(string csharpType)
     {
         return csharpType switch
         {
@@ -1307,8 +1307,249 @@ public class WASM : MapSet
     // PARAMETERS AND ARGUMENTS
     // ============================================================
     
+    /// <summary>Formal parameter list - emit WASM parameter declarations</summary>
+    public Map<AstNode, string> FormalParameterList = TypedMap.For<string>()
+        .Emit(node => {
+            System.Console.WriteLine($"DEBUG FormalParameterList: node.Type={node.Type}, fields={string.Join(",", node.Fields.Keys)}");
+            if (node == null || !node.Fields.ContainsKey("params")) return "";
+            
+            var paramsField = node.Fields["params"];
+            if (paramsField == null) return "";
+            
+            System.Console.WriteLine($"DEBUG FormalParameterList: paramsField type={paramsField.GetType().Name}");
+            
+            // Process the params field to extract parameters
+            var result = EmitParameterList(paramsField);
+            System.Console.WriteLine($"DEBUG FormalParameterList: result='{result}'");
+            return result;
+        });
+    
+    /// <summary>
+    /// Emit parameter list from params field.
+    /// </summary>
+    private static string EmitParameterList(object? paramsNode)
+    {
+        System.Console.WriteLine($"DEBUG EmitParameterList: paramsNode type={paramsNode?.GetType().Name}");
+        if (paramsNode == null) return "";
+        
+        if (!(paramsNode is AstNode node))
+        {
+            System.Console.WriteLine($"DEBUG EmitParameterList: not an AstNode");
+            return "";
+        }
+        
+        System.Console.WriteLine($"DEBUG EmitParameterList: node.Type={node.Type}, fields={string.Join(",", node.Fields.Keys)}");
+        
+        // Handle FormalParameterListContent
+        if (node.Type == "FormalParameterListContent" && node.Fields.ContainsKey("params"))
+        {
+            System.Console.WriteLine($"DEBUG EmitParameterList: recursing for FormalParameterListContent");
+            return EmitParameterList(node.Fields["params"]);
+        }
+        
+        // Handle FixedParameters
+        if (node.Type == "FixedParameters")
+        {
+            System.Console.WriteLine($"DEBUG EmitParameterList: processing FixedParameters");
+            var results = new List<string>();
+            
+            // Get first parameter
+            if (node.Fields.ContainsKey("first"))
+            {
+                System.Console.WriteLine($"DEBUG EmitParameterList: processing first param");
+                var firstParam = EmitSingleParameter(node.Fields["first"]);
+                if (!string.IsNullOrWhiteSpace(firstParam))
+                    results.Add(firstParam);
+            }
+            
+            // Get rest of parameters (if any)
+            if (node.Fields.ContainsKey("rest"))
+            {
+                var rest = node.Fields["rest"];
+                System.Console.WriteLine($"DEBUG EmitParameterList: rest type={rest?.GetType().Name}");
+                
+                // CDTk may return a single AstNode or a List
+                if (rest is List<AstNode> restList)
+                {
+                    System.Console.WriteLine($"DEBUG EmitParameterList: rest is List with {restList.Count} items");
+                    foreach (var item in restList)
+                    {
+                        System.Console.WriteLine($"DEBUG EmitParameterList: rest item type={item.Type}");
+                        if (item.Type == "FixedParameter")
+                        {
+                            var paramStr = EmitSingleParameter(item);
+                            if (!string.IsNullOrWhiteSpace(paramStr))
+                                results.Add(paramStr);
+                        }
+                    }
+                }
+                else if (rest is AstNode restNode)
+                {
+                    System.Console.WriteLine($"DEBUG EmitParameterList: rest is AstNode, type={restNode.Type}, fields={string.Join(",", restNode.Fields.Keys)}");
+                    // Process each item in the rest linked list  
+                    var current = restNode;
+                    while (current != null)
+                    {
+                        System.Console.WriteLine($"DEBUG EmitParameterList: processing node type={current.Type}, fields={string.Join(",", current.Fields.Keys)}");
+                        
+                        // Look for FixedParameter in the fields
+                        foreach (var kvp in current.Fields)
+                        {
+                            System.Console.WriteLine($"DEBUG EmitParameterList: field '{kvp.Key}' type={kvp.Value?.GetType().Name}");
+                            if (kvp.Value is AstNode fieldNode)
+                            {
+                                System.Console.WriteLine($"DEBUG EmitParameterList: field '{kvp.Key}' is AstNode type={fieldNode.Type}");
+                                if (fieldNode.Type == "FixedParameter")
+                                {
+                                    var paramStr = EmitSingleParameter(fieldNode);
+                                    System.Console.WriteLine($"DEBUG EmitParameterList: found FixedParameter, emitted '{paramStr}'");
+                                    if (!string.IsNullOrWhiteSpace(paramStr))
+                                        results.Add(paramStr);
+                                }
+                            }
+                        }
+                        
+                        // Try to find next in chain
+                        if (current.Fields.ContainsKey("next") && current.Fields["next"] is AstNode nextNode)
+                        {
+                            current = nextNode;
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            var result = string.Join("\n  ", results);
+            System.Console.WriteLine($"DEBUG EmitParameterList: returning '{result}'");
+            return result;
+        }
+        
+        // Single FixedParameter
+        System.Console.WriteLine($"DEBUG EmitParameterList: processing as single parameter");
+        return EmitSingleParameter(paramsNode);
+    }
+    
+    /// <summary>
+    /// Emit a single parameter.
+    /// </summary>
+    private static string EmitSingleParameter(object? paramNode)
+    {
+        System.Console.WriteLine($"DEBUG EmitSingleParameter: paramNode type={paramNode?.GetType().Name}");
+        if (paramNode == null) return "";
+        if (!(paramNode is AstNode node))
+        {
+            System.Console.WriteLine($"DEBUG EmitSingleParameter: not an AstNode");
+            return "";
+        }
+        
+        System.Console.WriteLine($"DEBUG EmitSingleParameter: node.Type={node.Type}, fields={string.Join(",", node.Fields.Keys)}");
+        foreach (var kvp in node.Fields)
+        {
+            var value = kvp.Value;
+            if (value is AstNode astValue)
+            {
+                System.Console.WriteLine($"DEBUG EmitSingleParameter: field['{kvp.Key}'] = AstNode type={astValue.Type}, fields={string.Join(",", astValue.Fields.Keys)}");
+            }
+            else
+            {
+                System.Console.WriteLine($"DEBUG EmitSingleParameter: field['{kvp.Key}'] = {value?.GetType().Name} : {value}");
+            }
+        }
+        if (node.Type != "FixedParameter" && node.Type != "FormalParameter")
+        {
+            System.Console.WriteLine($"DEBUG EmitSingleParameter: wrong type");
+            return "";
+        }
+        
+        // Due to CDTk field shifting bug, the actual fields are in the wrong places:
+        // - For FixedParameter with "int a", we expect type="Type", name="Identifier"
+        // - But CDTk returns attrs="Type", modifier="Identifier"
+        // Try all possible field names to work around this
+        
+        // Get parameter name - try modifier first (field shift bug), then name
+        var nameField = node.Fields.ContainsKey("modifier") ? node.Fields["modifier"] : 
+                       (node.Fields.ContainsKey("name") ? node.Fields["name"] : null);
+        string name = "param";
+        System.Console.WriteLine($"DEBUG EmitSingleParameter: nameField type={nameField?.GetType().Name}");
+        if (nameField is TokenInstance token)
+        {
+            name = token.Lexeme;
+            System.Console.WriteLine($"DEBUG EmitSingleParameter: name from token={name}");
+        }
+        else if (nameField is string str)
+        {
+            name = str;
+            System.Console.WriteLine($"DEBUG EmitSingleParameter: name from string={name}");
+        }
+        else if (nameField is AstNode nameNode)
+        {
+            System.Console.WriteLine($"DEBUG EmitSingleParameter: nameField is AstNode type={nameNode.Type}, fields={string.Join(",", nameNode.Fields.Keys)}");
+            // Identifier node with lexeme field
+            if (nameNode.Type == "Identifier" && nameNode.Fields.ContainsKey("lexeme"))
+            {
+                var lexeme = nameNode.Fields["lexeme"];
+                if (lexeme is string lexStr)
+                {
+                    name = lexStr;
+                    System.Console.WriteLine($"DEBUG EmitSingleParameter: name from Identifier lexeme={name}");
+                }
+            }
+        }
+        
+        // Get type - try attrs first (field shift bug), then type
+        var typeField = node.Fields.ContainsKey("attrs") ? node.Fields["attrs"] :
+                       (node.Fields.ContainsKey("type") ? node.Fields["type"] : null);
+        string wasmType = "i32";
+        System.Console.WriteLine($"DEBUG EmitSingleParameter: typeField type={typeField?.GetType().Name}");
+        if (typeField is AstNode typeNode)
+        {
+            wasmType = MapTypeNodeToWasm(typeNode);
+            System.Console.WriteLine($"DEBUG EmitSingleParameter: wasmType from AstNode={wasmType}");
+        }
+        else if (typeField is string typeStr)
+        {
+            wasmType = WasmEmit.MapCSharpTypeToWasm(typeStr);
+            System.Console.WriteLine($"DEBUG EmitSingleParameter: wasmType from string={wasmType}");
+        }
+        
+        var result = $"(param ${name} {wasmType})";
+        System.Console.WriteLine($"DEBUG EmitSingleParameter: returning '{result}'");
+        return result;
+    }
+    
+    /// <summary>
+    /// Map a type AstNode to WASM type.
+    /// </summary>
+    private static string MapTypeNodeToWasm(AstNode typeNode)
+    {
+        // For simple types, look for a lexeme
+        if (typeNode.Fields.ContainsKey("lexeme"))
+        {
+            var lexeme = typeNode.Fields["lexeme"];
+            if (lexeme is string str)
+                return WasmEmit.MapCSharpTypeToWasm(str);
+            if (lexeme is TokenInstance token)
+                return WasmEmit.MapCSharpTypeToWasm(token.Lexeme);
+        }
+        
+        // Try the type field
+        if (typeNode.Fields.ContainsKey("type"))
+        {
+            var typeField = typeNode.Fields["type"];
+            if (typeField is AstNode childType)
+                return MapTypeNodeToWasm(childType);
+            if (typeField is string str)
+                return WasmEmit.MapCSharpTypeToWasm(str);
+        }
+        
+        return "i32"; // Default
+    }
+    
     /// <summary>Formal parameter list</summary>
-    public Map FormalParameterList = "{params}";
+    public Map OLD_FormalParameterList = "{params}";
     
     /// <summary>Fixed parameter</summary>
     public Map FixedParameter = "(param ${name} {type})";
