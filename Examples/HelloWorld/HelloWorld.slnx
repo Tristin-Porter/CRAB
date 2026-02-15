@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Solution Version="1.0">
+  <Properties>
+    <Name>HelloWorld</Name>
+  </Properties>
+  <Project Path="HelloWorld.csproj" Name="HelloWorld" Type="C#" Id="{5BEAE1BF-682B-4F34-8B3B-4DAE3A7EA4D1}" />
+</Solution>
