@@ -572,6 +572,9 @@ public class Rules : RuleSet
 
     public Rule GotoDefaultTarget = "@KwDefault";
 
+    // Return statement - uses Expression which goes through dispatcher chain
+    // KNOWN ISSUE: Expression dispatcher chain doesn't properly populate expr field
+    // causing Fallback map to be used instead of proper lowering
     public Rule ReturnStatement = new Rule("@KwReturn expr:Expression? @Semicolon")
         .Returns("expr");
 

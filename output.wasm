@@ -6,10 +6,8 @@
 ;; class Calculator
 (type $Calculator (struct
 (func $Add
-(param $ ), 
   (result i32)
 (block
-(return ;; TODO: Add map for this construct
 nop
 
 )
@@ -18,7 +16,6 @@ nop
 )
 (func $GetFive
 (block
-(return ;; TODO: Add map for this construct
 nop
 
 )

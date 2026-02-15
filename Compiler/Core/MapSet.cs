@@ -327,6 +327,7 @@ public class WASM : MapSet
     /// <summary>
     /// Return statement - supports optional expression
     /// Outputs (return) for void returns, (return expr) for value returns
+    /// The expr field exists for all alternatives except void return
     /// </summary>
     public Map ReturnStatement = "(return {expr})";
     
@@ -581,26 +582,26 @@ public class WASM : MapSet
     /// </summary>
     
     /// <summary>Integer literal (decimal)</summary>
-    public Map DecimalIntegerLiteral = "(i32.const {value})";
+    public Map DecimalIntegerLiteral = "(i32.const {lexeme})";
     
     /// <summary>Hexadecimal integer literal</summary>
-    public Map HexIntegerLiteral = "(i32.const {value})";
+    public Map HexIntegerLiteral = "(i32.const {lexeme})";
     
     /// <summary>Binary integer literal</summary>
-    public Map BinaryIntegerLiteral = "(i32.const {value})";
+    public Map BinaryIntegerLiteral = "(i32.const {lexeme})";
     
     /// <summary>Floating-point literal</summary>
-    public Map FloatLiteral = "(f32.const {value})";
+    public Map FloatLiteral = "(f32.const {lexeme})";
     
     /// <summary>Double literal</summary>
-    public Map DoubleLiteral = "(f64.const {value})";
+    public Map DoubleLiteral = "(f64.const {lexeme})";
     
     /// <summary>String literal - requires data section</summary>
-    public Map StringLiteral = @";; string ""{value}""
+    public Map StringLiteral = @";; string ""{lexeme}""
 (i32.const {offset})";
     
     /// <summary>Character literal</summary>
-    public Map CharacterLiteral = "(i32.const {value})";
+    public Map CharacterLiteral = "(i32.const {lexeme})";
     
     /// <summary>Boolean true</summary>
     public Map TrueLiteral = "(i32.const 1)";
