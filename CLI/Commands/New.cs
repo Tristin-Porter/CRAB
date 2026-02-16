@@ -91,19 +91,8 @@ namespace " + name + @"
 ";
             File.WriteAllText(Path.Combine(projectPath, "Program.cs"), programContent);
             
-            // Create .crab project file
-            var projectFileContent = @"{
-  ""name"": """ + name + @""",
-  ""type"": ""console"",
-  ""output"": ""bin"",
-  ""sources"": [""*.cs""]
-}
-";
-            File.WriteAllText(Path.Combine(projectPath, $"{name}.crab"), projectFileContent);
-            
             System.Console.WriteLine($"✓ Created {name}/");
             System.Console.WriteLine($"✓ Created {name}/Program.cs");
-            System.Console.WriteLine($"✓ Created {name}/{name}.crab");
             System.Console.WriteLine();
             System.Console.WriteLine("Next steps:");
             System.Console.WriteLine($"  cd {name}");
@@ -157,16 +146,6 @@ class Project : Command
             Directory.CreateDirectory(projectPath);
             Directory.CreateDirectory(Path.Combine(projectPath, "src"));
             
-            // Create .crab project file
-            var projectFileContent = @"{
-  ""name"": """ + name + @""",
-  ""type"": ""library"",
-  ""output"": ""bin"",
-  ""sources"": [""src/*.cs""]
-}
-";
-            File.WriteAllText(Path.Combine(projectPath, $"{name}.crab"), projectFileContent);
-            
             // Create README.md
             var readmeContent = $@"# {name}
 
@@ -187,7 +166,6 @@ crab build
             
             System.Console.WriteLine($"✓ Created {name}/");
             System.Console.WriteLine($"✓ Created {name}/src/");
-            System.Console.WriteLine($"✓ Created {name}/{name}.crab");
             System.Console.WriteLine($"✓ Created {name}/README.md");
             System.Console.WriteLine();
             System.Console.WriteLine("Next steps:");

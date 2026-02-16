@@ -325,20 +325,99 @@ class Test : Command
         }
     }
 
+    private (string csharp, string sln, string slnx) ParseTestFile(string testFilePath)
+    {
+        try
+        {
+            string content = File.ReadAllText(testFilePath);
+            
+            // Extract C# code
+            string csharpCode = ExtractSection(content, "BEGIN CSHARP", "END CSHARP");
+            
+            // Extract .sln content
+            string slnContent = ExtractSection(content, "BEGIN SLN", "END SLN");
+            
+            // Extract .slnx content
+            string slnxContent = ExtractSection(content, "BEGIN SLNX", "END SLNX");
+            
+            return (csharpCode, slnContent, slnxContent);
+        }
+        catch (Exception ex)
+        {
+            LogDebug($"Failed to parse test file {testFilePath}: {ex.Message}");
+            return (null, null, null);
+        }
+    }
+    
+    private string ExtractSection(string content, string beginMarker, string endMarker)
+    {
+        string beginTag = $"// === {beginMarker} ===";
+        string endTag = $"// === {endMarker} ===";
+        
+        int beginIndex = content.IndexOf(beginTag);
+        int endIndex = content.IndexOf(endTag);
+        
+        if (beginIndex >= 0 && endIndex > beginIndex)
+        {
+            beginIndex += beginTag.Length;
+            string section = content.Substring(beginIndex, endIndex - beginIndex);
+            return section.Trim();
+        }
+        
+        return null;
+    }
+
     private bool GenerateTestProject(string projectName, string projectPath)
     {
         try
         {
             Directory.CreateDirectory(projectPath);
             
-            string sourceCode = projectName switch
+            // Find the CRAB executable directory to locate tests folder
+            string crabDir = Path.GetDirectoryName(typeof(Test).Assembly.Location);
+            string testsDir = Path.Combine(crabDir, "tests");
+            
+            // If tests folder doesn't exist in executable directory, try repository root
+            if (!Directory.Exists(testsDir))
             {
-                "HelloWorld" => @"class Test {
+                // Try to find repository root by looking for CRAB.csproj
+                string currentDir = crabDir;
+                while (currentDir != null && !File.Exists(Path.Combine(currentDir, "CRAB.csproj")))
+                {
+                    currentDir = Directory.GetParent(currentDir)?.FullName;
+                }
+                
+                if (currentDir != null)
+                {
+                    testsDir = Path.Combine(currentDir, "tests");
+                }
+            }
+            
+            string testFilePath = Path.Combine(testsDir, $"{projectName}.cs");
+            
+            string csharpCode = null;
+            string slnContent = null;
+            string slnxContent = null;
+            
+            // Try to read from test file if it exists
+            if (File.Exists(testFilePath))
+            {
+                LogDebug($"Reading test file: {testFilePath}");
+                (csharpCode, slnContent, slnxContent) = ParseTestFile(testFilePath);
+            }
+            
+            // Fallback to hardcoded content if test file doesn't exist or parsing failed
+            if (string.IsNullOrWhiteSpace(csharpCode))
+            {
+                LogDebug($"Test file not found or invalid, using fallback content for {projectName}");
+                csharpCode = projectName switch
+                {
+                    "HelloWorld" => @"class Test {
     int GetValue() {
         return 42;
     }
 }",
-                "Calculator" => @"class Calculator {
+                    "Calculator" => @"class Calculator {
     int Add(int a, int b) {
         return a + b;
     }
@@ -347,7 +426,7 @@ class Test : Command
         return a * b;
     }
 }",
-                "ClassHierarchy" => @"class Base {
+                    "ClassHierarchy" => @"class Base {
     int GetBase() {
         return 10;
     }
@@ -358,28 +437,21 @@ class Derived {
         return 20;
     }
 }",
-                "GenericCollections" => @"class Container {
+                    "GenericCollections" => @"class Container {
     int GetData() {
         return 100;
     }
 }",
-                _ => @"class Program {
+                    _ => @"class Program {
     int Main() {
         return 0;
     }
 }"
-            };
+                };
+            }
             
             // Create Program.cs
-            File.WriteAllText(Path.Combine(projectPath, "Program.cs"), sourceCode);
-            
-            // Create .crab project file
-            string crabProject = $@"{{
-  ""name"": ""{projectName}"",
-  ""version"": ""1.0.0"",
-  ""type"": ""console""
-}}";
-            File.WriteAllText(Path.Combine(projectPath, $"{projectName}.crab"), crabProject);
+            File.WriteAllText(Path.Combine(projectPath, "Program.cs"), csharpCode);
             
             // Generate GUID for the project
             string projectGuid = Guid.NewGuid().ToString("B").ToUpper();
@@ -400,7 +472,9 @@ class Derived {
             File.WriteAllText(Path.Combine(projectPath, $"{projectName}.csproj"), csprojContent);
             
             // Create .sln file
-            string slnContent = $@"
+            if (string.IsNullOrWhiteSpace(slnContent))
+            {
+                slnContent = $@"
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.0.0
@@ -426,10 +500,13 @@ Global
 	EndGlobalSection
 EndGlobal
 ";
+            }
             File.WriteAllText(Path.Combine(projectPath, $"{projectName}.sln"), slnContent);
             
             // Create .slnx file
-            string slnxContent = $@"<?xml version=""1.0"" encoding=""utf-8""?>
+            if (string.IsNullOrWhiteSpace(slnxContent))
+            {
+                slnxContent = $@"<?xml version=""1.0"" encoding=""utf-8""?>
 <Solution Version=""1.0"">
   <Properties>
     <Name>{projectName}</Name>
@@ -437,10 +514,11 @@ EndGlobal
   <Project Path=""{projectName}.csproj"" Name=""{projectName}"" Type=""C#"" Id=""{projectGuid}"" />
 </Solution>
 ";
+            }
             File.WriteAllText(Path.Combine(projectPath, $"{projectName}.slnx"), slnxContent);
             
             LogDebug($"Generated {projectName} project at {projectPath}");
-            LogDebug($"Created files: Program.cs, {projectName}.crab, {projectName}.csproj, {projectName}.sln, {projectName}.slnx");
+            LogDebug($"Created files: Program.cs, {projectName}.csproj, {projectName}.sln, {projectName}.slnx");
             return true;
         }
         catch (Exception ex)
