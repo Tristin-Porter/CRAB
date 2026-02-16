@@ -2225,6 +2225,16 @@ public class WASM : MapSet
         var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
         var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
         
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: Fields in node: {string.Join(", ", node.Fields.Keys)}");
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: mods type={modsField?.GetType().Name}");
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: attrs type={attrsField?.GetType().Name}");
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: returnType type={returnTypeField?.GetType().Name}");
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: name type={nameField?.GetType().Name}");
+        if (modsField is AstNode mn) System.Console.WriteLine($"  mods AstNode type={mn.Type}, fields={string.Join(", ", mn.Fields.Keys)}");
+        if (attrsField is AstNode an) System.Console.WriteLine($"  attrs AstNode type={an.Type}");
+        if (returnTypeField is AstNode rn) System.Console.WriteLine($"  returnType AstNode type={rn.Type}");
+        if (nameField is AstNode nn) System.Console.WriteLine($"  name AstNode type={nn.Type}");
+        
         string funcName = "";
         string resultType = "";
         string parameters = "";
@@ -2233,6 +2243,7 @@ public class WASM : MapSet
         // Detect case by checking if mods is an Identifier
         if (modsField is AstNode modsNode && modsNode.Type == "Identifier")
         {
+            System.Console.WriteLine($"DEBUG: WITH params case detected");
             // WITH params case
             funcName = modsNode.Fields.ContainsKey("lexeme") ? modsNode.Fields["lexeme"]?.ToString() ?? "" : "";
             
@@ -2240,7 +2251,11 @@ public class WASM : MapSet
                 resultType = ExtractTypeFromNode(attrsType);
             
             if (returnTypeField != null)
+            {
+                System.Console.WriteLine($"DEBUG: Calling EmitParameterList with returnTypeField");
                 parameters = EmitParameterList(returnTypeField);
+                System.Console.WriteLine($"DEBUG: EmitParameterList returned: {parameters}");
+            }
             
             // Clear local variables for this function BEFORE emitting body
             LocalVariableRegistry.ClearCurrentFunction();
@@ -3172,13 +3187,22 @@ public class WASM : MapSet
     /// </summary>
     private static string EmitParameterList(object? paramsNode)
     {
+        System.Console.WriteLine($"DEBUG EmitParameterList: paramsNode type={paramsNode?.GetType().Name}");
+        
         if (paramsNode == null) return "";
         
-        if (!(paramsNode is AstNode node)) return "";
+        if (!(paramsNode is AstNode node))
+        {
+            System.Console.WriteLine($"DEBUG EmitParameterList: Not an AstNode");
+            return "";
+        }
+        
+        System.Console.WriteLine($"DEBUG EmitParameterList: node type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
         
         // Handle FormalParameterList -> extract params field
         if (node.Type == "FormalParameterList" && node.Fields.ContainsKey("params"))
         {
+            System.Console.WriteLine($"DEBUG EmitParameterList: Found FormalParameterList with params field");
             return EmitParameterList(node.Fields["params"]);
         }
         
