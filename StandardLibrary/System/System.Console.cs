@@ -102,6 +102,8 @@ namespace System
             // Read a key press - this is critical for preventing PE window auto-close
             // For PE, this will use Windows console API (ReadConsoleInput)
             // For WASM, this will wait for keyboard input
+            // NOTE: This is a placeholder implementation. The actual implementation
+            // will be provided by the CRAB compiler's PE and WASM backends.
             return new ConsoleKeyInfo('\0', ConsoleKey.None, false, false, false);
         }
         
