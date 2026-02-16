@@ -429,6 +429,8 @@ class Test : Command
 class Program {
     static void Main() {
         Console.WriteLine(""Hello World!"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }",
                     "Calculator" => @"using System;
@@ -446,6 +448,8 @@ class Calculator {
 class Program {
     static void Main() {
         Console.WriteLine(""Calculator: 5 + 3 = 8"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }",
                     "ClassHierarchy" => @"using System;
@@ -465,6 +469,8 @@ class Derived {
 class Program {
     static void Main() {
         Console.WriteLine(""Base: 10, Derived: 20"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }",
                     "GenericCollections" => @"using System;
@@ -478,6 +484,8 @@ class Container {
 class Program {
     static void Main() {
         Console.WriteLine(""Container Data: 100"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }",
                     _ => @"using System;
@@ -485,6 +493,8 @@ class Program {
 class Program {
     static void Main() {
         Console.WriteLine(""Default Test"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }"
                 };

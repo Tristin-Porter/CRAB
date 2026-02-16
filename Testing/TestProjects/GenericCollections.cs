@@ -19,6 +19,8 @@ namespace GenericCollections
         static void Main()
         {
             Console.WriteLine("Container Data: 100");
+            Console.WriteLine("Press any key to exit...");
+            Console.ReadKey();
         }
     }
 }

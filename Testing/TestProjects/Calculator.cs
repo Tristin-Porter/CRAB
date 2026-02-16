@@ -29,6 +29,8 @@ namespace Calculator
         static void Main()
         {
             Console.WriteLine("Calculator: 5 + 3 = 8");
+            Console.WriteLine("Press any key to exit...");
+            Console.ReadKey();
         }
     }
 }
