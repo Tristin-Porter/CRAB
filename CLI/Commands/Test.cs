@@ -19,8 +19,7 @@ class Test : Command
         Description = "Run comprehensive test suite with multiple test projects across all architectures.";
         
         SupportedFlags["name"] = "Name of a specific test project to run (default: run all projects).";
-        SupportedFlags["keep"] = "Keep the generated test projects after execution (runs comprehensive tests).";
-        SupportedFlags["save"] = "Save the project so you can run it yourself (skips comprehensive tests, only builds Web outputs).";
+        SupportedFlags["save"] = "Save the generated test projects to disk (so you can run them yourself).";
         SupportedFlags["verbose"] = "Enable verbose output.";
         SupportedFlags["debug"] = "Enable debug logging with detailed information.";
         SupportedFlags["quick"] = "Run quick test (single architecture only).";
@@ -37,7 +36,6 @@ class Test : Command
         else if (args.Length > 0)
             specificProject = args[0];
 
-        bool keepProjects = flags.ContainsKey("keep");
         bool saveOutputs = flags.ContainsKey("save");
         bool verbose = flags.ContainsKey("verbose");
         bool debugMode = flags.ContainsKey("debug");
@@ -57,16 +55,9 @@ class Test : Command
         System.Console.WriteLine($"Projects:   {(specificProject != null ? specificProject : $"{projectsToRun.Length} test projects")}");
         
         // Update mode based on flags
-        string mode;
-        if (saveOutputs)
-            mode = "Save only (build Web outputs, skip tests)";
-        else if (quickMode)
-            mode = "Quick (single architecture)";
-        else
-            mode = "Comprehensive (all architectures)";
+        string mode = quickMode ? "Quick (single architecture)" : "Comprehensive (all architectures)";
         
         System.Console.WriteLine($"Mode:       {mode}");
-        System.Console.WriteLine($"Keep:       {keepProjects}");
         System.Console.WriteLine($"Save:       {saveOutputs}");
         System.Console.WriteLine($"Verbose:    {verbose}");
         System.Console.WriteLine($"Debug:      {debugMode}");
@@ -95,7 +86,6 @@ class Test : Command
                 bool projectSuccess = RunProjectTest(
                     projectName, 
                     currentDir, 
-                    keepProjects, 
                     saveOutputs, 
                     verbose, 
                     debugMode, 
@@ -162,7 +152,6 @@ class Test : Command
     private bool RunProjectTest(
         string projectName,
         string baseDir,
-        bool keepProject,
         bool saveOutputs,
         bool verbose,
         bool debugMode,
@@ -229,7 +218,7 @@ class Test : Command
                 {
                     System.Console.WriteLine($"Error: Build failed - output file not found");
                     LogDebug($"ERROR: Build failed for {projectName}");
-                    CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
+                    CleanupProject(projectPath, saveOutputs, verbose || debugMode, saveDir);
                     return false;
                 }
             }
@@ -271,28 +260,11 @@ class Test : Command
                 }
             }
 
-            // Step 3: Test across architectures (unless --save is used, which just keeps the project)
-            if (saveOutputs)
-            {
-                // With --save, just keep the project and Web outputs - skip comprehensive testing
-                if (verbose || debugMode)
-                    System.Console.WriteLine($"[3/3] Project saved at {projectPath}");
-                else
-                    System.Console.WriteLine($"Project {projectName} saved - ready to run.");
-                
-                System.Console.WriteLine();
-                System.Console.WriteLine($"To run in browser:");
-                System.Console.WriteLine($"  1. cd {projectPath}/bin/Debug/crab/Web");
-                System.Console.WriteLine($"  2. python -m http.server 8000");
-                System.Console.WriteLine($"  3. Open http://localhost:8000/{projectName}.html");
-                
-                testsPassed = 1;
-                testsTotal = 1;
-            }
-            else if (quickMode)
+            // Step 3: Test across architectures
+            if (quickMode)
             {
                 if (verbose || debugMode)
-                    System.Console.WriteLine($"[3/3] Testing {projectName} across architectures...");
+                    System.Console.WriteLine($"[3/3] Testing {projectName} (quick mode)...");
                 else
                     System.Console.WriteLine($"Testing {projectName}...");
                 
@@ -310,8 +282,8 @@ class Test : Command
                 RunComprehensiveTest(outputFile, projectName, projectPath, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
             }
 
-            // Cleanup if requested (but not if --save is used)
-            CleanupProject(projectPath, keepProject || saveOutputs, verbose || debugMode, saveDir);
+            // Cleanup project unless --save flag is used
+            CleanupProject(projectPath, saveOutputs, verbose || debugMode, saveDir);
             
             // Save logs if requested
             if (saveOutputs && saveDir != null)
@@ -335,7 +307,7 @@ class Test : Command
             }
 
             // Attempt cleanup even on error
-            CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
+            CleanupProject(projectPath, saveOutputs, verbose || debugMode, saveDir);
             return false;
         }
     }
