@@ -3,21 +3,22 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; class Program
-(type $Program (struct
+;; class C
+(type $C (struct
 (func $
 Main
   (result ;; modifiers: )
 (block
-
+;; TODO: Emit DeclarationStatement
+nop
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )
 )
 (func $i32
 Add
   (result ;; modifiers: )
-(param $x i32)
-  (param $y i32)
+(param $a i32)
+  (param $b i32)
 )
 ))
 )
