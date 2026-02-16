@@ -3,7 +3,15 @@ bin/
 obj/
 TestProject/
 testing/
-tests/
+
+# Allow tests/ folder with test files, but ignore specific test output folders
+!tests/
+tests/*_outputs/
+tests/HelloWorld/
+tests/Calculator/
+tests/ClassHierarchy/
+tests/GenericCollections/
+
 *_outputs/
 
 # Test command generated projects (at root level only)

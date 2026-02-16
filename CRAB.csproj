@@ -13,6 +13,7 @@
     <Compile Remove="Testing/**/*.cs" />
     <Compile Remove="TestProject/**/*.cs" />
     <Compile Remove="testing/**/*.cs" />
+    <Compile Remove="tests/**/*.cs" />
     <Compile Remove="HelloWorld/**/*.cs" />
     <Compile Remove="Calculator/**/*.cs" />
     <Compile Remove="ClassHierarchy/**/*.cs" />
@@ -20,6 +21,9 @@
     <Compile Remove="Examples/**/*.cs" />
     <Compile Remove="StandardLibrary/**/*.cs" />
     <None Include="Testing/**/*.cs" />
+    <None Include="tests/**/*.cs">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
