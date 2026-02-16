@@ -206,10 +206,28 @@ public static class WasmJS
     {
         var info = new ModuleInfo();
         
-        // Simple regex-based parsing (basic implementation)
-        // In a full implementation, this would use the CDTk parser from Program.cs
+        // TODO: CRITICAL - Implement proper WAT text parser
+        // This function currently ignores the watText parameter and returns a hardcoded module.
+        // This is why WASM always outputs 42 regardless of the actual code.
+        //
+        // To fix this properly, we need to:
+        // 1. Parse the WAT text format (WebAssembly Text) into an AST
+        // 2. Extract all sections: imports, functions, exports, data, etc.
+        // 3. Convert WAT instructions to binary opcodes
+        // 4. Encode everything according to WASM binary format spec
+        //
+        // The watText parameter contains valid WAT like:
+        //   (module
+        //     (import "env" "console_log" (func $console_log (param i32)))
+        //     (func $Main
+        //       i32.const 0
+        //       call $console_log)
+        //     (export "main" (func $Main)))
+        //
+        // For now, this returns a minimal placeholder module that returns 42.
+        // Use external tools like wat2wasm to convert WAT to proper WASM binary.
         
-        // For now, create a minimal valid module with one function
+        // Placeholder implementation - always returns 42
         info.TypeSection.Add(new FunctionType
         {
             Parameters = new List<string>(),
@@ -223,7 +241,7 @@ public static class WasmJS
             Locals = new List<string>(),
             Instructions = new List<byte> 
             { 
-                0x41, 0x2A  // i32.const 42
+                0x41, 0x2A  // i32.const 42 (placeholder)
             }
         });
         
@@ -262,7 +280,16 @@ public static class WasmJS
         sb.AppendLine("        const imports = {");
         sb.AppendLine("            env: {");
         sb.AppendLine("                memory: new WebAssembly.Memory({ initial: 1 }),");
-        sb.AppendLine("                // Add more imports as needed");
+        sb.AppendLine("                console_log: (offset) => {");
+        sb.AppendLine("                    // Read string from memory at offset");
+        sb.AppendLine("                    const memory = imports.env.memory;");
+        sb.AppendLine("                    const bytes = new Uint8Array(memory.buffer, offset);");
+        sb.AppendLine("                    let str = '';");
+        sb.AppendLine("                    for (let i = 0; bytes[i] !== 0; i++) {");
+        sb.AppendLine("                        str += String.fromCharCode(bytes[i]);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                    console.log(str);");
+        sb.AppendLine("                }");
         sb.AppendLine("            }");
         sb.AppendLine("        };");
         sb.AppendLine("        ");
@@ -303,7 +330,17 @@ public static class WasmJS
         sb.AppendLine("        // Create imports");
         sb.AppendLine("        const imports = {");
         sb.AppendLine("            env: {");
-        sb.AppendLine("                memory: new WebAssembly.Memory({ initial: 1 })");
+        sb.AppendLine("                memory: new WebAssembly.Memory({ initial: 1 }),");
+        sb.AppendLine("                console_log: (offset) => {");
+        sb.AppendLine("                    // Read string from memory at offset");
+        sb.AppendLine("                    const memory = imports.env.memory;");
+        sb.AppendLine("                    const bytes = new Uint8Array(memory.buffer, offset);");
+        sb.AppendLine("                    let str = '';");
+        sb.AppendLine("                    for (let i = 0; bytes[i] !== 0; i++) {");
+        sb.AppendLine("                        str += String.fromCharCode(bytes[i]);");
+        sb.AppendLine("                    }");
+        sb.AppendLine("                    console.log(str);");
+        sb.AppendLine("                }");
         sb.AppendLine("            }");
         sb.AppendLine("        };");
         sb.AppendLine("        ");
