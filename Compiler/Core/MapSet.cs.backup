@@ -201,6 +201,7 @@ public static class WasmEmit
         }
         
         // DEBUG: Print what we're dispatching
+        System.Console.WriteLine($"DEBUG EmitExpressionDispatcher: type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
         
         // For debugging complex expressions
         if (node.Type == "Sequence" && node.Fields.Count > 0)
@@ -284,6 +285,7 @@ public static class WasmEmit
             var baseExpr = node.Fields["base"];
             var suffix = node.Fields.ContainsKey("suffix") ? node.Fields["suffix"] : null;
             
+            System.Console.WriteLine($"DEBUG Found base/suffix: base type={((baseExpr as AstNode)?.Type ?? baseExpr?.GetType().Name)}, suffix type={((suffix as AstNode)?.Type ?? suffix?.GetType().Name)}");
             
             // If suffix is UnaryExpressionSuffix with args, this is a method call
             if (suffix is AstNode suffixNode && suffixNode.Type == "UnaryExpressionSuffix")
@@ -291,6 +293,7 @@ public static class WasmEmit
                 // This is a method invocation - base is the method name, suffix has args
                 // But we need to look deeper into base to get the actual method name
                 var baseName = GetFullMemberName(baseExpr);
+                System.Console.WriteLine($"DEBUG Base name: {baseName}");
                 
                 // Check if this is Console.WriteLine (base will be "Console", method is WriteLine)
                 if (baseName == "Console" || baseName.EndsWith(".Console") || baseName.EndsWith("WriteLine"))
@@ -544,19 +547,23 @@ public static class WasmEmit
     {
         if (argsNode == null) return "";
         
+        System.Console.WriteLine($"DEBUG EmitArgumentList: type={argsNode?.GetType().Name}, AstNode type={(argsNode as AstNode)?.Type}");
         
         if (argsNode is AstNode node)
         {
             // Print fields for debugging
+            System.Console.WriteLine($"DEBUG EmitArgumentList fields: {string.Join(", ", node.Fields.Keys)}");
             
             // ArgumentList has 'first' field (CDTk structure)
             if (node.Fields.ContainsKey("first"))
             {
                 var first = node.Fields["first"];
+                System.Console.WriteLine($"DEBUG first field type: {first?.GetType().Name}, AstNode type: {(first as AstNode)?.Type}");
                 
                 // First might be an Argument wrapper
                 if (first is AstNode firstNode)
                 {
+                    System.Console.WriteLine($"DEBUG first node type: {firstNode.Type}, fields: {string.Join(", ", firstNode.Fields.Keys)}");
                     
                     // Argument has 'base' field (not 'expr' as expected - CDTk quirk)
                     if (firstNode.Type == "Argument")
@@ -566,6 +573,7 @@ public static class WasmEmit
                         
                         if (expr != null)
                         {
+                            System.Console.WriteLine($"DEBUG expr type: {(expr as AstNode)?.Type ?? expr?.GetType().Name}");
                             return EmitExpression(expr);
                         }
                     }
@@ -579,6 +587,7 @@ public static class WasmEmit
             {
                 var args = node.Fields["args"];
                 
+                System.Console.WriteLine($"DEBUG args field type: {args?.GetType().Name}");
                 
                 if (args is List<AstNode> argList)
                 {
@@ -600,6 +609,7 @@ public static class WasmEmit
                 }
                 else if (args is AstNode singleArg)
                 {
+                    System.Console.WriteLine($"DEBUG single arg type: {singleArg.Type}");
                     return EmitExpression(singleArg);
                 }
             }
@@ -2126,18 +2136,22 @@ public class WASM : MapSet
             // Get class body (in name field due to field shifting)
             if (typeNode.Fields.ContainsKey("name") && typeNode.Fields["name"] is AstNode bodyNode)
             {
+                System.Console.WriteLine($"DEBUG: ClassBody type={bodyNode.Type}, fields={string.Join(", ", bodyNode.Fields.Keys)}");
                 
                 // ClassBody has members field
                 if (bodyNode.Fields.ContainsKey("members") && bodyNode.Fields["members"] is AstNode membersNode)
                 {
+                    System.Console.WriteLine($"DEBUG: ClassMemberDeclarations type={membersNode.Type}, fields={string.Join(", ", membersNode.Fields.Keys)}");
                     
                     // ClassMemberDeclarations has members field (linked list or single node)
                     if (membersNode.Fields.ContainsKey("members"))
                     {
                         var members = membersNode.Fields["members"];
+                        System.Console.WriteLine($"DEBUG: members type={members?.GetType().Name}");
                         
                         if (members is List<AstNode> memberList)
                         {
+                            System.Console.WriteLine($"DEBUG: members list has {memberList.Count} items");
                             
                             foreach (var memberDecl in memberList)
                             {
@@ -2146,6 +2160,7 @@ public class WASM : MapSet
                         }
                         else if (members is AstNode memberNode)
                         {
+                            System.Console.WriteLine($"DEBUG: members is single AstNode, will iterate");
                             
                             // Iterate through linked list of members
                             var current = memberNode;
@@ -2179,15 +2194,19 @@ public class WASM : MapSet
     /// </summary>
     private static void ProcessClassMemberDeclaration(AstNode memberDecl, System.Text.StringBuilder output)
     {
+        System.Console.WriteLine($"DEBUG: memberDecl type={memberDecl.Type}, fields={string.Join(", ", memberDecl.Fields.Keys)}");
         
         // ClassMemberDeclaration has member field
         if (memberDecl.Fields.ContainsKey("member") && memberDecl.Fields["member"] is AstNode actualMember)
         {
+            System.Console.WriteLine($"DEBUG: actualMember type={actualMember.Type}");
             
             // For MethodDeclaration, we need to inline the processing
             if (actualMember.Type == "MethodDeclaration")
             {
+                System.Console.WriteLine($"DEBUG: Calling EmitMethodDeclarationInline");
                 var methodOutput = EmitMethodDeclarationInline(actualMember);
+                System.Console.WriteLine($"DEBUG: methodOutput length={methodOutput?.Length}");
                 if (!string.IsNullOrWhiteSpace(methodOutput))
                     output.Append(methodOutput);
             }
@@ -2207,6 +2226,17 @@ public class WASM : MapSet
         var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
         var typeParamsField = node.Fields.ContainsKey("typeParams") ? node.Fields["typeParams"] : null;
         
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: Fields in node: {string.Join(", ", node.Fields.Keys)}");
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: mods type={modsField?.GetType().Name}");
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: attrs type={attrsField?.GetType().Name}");
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: returnType type={returnTypeField?.GetType().Name}");
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: name type={nameField?.GetType().Name}");
+        System.Console.WriteLine($"DEBUG EmitMethodDeclarationInline: typeParams type={typeParamsField?.GetType().Name}");
+        if (modsField is AstNode mn) System.Console.WriteLine($"  mods AstNode type={mn.Type}, fields={string.Join(", ", mn.Fields.Keys)}");
+        if (attrsField is AstNode an) System.Console.WriteLine($"  attrs AstNode type={an.Type}");
+        if (returnTypeField is AstNode rn) System.Console.WriteLine($"  returnType AstNode type={rn.Type}");
+        if (nameField is AstNode nn) System.Console.WriteLine($"  name AstNode type={nn.Type}");
+        if (typeParamsField is AstNode tn) System.Console.WriteLine($"  typeParams AstNode type={tn.Type}");
         
         string funcName = "";
         string resultType = "";
@@ -2217,6 +2247,7 @@ public class WASM : MapSet
         if (nameField is AstNode nameNode && nameNode.Type == "FormalParameterList" && 
             typeParamsField is AstNode typeParamsNode && typeParamsNode.Type == "MethodBody")
         {
+            System.Console.WriteLine($"DEBUG: Field-shifted WITH params case detected");
             // Field-shifted case: mods=Type, returnType=Identifier(name), name=FormalParameterList, typeParams=MethodBody
             
             // Get function name from returnType field
@@ -2228,7 +2259,9 @@ public class WASM : MapSet
                 resultType = ExtractTypeFromNode(modsType);
             
             // Get parameters from name field (which contains FormalParameterList)
+            System.Console.WriteLine($"DEBUG: Calling EmitParameterList with nameField (FormalParameterList)");
             parameters = EmitParameterList(nameField);
+            System.Console.WriteLine($"DEBUG: EmitParameterList returned: {parameters}");
             
             // Clear local variables for this function BEFORE emitting body
             LocalVariableRegistry.ClearCurrentFunction();
@@ -2242,6 +2275,7 @@ public class WASM : MapSet
         // Detect case by checking if mods is an Identifier
         else if (modsField is AstNode modsNode && modsNode.Type == "Identifier")
         {
+            System.Console.WriteLine($"DEBUG: WITH params case detected");
             // WITH params case
             funcName = modsNode.Fields.ContainsKey("lexeme") ? modsNode.Fields["lexeme"]?.ToString() ?? "" : "";
             
@@ -2250,7 +2284,9 @@ public class WASM : MapSet
             
             if (returnTypeField != null)
             {
+                System.Console.WriteLine($"DEBUG: Calling EmitParameterList with returnTypeField");
                 parameters = EmitParameterList(returnTypeField);
+                System.Console.WriteLine($"DEBUG: EmitParameterList returned: {parameters}");
             }
             
             // Clear local variables for this function BEFORE emitting body
@@ -2279,16 +2315,23 @@ public class WASM : MapSet
             if (nameField is AstNode bodyNode)
             {
                 // DEBUG: Print body structure
+                System.Console.WriteLine($"DEBUG Body node type: {bodyNode.Type}");
+                System.Console.WriteLine($"DEBUG Body fields: {string.Join(", ", bodyNode.Fields.Keys)}");
                 if (bodyNode.Fields.ContainsKey("body"))
                 {
                     var innerBody = bodyNode.Fields["body"];
+                    System.Console.WriteLine($"DEBUG Inner body type: {(innerBody as AstNode)?.Type ?? innerBody?.GetType().Name}");
                     if (innerBody is AstNode ibn)
                     {
+                        System.Console.WriteLine($"DEBUG Inner body fields: {string.Join(", ", ibn.Fields.Keys)}");
                         if (ibn.Fields.ContainsKey("stmts"))
                         {
                             var stmts = ibn.Fields["stmts"];
+                            System.Console.WriteLine($"DEBUG Stmts type: {stmts?.GetType().Name}");
                             if (stmts is AstNode sn)
                             {
+                                System.Console.WriteLine($"DEBUG Stmts node type: {sn.Type}");
+                                System.Console.WriteLine($"DEBUG Stmts fields: {string.Join(", ", sn.Fields.Keys)}");
                             }
                         }
                     }
@@ -2326,8 +2369,10 @@ public class WASM : MapSet
         
         // Now emit local variable declarations based on what was registered
         var locals = LocalVariableRegistry.GetCurrentFunctionVariables();
+        System.Console.WriteLine($"DEBUG: Found {locals.Count} local variables");
         foreach (var (name, type) in locals)
         {
+            System.Console.WriteLine($"DEBUG: Local {name}: {type}");
         }
         if (locals.Count > 0)
         {
@@ -3174,18 +3219,22 @@ public class WASM : MapSet
     /// </summary>
     private static string EmitParameterList(object? paramsNode)
     {
+        System.Console.WriteLine($"DEBUG EmitParameterList: paramsNode type={paramsNode?.GetType().Name}");
         
         if (paramsNode == null) return "";
         
         if (!(paramsNode is AstNode node))
         {
+            System.Console.WriteLine($"DEBUG EmitParameterList: Not an AstNode");
             return "";
         }
         
+        System.Console.WriteLine($"DEBUG EmitParameterList: node type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
         
         // Handle FormalParameterList -> extract params field
         if (node.Type == "FormalParameterList" && node.Fields.ContainsKey("params"))
         {
+            System.Console.WriteLine($"DEBUG EmitParameterList: Found FormalParameterList with params field");
             return EmitParameterList(node.Fields["params"]);
         }
         
@@ -3200,22 +3249,27 @@ public class WASM : MapSet
         {
             var results = new List<string>();
             
+            System.Console.WriteLine($"DEBUG EmitParameterList: Processing FixedParameters");
             
             // Check if we have a 'params' field with a list of parameters
             if (node.Fields.ContainsKey("params"))
             {
                 var paramsField = node.Fields["params"];
                 
+                System.Console.WriteLine($"DEBUG: params field type={paramsField?.GetType().Name}");
                 
                 if (paramsField is List<AstNode> paramsList)
                 {
+                    System.Console.WriteLine($"DEBUG: params is List<AstNode> with {paramsList.Count} items");
                     // New grammar: all parameters in a list (including Comma tokens)
                     foreach (var item in paramsList)
                     {
+                        System.Console.WriteLine($"DEBUG: Item type={item.Type}");
                         // Skip Comma tokens, only process FixedParameter nodes
                         if (item.Type == "FixedParameter")
                         {
                             var paramStr = EmitSingleParameter(item);
+                            System.Console.WriteLine($"DEBUG: Emitted param: {paramStr}");
                             if (!string.IsNullOrWhiteSpace(paramStr))
                                 results.Add(paramStr);
                         }
@@ -3223,6 +3277,7 @@ public class WASM : MapSet
                 }
                 else if (paramsField is AstNode singleParam)
                 {
+                    System.Console.WriteLine($"DEBUG: params is single AstNode type={singleParam.Type}");
                     // Single parameter
                     var paramStr = EmitSingleParameter(singleParam);
                     if (!string.IsNullOrWhiteSpace(paramStr))
@@ -3230,6 +3285,7 @@ public class WASM : MapSet
                 }
             }
             
+            System.Console.WriteLine($"DEBUG: Returning {results.Count} parameters");
             return string.Join("\n  ", results);
         }
         
@@ -4147,11 +4203,13 @@ public class WASM : MapSet
         .Emit(node => {
             if (node == null) return "";
             
+            System.Console.WriteLine($"DEBUG CompilationUnitItem: type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
             
             if (!node.Fields.ContainsKey("item")) return "";
             var item = node.Fields["item"];
             if (!(item is AstNode itemNode)) return "";
             
+            System.Console.WriteLine($"DEBUG CompilationUnitItem.item: type={itemNode.Type}");
             
             // Process based on item type
             if (itemNode.Type.Contains("Using"))
@@ -4162,22 +4220,27 @@ public class WASM : MapSet
                 // Unwrap to get the actual member
                 if (itemNode.Fields.ContainsKey("member") && itemNode.Fields["member"] is AstNode member)
                 {
+                    System.Console.WriteLine($"DEBUG NamespaceMemberDeclaration.member: type={member.Type}");
                     
                     // Could be NamespaceDeclaration or TypeDeclaration
                     if (member.Type == "NamespaceDeclaration")
                     {
+                        System.Console.WriteLine($"DEBUG Processing NamespaceDeclaration");
                         return ProcessNamespaceDeclarationInline(member);
                     }
                     else
                     {
+                        System.Console.WriteLine($"DEBUG Processing TypeDeclaration: {member.Type}");
                         return ProcessTypeDeclaration(member);
                     }
                 }
                 else
                 {
+                    System.Console.WriteLine($"DEBUG NamespaceMemberDeclaration has no member field or it's not AstNode");
                 }
             }
             
+            System.Console.WriteLine($"DEBUG Returning empty for item type {itemNode.Type}");
             return "";
         });
     
@@ -4186,11 +4249,13 @@ public class WASM : MapSet
     /// </summary>
     private static string ProcessNamespaceDeclarationInline(AstNode nsNode)
     {
+        System.Console.WriteLine($"DEBUG ProcessNamespaceDeclarationInline: fields={string.Join(", ", nsNode.Fields.Keys)}");
         
         // Check all fields
         foreach (var kvp in nsNode.Fields)
         {
             var value = kvp.Value;
+            System.Console.WriteLine($"DEBUG field {kvp.Key}: type={value?.GetType().Name}, AstNode type={(value as AstNode)?.Type}");
         }
         
         // WORKAROUND for CDTk field shifting bug:
@@ -4206,6 +4271,7 @@ public class WASM : MapSet
         {
             if (kvp.Value is AstNode astNode && astNode.Type == "NamespaceBody")
             {
+                System.Console.WriteLine($"DEBUG Found NamespaceBody in field: {kvp.Key}");
                 bodyNode = astNode;
                 break;
             }
@@ -4218,6 +4284,7 @@ public class WASM : MapSet
             {
                 if (kvp.Value is AstNode astNode && astNode.Fields.ContainsKey("items"))
                 {
+                    System.Console.WriteLine($"DEBUG Found potential NamespaceBody (has items field) in field: {kvp.Key}, type={astNode.Type}");
                     bodyNode = astNode;
                     break;
                 }
@@ -4226,6 +4293,7 @@ public class WASM : MapSet
         
         if (bodyNode == null)
         {
+            System.Console.WriteLine($"DEBUG No NamespaceBody found in any field - checking if we can find class directly");
             
             // Last resort: check if any field contains a ClassDeclaration directly
             // This handles the case where the namespace is being skipped entirely
@@ -4237,6 +4305,7 @@ public class WASM : MapSet
                     if (astNode.Type.Contains("Class") || astNode.Type.Contains("Type") || 
                         astNode.Type.Contains("Member") || astNode.Type.Contains("Declaration"))
                     {
+                        System.Console.WriteLine($"DEBUG Trying to process {astNode.Type} as potential type container");
                         var result = ProcessTypeDeclaration(astNode);
                         if (!string.IsNullOrWhiteSpace(result))
                             return result;
@@ -4247,20 +4316,24 @@ public class WASM : MapSet
             return "";
         }
         
+        System.Console.WriteLine($"DEBUG NamespaceBody: type={bodyNode.Type}, fields={string.Join(", ", bodyNode.Fields.Keys)}");
         
         // NamespaceBody has items field
         if (!bodyNode.Fields.ContainsKey("items"))
         {
+            System.Console.WriteLine($"DEBUG NamespaceBody: no items field");
             return "";
         }
         
         var items = bodyNode.Fields["items"];
+        System.Console.WriteLine($"DEBUG NamespaceBody.items: type={items?.GetType().Name}");
         
         var results = new List<string>();
         
         // Process list of NamespaceBodyItem
         if (items is List<AstNode> itemList)
         {
+            System.Console.WriteLine($"DEBUG NamespaceBody.items is list with {itemList.Count} items");
             
             foreach (var bodyItem in itemList)
             {
@@ -4276,6 +4349,7 @@ public class WASM : MapSet
         }
         else if (items is AstNode itemNode)
         {
+            System.Console.WriteLine($"DEBUG NamespaceBody.items is single AstNode");
             
             // Single item or linked list
             var current = itemNode;
@@ -4301,6 +4375,7 @@ public class WASM : MapSet
         }
         else
         {
+            System.Console.WriteLine($"DEBUG NamespaceBody.items is neither list nor AstNode");
         }
         
         return string.Join("\n", results);
