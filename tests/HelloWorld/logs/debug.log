@@ -1,0 +1,25 @@
+[18:05:09.592] DEBUG: Created subfolders: wasm, binaries, logs
+[18:05:09.593] DEBUG: Reading test file: /home/runner/work/CRAB/CRAB/Testing/TestProjects/HelloWorld.cs
+[18:05:09.608] DEBUG: Generated HelloWorld project at /home/runner/work/CRAB/CRAB/HelloWorld
+[18:05:09.608] DEBUG: Created files: Program.cs, HelloWorld.csproj, HelloWorld.sln, HelloWorld.slnx
+[18:05:10.270] DEBUG: Testing x86_64/native
+[18:05:10.279] DEBUG: Saved x86_64/native binary to /home/runner/work/CRAB/CRAB/tests/HelloWorld/binaries/HelloWorld.x86-64.bin
+[18:05:10.279] DEBUG: Testing x86_64/pe
+[18:05:10.280] DEBUG: Saved x86_64/pe binary to /home/runner/work/CRAB/CRAB/tests/HelloWorld/binaries/HelloWorld.x86-64.exe
+[18:05:10.280] DEBUG: Testing x86_32/native
+[18:05:10.284] DEBUG: Saved x86_32/native binary to /home/runner/work/CRAB/CRAB/tests/HelloWorld/binaries/HelloWorld.x86-32.bin
+[18:05:10.284] DEBUG: Testing x86_32/pe
+[18:05:10.284] DEBUG: Saved x86_32/pe binary to /home/runner/work/CRAB/CRAB/tests/HelloWorld/binaries/HelloWorld.x86-32.exe
+[18:05:10.284] DEBUG: Testing x86_16/native
+[18:05:10.288] DEBUG: Saved x86_16/native binary to /home/runner/work/CRAB/CRAB/tests/HelloWorld/binaries/HelloWorld.x86-16.bin
+[18:05:10.288] DEBUG: Skipping x86_16/pe - invalid combination
+[18:05:10.288] DEBUG: Testing arm64/native
+[18:05:10.291] DEBUG: Saved arm64/native binary to /home/runner/work/CRAB/CRAB/tests/HelloWorld/binaries/HelloWorld.arm64.bin
+[18:05:10.291] DEBUG: Testing arm64/pe
+[18:05:10.291] DEBUG: Saved arm64/pe binary to /home/runner/work/CRAB/CRAB/tests/HelloWorld/binaries/HelloWorld.arm64.exe
+[18:05:10.291] DEBUG: Testing arm32/native
+[18:05:10.294] DEBUG: Saved arm32/native binary to /home/runner/work/CRAB/CRAB/tests/HelloWorld/binaries/HelloWorld.arm32.bin
+[18:05:10.294] DEBUG: Testing arm32/pe
+[18:05:10.295] DEBUG: Saved arm32/pe binary to /home/runner/work/CRAB/CRAB/tests/HelloWorld/binaries/HelloWorld.arm32.exe
+[18:05:10.295] DEBUG: Testing WASM format
+[18:05:10.296] DEBUG: Detected architecture: x86_64 (RuntimeInformation: X64)
