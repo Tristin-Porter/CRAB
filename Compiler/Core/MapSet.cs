@@ -4,6 +4,49 @@ using System;
 namespace CRAB;
 
 /// <summary>
+/// Manages string literals for WASM data section.
+/// </summary>
+public static class StringRegistry
+{
+    private static Dictionary<int, string> strings = new();
+    private static Dictionary<int, int> offsets = new();
+    private static int nextId = 0;
+    private static int currentOffset = 0;
+    
+    public static int RegisterString(string text)
+    {
+        var id = nextId++;
+        strings[id] = text;
+        offsets[id] = currentOffset;
+        currentOffset += text.Length + 1; // +1 for null terminator
+        return id;
+    }
+    
+    public static int GetStringOffset(int id)
+    {
+        return offsets.ContainsKey(id) ? offsets[id] : 0;
+    }
+    
+    public static string GetString(int id)
+    {
+        return strings.ContainsKey(id) ? strings[id] : "";
+    }
+    
+    public static Dictionary<int, string> GetAllStrings()
+    {
+        return new Dictionary<int, string>(strings);
+    }
+    
+    public static void Clear()
+    {
+        strings.Clear();
+        offsets.Clear();
+        nextId = 0;
+        currentOffset = 0;
+    }
+}
+
+/// <summary>
 /// Static helper class for WASM code emission.
 /// Used by typed Maps to generate WASM instructions from AST nodes.
 /// All methods are static so they can be called from field initializers.
@@ -43,8 +86,17 @@ public static class WasmEmit
             "DecimalIntegerLiteral" or "HexIntegerLiteral" or "BinaryIntegerLiteral" => EmitIntegerLiteral(node),
             "FloatLiteral" => EmitFloatLiteral(node),
             "DoubleLiteral" => EmitDoubleLiteral(node),
+            "StringLiteral" => EmitStringLiteral(node),
             "TrueLiteral" => "i32.const 1",
             "FalseLiteral" => "i32.const 0",
+            
+            // Method calls and member access
+            "InvocationExpression" => EmitInvocationExpression(node),
+            "MemberAccessExpression" => EmitMemberAccessExpression(node),
+            "NameSegment" => EmitNameSegment(node),
+            "NameSegmentRest" => EmitExpressionDispatcher(node),  // Pass through to child
+            "SimpleName" => EmitExpressionDispatcher(node),  // Pass through to child
+            "QualifiedName" => EmitExpressionDispatcher(node),  // Pass through to child
             
             // Binary operations
             // ONLY call EmitBinaryExpression if the node has left/op/right fields
@@ -289,6 +341,196 @@ public static class WasmEmit
     {
         var name = GetField(node, "lexeme") ?? "unknown";
         return $"local.get ${name}";
+    }
+    
+    /// <summary>
+    /// Emit string literal.
+    /// Stores string in data section and returns pointer.
+    /// </summary>
+    private static string EmitStringLiteral(AstNode node)
+    {
+        var text = GetField(node, "lexeme") ?? "";
+        
+        // Store string in a global registry for later data section emission
+        // For now, we'll use a simple approach - just emit a comment and placeholder
+        // In a full implementation, we'd track strings and add them to data section
+        var stringId = StringRegistry.RegisterString(text);
+        var offset = StringRegistry.GetStringOffset(stringId);
+        var length = text.Length;
+        
+        // Return pointer to string in memory (offset) and length
+        // For Console.WriteLine, we'll pass both offset and length
+        return $";; string \"{text}\" at offset {offset}, length {length}\ni32.const {offset}";
+    }
+    
+    /// <summary>
+    /// Emit method invocation (function call).
+    /// </summary>
+    private static string EmitInvocationExpression(AstNode node)
+    {
+        // InvocationExpression has 'target' (the method being called) and 'args' (arguments)
+        var target = node.Fields.ContainsKey("target") ? node.Fields["target"] : null;
+        var args = node.Fields.ContainsKey("args") ? node.Fields["args"] : null;
+        
+        // Check if this is Console.WriteLine
+        if (target is AstNode targetNode)
+        {
+            var targetStr = GetMethodName(targetNode);
+            
+            // Special case for Console.WriteLine
+            if (targetStr == "Console.WriteLine" || targetStr.EndsWith(".WriteLine"))
+            {
+                // Emit arguments (string literal)
+                var argCode = "";
+                if (args != null)
+                {
+                    argCode = EmitArgumentList(args);
+                }
+                
+                // Call imported console_log function
+                return $";; Console.WriteLine\n{argCode}\ncall $console_log";
+            }
+        }
+        
+        // Generic method call
+        var targetExpr = target != null ? EmitExpression(target) : "";
+        var argsExpr = args != null ? EmitArgumentList(args) : "";
+        
+        return $";; method call\n{argsExpr}\n{targetExpr}";
+    }
+    
+    /// <summary>
+    /// Emit member access expression (obj.Member).
+    /// </summary>
+    private static string EmitMemberAccessExpression(AstNode node)
+    {
+        // MemberAccessExpression has 'target' (left side) and 'member' (right side)
+        var target = node.Fields.ContainsKey("target") ? node.Fields["target"] : null;
+        var member = node.Fields.ContainsKey("member") ? node.Fields["member"] : null;
+        
+        // For now, just concatenate with a dot for debugging
+        var targetStr = target is AstNode tn ? GetNodeName(tn) : "";
+        var memberStr = member is AstNode mn ? GetNodeName(mn) : "";
+        
+        // Return as comment for now - this needs proper implementation for field access
+        return $";; {targetStr}.{memberStr}";
+    }
+    
+    /// <summary>
+    /// Emit name segment (part of qualified name like Console.WriteLine).
+    /// </summary>
+    private static string EmitNameSegment(AstNode node)
+    {
+        // NameSegment has 'name' field which is an IdentifierName
+        var name = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
+        
+        if (name is AstNode nameNode)
+        {
+            var nameStr = GetField(nameNode, "lexeme") ?? "";
+            return $";; name segment: {nameStr}";
+        }
+        
+        return ";; name segment";
+    }
+    
+    /// <summary>
+    /// Emit argument list for method call.
+    /// </summary>
+    private static string EmitArgumentList(object? argsNode)
+    {
+        if (argsNode == null) return "";
+        
+        if (argsNode is AstNode node)
+        {
+            // ArgumentList has 'args' field with list of arguments
+            if (node.Fields.ContainsKey("args"))
+            {
+                var args = node.Fields["args"];
+                
+                if (args is List<AstNode> argList)
+                {
+                    var results = new List<string>();
+                    foreach (var arg in argList)
+                    {
+                        // Each arg might be an Argument wrapper
+                        if (arg.Type == "Argument" && arg.Fields.ContainsKey("expr"))
+                        {
+                            var expr = arg.Fields["expr"];
+                            results.Add(EmitExpression(expr));
+                        }
+                        else
+                        {
+                            results.Add(EmitExpression(arg));
+                        }
+                    }
+                    return string.Join("\n", results);
+                }
+                else if (args is AstNode singleArg)
+                {
+                    return EmitExpression(singleArg);
+                }
+            }
+            
+            // Might be a single expression
+            return EmitExpression(node);
+        }
+        
+        return "";
+    }
+    
+    /// <summary>
+    /// Get method name from AST node (for Console.WriteLine detection).
+    /// </summary>
+    private static string GetMethodName(AstNode node)
+    {
+        if (node.Type == "MemberAccessExpression")
+        {
+            var target = node.Fields.ContainsKey("target") ? node.Fields["target"] : null;
+            var member = node.Fields.ContainsKey("member") ? node.Fields["member"] : null;
+            
+            var targetName = target is AstNode tn ? GetNodeName(tn) : "";
+            var memberName = member is AstNode mn ? GetNodeName(mn) : "";
+            
+            return $"{targetName}.{memberName}";
+        }
+        
+        return GetNodeName(node);
+    }
+    
+    /// <summary>
+    /// Get name from AST node.
+    /// </summary>
+    private static string GetNodeName(AstNode node)
+    {
+        if (node.Fields.ContainsKey("lexeme"))
+        {
+            return node.Fields["lexeme"]?.ToString() ?? "";
+        }
+        
+        if (node.Type == "IdentifierName" || node.Type == "Identifier")
+        {
+            return GetField(node, "lexeme") ?? "";
+        }
+        
+        if (node.Type == "NameSegment" && node.Fields.ContainsKey("name"))
+        {
+            var name = node.Fields["name"];
+            if (name is AstNode nameNode)
+            {
+                return GetNodeName(nameNode);
+            }
+        }
+        
+        if (node.Type == "SimpleName" && node.Fields.ContainsKey("name"))
+        {
+            var name = node.Fields["name"];
+            if (name is AstNode nameNode)
+            {
+                return GetNodeName(nameNode);
+            }
+        }
+        
+        return node.Type;
     }
     
     /// <summary>
@@ -819,6 +1061,7 @@ public class WASM : MapSet
     public Map CompilationUnit = @"(module
   ;; Imports
   (import ""env"" ""memory"" (memory 1))
+  (import ""env"" ""console_log"" (func $console_log (param i32)))
   
   ;; Generated members
 {items}
@@ -1016,8 +1259,29 @@ public class WASM : MapSet
             
             if (nameField is AstNode bodyNode)
             {
+                // DEBUG: Print body structure
+                System.Console.WriteLine($"DEBUG Body node type: {bodyNode.Type}");
+                System.Console.WriteLine($"DEBUG Body fields: {string.Join(", ", bodyNode.Fields.Keys)}");
                 if (bodyNode.Fields.ContainsKey("body"))
+                {
+                    var innerBody = bodyNode.Fields["body"];
+                    System.Console.WriteLine($"DEBUG Inner body type: {(innerBody as AstNode)?.Type ?? innerBody?.GetType().Name}");
+                    if (innerBody is AstNode ibn)
+                    {
+                        System.Console.WriteLine($"DEBUG Inner body fields: {string.Join(", ", ibn.Fields.Keys)}");
+                        if (ibn.Fields.ContainsKey("stmts"))
+                        {
+                            var stmts = ibn.Fields["stmts"];
+                            System.Console.WriteLine($"DEBUG Stmts type: {stmts?.GetType().Name}");
+                            if (stmts is AstNode sn)
+                            {
+                                System.Console.WriteLine($"DEBUG Stmts node type: {sn.Type}");
+                                System.Console.WriteLine($"DEBUG Stmts fields: {string.Join(", ", sn.Fields.Keys)}");
+                            }
+                        }
+                    }
                     body = WasmEmit.EmitStatement(bodyNode.Fields["body"]);
+                }
                 else
                     body = WasmEmit.EmitStatement(bodyNode);
             }
