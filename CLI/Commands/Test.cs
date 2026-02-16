@@ -19,8 +19,7 @@ class Test : Command
         Description = "Run comprehensive test suite with multiple test projects across all architectures.";
         
         SupportedFlags["name"] = "Name of a specific test project to run (default: run all projects).";
-        SupportedFlags["keep"] = "Keep the generated test projects after execution.";
-        SupportedFlags["save"] = "Save all compiled outputs in tests/{project-name} folders with organized subfolders.";
+        SupportedFlags["save"] = "Save the generated test projects to disk (so you can run them yourself).";
         SupportedFlags["verbose"] = "Enable verbose output.";
         SupportedFlags["debug"] = "Enable debug logging with detailed information.";
         SupportedFlags["quick"] = "Run quick test (single architecture only).";
@@ -37,7 +36,6 @@ class Test : Command
         else if (args.Length > 0)
             specificProject = args[0];
 
-        bool keepProjects = flags.ContainsKey("keep");
         bool saveOutputs = flags.ContainsKey("save");
         bool verbose = flags.ContainsKey("verbose");
         bool debugMode = flags.ContainsKey("debug");
@@ -55,8 +53,11 @@ class Test : Command
         System.Console.WriteLine("CRAB Compiler - Comprehensive Test Suite");
         System.Console.WriteLine("=".PadRight(70, '='));
         System.Console.WriteLine($"Projects:   {(specificProject != null ? specificProject : $"{projectsToRun.Length} test projects")}");
-        System.Console.WriteLine($"Mode:       {(quickMode ? "Quick (single architecture)" : "Comprehensive (all architectures)")}");
-        System.Console.WriteLine($"Keep:       {keepProjects}");
+        
+        // Update mode based on flags
+        string mode = quickMode ? "Quick (single architecture)" : "Comprehensive (all architectures)";
+        
+        System.Console.WriteLine($"Mode:       {mode}");
         System.Console.WriteLine($"Save:       {saveOutputs}");
         System.Console.WriteLine($"Verbose:    {verbose}");
         System.Console.WriteLine($"Debug:      {debugMode}");
@@ -85,7 +86,6 @@ class Test : Command
                 bool projectSuccess = RunProjectTest(
                     projectName, 
                     currentDir, 
-                    keepProjects, 
                     saveOutputs, 
                     verbose, 
                     debugMode, 
@@ -152,7 +152,6 @@ class Test : Command
     private bool RunProjectTest(
         string projectName,
         string baseDir,
-        bool keepProject,
         bool saveOutputs,
         bool verbose,
         bool debugMode,
@@ -168,20 +167,10 @@ class Test : Command
 
         try
         {
-            // Set up save directory if requested
-            if (saveOutputs)
-            {
-                saveDir = Path.Combine(baseDir, "tests", projectName);
-                Directory.CreateDirectory(saveDir);
-                
-                // Create organized subfolders
-                Directory.CreateDirectory(Path.Combine(saveDir, "wasm"));
-                Directory.CreateDirectory(Path.Combine(saveDir, "binaries"));
-                Directory.CreateDirectory(Path.Combine(saveDir, "logs"));
-                
-                LogInfo($"Save directory created: {saveDir}");
-                LogDebug($"Created subfolders: wasm, binaries, logs");
-            }
+            // Always set saveDir so binaries can be saved to the proper location
+            // This will be used even with --keep to organize outputs properly
+            saveDir = Path.Combine(projectPath, "bin", "Debug", "crab");
+            LogInfo($"Outputs will be tracked in: {saveDir}");
 
             // Step 1: Generate test project with appropriate content
             if (verbose || debugMode) 
@@ -220,16 +209,16 @@ class Test : Command
 
             buildCommand.Execute(Array.Empty<string>(), buildFlags);
 
-            // Check for compiled output (wasm or wat)
-            string outputFile = Path.Combine(projectPath, "bin", "output.wasm");
+            // Check for compiled output (wasm or wat) in new bin/Debug/crab/Web structure
+            string outputFile = Path.Combine(projectPath, "bin", "Debug", "crab", "Web", "output.wasm");
             if (!File.Exists(outputFile))
             {
-                outputFile = Path.Combine(projectPath, "bin", "output.wat");
+                outputFile = Path.Combine(projectPath, "bin", "Debug", "crab", "Web", "output.wat");
                 if (!File.Exists(outputFile))
                 {
                     System.Console.WriteLine($"Error: Build failed - output file not found");
                     LogDebug($"ERROR: Build failed for {projectName}");
-                    CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
+                    CleanupProject(projectPath, saveOutputs, verbose || debugMode, saveDir);
                     return false;
                 }
             }
@@ -238,77 +227,63 @@ class Test : Command
 
             if (verbose || debugMode) System.Console.WriteLine();
 
-            // Save WASM/WAT/JS/HTML files if requested
+            // Files are already saved to bin/Debug/crab/Web by Build command
+            // Just log the locations if requested
             if (saveOutputs && saveDir != null)
             {
-                string wasmSaveDir = Path.Combine(saveDir, "wasm");
-                string binDir = Path.Combine(projectPath, "bin");
+                string webDir = Path.Combine(projectPath, "bin", "Debug", "crab", "Web");
                 
-                // Copy the main output file (WASM or WAT) with project name
-                string outputExt = Path.GetExtension(outputFile);
-                string watDest = Path.Combine(wasmSaveDir, $"{projectName}{outputExt}");
-                File.Copy(outputFile, watDest, overwrite: true);
-                LogInfo($"Saved WASM/WAT output to {watDest}");
-                
-                // Also copy JS and HTML files if they exist with project name
-                string jsSource = Path.Combine(binDir, $"{projectName}.js");
-                string htmlSource = Path.Combine(binDir, $"{projectName}.html");
-                string wasmSource = Path.Combine(binDir, $"{projectName}.wasm");
+                // Check what files exist and log them
+                string jsSource = Path.Combine(webDir, $"{projectName}.js");
+                string htmlSource = Path.Combine(webDir, $"{projectName}.html");
+                string wasmSource = Path.Combine(webDir, $"{projectName}.wasm");
                 
                 if (File.Exists(jsSource))
                 {
-                    string jsDest = Path.Combine(wasmSaveDir, $"{projectName}.js");
-                    File.Copy(jsSource, jsDest, overwrite: true);
-                    LogInfo($"Saved JS wrapper to {jsDest}");
-                    
+                    LogInfo($"JS wrapper saved at {jsSource}");
                     if (verbose || debugMode)
-                        System.Console.WriteLine($"Saved {projectName}.js to {wasmSaveDir}");
+                        System.Console.WriteLine($"JS saved: {jsSource}");
                 }
                 
                 if (File.Exists(htmlSource))
                 {
-                    string htmlDest = Path.Combine(wasmSaveDir, $"{projectName}.html");
-                    File.Copy(htmlSource, htmlDest, overwrite: true);
-                    LogInfo($"Saved HTML runner to {htmlDest}");
-                    
+                    LogInfo($"HTML runner saved at {htmlSource}");
                     if (verbose || debugMode)
-                        System.Console.WriteLine($"Saved {projectName}.html to {wasmSaveDir}");
+                        System.Console.WriteLine($"HTML saved: {htmlSource}");
                 }
                 
                 if (File.Exists(wasmSource))
                 {
-                    string wasmDest = Path.Combine(wasmSaveDir, $"{projectName}.wasm");
-                    File.Copy(wasmSource, wasmDest, overwrite: true);
-                    LogInfo($"Saved WASM binary to {wasmDest}");
-                    
+                    LogInfo($"WASM binary saved at {wasmSource}");
                     if (verbose || debugMode)
-                        System.Console.WriteLine($"Saved {projectName}.wasm to {wasmSaveDir}");
+                        System.Console.WriteLine($"WASM saved: {wasmSource}");
                 }
-                
-                // Final summary log after all files are copied
-                if (verbose || debugMode)
-                    System.Console.WriteLine($"Saved all test outputs to {wasmSaveDir}");
             }
 
-            // Step 3: Compile to native/PE for all architectures (or single if quick mode)
-            if (verbose || debugMode)
-                System.Console.WriteLine($"[3/3] Testing {projectName} across architectures...");
-            else
-                System.Console.WriteLine($"Testing {projectName}...");
-
+            // Step 3: Test across architectures
             if (quickMode)
             {
+                if (verbose || debugMode)
+                    System.Console.WriteLine($"[3/3] Testing {projectName} (quick mode)...");
+                else
+                    System.Console.WriteLine($"Testing {projectName}...");
+                
                 RunQuickTest(outputFile, new Dictionary<string, string?>(), verbose || debugMode, saveDir);
                 testsPassed = 1;
                 testsTotal = 1;
             }
             else
             {
+                if (verbose || debugMode)
+                    System.Console.WriteLine($"[3/3] Testing {projectName} across architectures...");
+                else
+                    System.Console.WriteLine($"Testing {projectName}...");
+                
                 RunComprehensiveTest(outputFile, projectName, projectPath, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
             }
 
-            // Cleanup if requested
-            CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
+            // Cleanup project unless --save flag is used
+            CleanupProject(projectPath, saveOutputs, verbose || debugMode, saveDir);
             
             // Save logs if requested
             if (saveOutputs && saveDir != null)
@@ -332,7 +307,7 @@ class Test : Command
             }
 
             // Attempt cleanup even on error
-            CleanupProject(projectPath, keepProject, verbose || debugMode, saveDir);
+            CleanupProject(projectPath, saveOutputs, verbose || debugMode, saveDir);
             return false;
         }
     }
@@ -609,14 +584,20 @@ EndGlobal
 
         runCommand.Execute(Array.Empty<string>(), runFlags);
         
-        // Save output if requested
+        // Save output if requested - save to bin/Debug/crab folder structure
         if (saveDir != null)
         {
             string outputBin = $"output.bin";
             if (File.Exists(outputBin))
             {
                 string extension = runFlags["format"] == "pe" ? "exe" : "bin";
-                string binarySaveDir = Path.Combine(saveDir, "binaries");
+                string targetFolder = runFlags["format"] == "pe" ? "Windows" : "Native";
+                
+                // Get project name from saveDir path
+                string projectPath = Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(saveDir)));
+                string binarySaveDir = Path.Combine(projectPath, "bin", "Debug", "crab", targetFolder);
+                Directory.CreateDirectory(binarySaveDir);
+                
                 string destName = $"{runFlags["arch"]}_{runFlags["format"]}.{extension}";
                 string destPath = Path.Combine(binarySaveDir, destName);
                 File.Copy(outputBin, destPath, overwrite: true);
@@ -694,11 +675,13 @@ EndGlobal
                         
                         LogInfo($"Test {arch}/{format} PASSED in {sw.ElapsedMilliseconds}ms");
                         
-                        // Save output if requested with proper naming
+                        // Save output if requested - move to proper subfolder in bin/Debug/crab
                         if (saveDir != null && File.Exists(outputFileName))
                         {
                             string extension = format == "pe" ? "exe" : "bin";
-                            string binarySaveDir = Path.Combine(saveDir, "binaries");
+                            string targetFolder = format == "pe" ? "Windows" : "Native";
+                            string binarySaveDir = Path.Combine(projectPath, "bin", "Debug", "crab", targetFolder);
+                            Directory.CreateDirectory(binarySaveDir);
                             
                             // Use format: HelloWorld.x86-64.exe or HelloWorld.x86-64.bin
                             string archName = arch.Replace("_", "-");
@@ -753,9 +736,9 @@ EndGlobal
         var wasmSw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            // Read WAT file - use .wat file if available, otherwise try reading as text
-            string binDir = Path.Combine(projectPath, "bin");
-            string watFile = Path.Combine(binDir, "output.wat");
+            // Read WAT file from new bin/Debug/crab/Web structure
+            string webDir = Path.Combine(projectPath, "bin", "Debug", "crab", "Web");
+            string watFile = Path.Combine(webDir, "output.wat");
             string watContent;
             
             if (File.Exists(watFile))
@@ -826,12 +809,12 @@ EndGlobal
         if (saveDir != null)
         {
             System.Console.WriteLine();
-            System.Console.WriteLine($"Saved outputs to: {saveDir}");
-            System.Console.WriteLine($"  - WASM files in: {Path.Combine(saveDir, "wasm")}");
-            System.Console.WriteLine($"  - {passed - 1} binaries in: {Path.Combine(saveDir, "binaries")}"); // -1 for WASM
-            System.Console.WriteLine($"  - Logs in: {Path.Combine(saveDir, "logs")}");
+            System.Console.WriteLine($"Project outputs saved to: {saveDir}");
+            System.Console.WriteLine($"  - Web files (WASM/JS/HTML): {Path.Combine(saveDir, "Web")}");
+            System.Console.WriteLine($"  - Windows PE executables: {Path.Combine(saveDir, "Windows")}");
+            System.Console.WriteLine($"  - Native binaries: {Path.Combine(saveDir, "Native")}");
             
-            LogInfo($"Saved {passed} outputs to {saveDir}");
+            LogInfo($"All outputs saved to organized structure in {saveDir}");
         }
 
         // Try to run on the appropriate architecture for the current platform

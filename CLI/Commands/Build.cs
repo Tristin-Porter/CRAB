@@ -42,15 +42,15 @@ class Build : Command
             baseDir = Path.GetDirectoryName(projectPath) ?? ".";
         }
         
-        // Parse output path
-        string outputPath = Path.Combine(baseDir, "bin");
-        if (flags.TryGetValue("output", out var flagOutput) && !string.IsNullOrWhiteSpace(flagOutput))
-            outputPath = flagOutput;
-
         // Parse configuration
         string config = "debug";
         if (flags.TryGetValue("config", out var flagConfig) && !string.IsNullOrWhiteSpace(flagConfig))
             config = flagConfig.ToLower();
+
+        // Parse output path - default to bin/Debug/crab or bin/Release/crab
+        string outputPath = Path.Combine(baseDir, "bin", config.Substring(0, 1).ToUpper() + config.Substring(1), "crab");
+        if (flags.TryGetValue("output", out var flagOutput) && !string.IsNullOrWhiteSpace(flagOutput))
+            outputPath = flagOutput;
 
         bool verbose = flags.ContainsKey("verbose");
 
@@ -125,12 +125,39 @@ class Build : Command
                 }
             }
 
-            // Create output directory
+            // Create output directory and subdirectories
             if (verbose) System.Console.WriteLine("\n[2/4] Preparing output directory...");
             Directory.CreateDirectory(outputPath);
             
+            // Create organized subdirectories
+            string webOutputDir = Path.Combine(outputPath, "Web");
+            string windowsOutputDir = Path.Combine(outputPath, "Windows");
+            string nativeOutputDir = Path.Combine(outputPath, "Native");
+            
+            Directory.CreateDirectory(webOutputDir);
+            Directory.CreateDirectory(windowsOutputDir);
+            Directory.CreateDirectory(nativeOutputDir);
+            
             bool toAsm = flags.ContainsKey("to-asm");
-            string outputFile = Path.Combine(outputPath, toAsm ? "output.bin" : "output.wasm");
+            
+            // For WASM output, place in Web folder
+            // For native/PE output, place in appropriate folders
+            string outputFile;
+            if (toAsm)
+            {
+                string format = "native";
+                if (flags.TryGetValue("format", out var fmt) && !string.IsNullOrWhiteSpace(fmt))
+                    format = fmt.ToLower();
+                
+                if (format == "pe")
+                    outputFile = Path.Combine(windowsOutputDir, "output.exe");
+                else
+                    outputFile = Path.Combine(nativeOutputDir, "output.bin");
+            }
+            else
+            {
+                outputFile = Path.Combine(webOutputDir, "output.wasm");
+            }
 
             // Compile source files
             if (verbose) System.Console.WriteLine("\n[3/4] Compiling project...");
@@ -220,13 +247,13 @@ class Build : Command
                         projectNameForFiles = "output";
                     }
                     
-                    // Save WASM binary
-                    string wasmBinaryPath = Path.Combine(outputPath, $"{projectNameForFiles}.wasm");
+                    // Save WASM binary, JS, HTML to Web folder
+                    string wasmBinaryPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.wasm");
                     File.WriteAllBytes(wasmBinaryPath, wasmBinary);
                     if (verbose) System.Console.WriteLine($"      Saved {wasmBinaryPath} ({wasmBinary.Length} bytes)");
                     
                     // Save JS wrapper
-                    string jsPath = Path.Combine(outputPath, $"{projectNameForFiles}.js");
+                    string jsPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.js");
                     File.WriteAllText(jsPath, jsWrapper);
                     if (verbose) System.Console.WriteLine($"      Saved {jsPath}");
                     
@@ -236,12 +263,12 @@ class Build : Command
                         projectNameForTitle, 
                         $"{projectNameForFiles}.wasm", 
                         $"{projectNameForFiles}.js");
-                    string htmlPath = Path.Combine(outputPath, $"{projectNameForFiles}.html");
+                    string htmlPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.html");
                     File.WriteAllText(htmlPath, htmlContent);
                     if (verbose) System.Console.WriteLine($"      Saved {htmlPath}");
                     
                     // Also save the original WAT for debugging
-                    string watPath = Path.Combine(outputPath, $"{projectNameForFiles}.wat");
+                    string watPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.wat");
                     File.WriteAllText(watPath, watText);
                     if (verbose) System.Console.WriteLine($"      Saved {watPath} (WebAssembly text format)");
                     
@@ -308,10 +335,10 @@ class Build : Command
                     // If discovery fails, use default
                 }
                 
-                string wasmBinaryPath = Path.Combine(outputPath, $"{projectNameForFiles}.wasm");
-                string jsPath = Path.Combine(outputPath, $"{projectNameForFiles}.js");
-                string htmlPath = Path.Combine(outputPath, $"{projectNameForFiles}.html");
-                string watPath = Path.Combine(outputPath, $"{projectNameForFiles}.wat");
+                string wasmBinaryPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.wasm");
+                string jsPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.js");
+                string htmlPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.html");
+                string watPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.wat");
                 
                 if (File.Exists(wasmBinaryPath))
                     System.Console.WriteLine($"  WASM binary: {wasmBinaryPath} ({new FileInfo(wasmBinaryPath).Length} bytes)");
