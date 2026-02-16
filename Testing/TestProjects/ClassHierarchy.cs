@@ -27,6 +27,8 @@ namespace ClassHierarchy
         static void Main()
         {
             Console.WriteLine("Base: 10, Derived: 20");
+            Console.WriteLine("Press any key to exit...");
+            Console.ReadKey();
         }
     }
 }

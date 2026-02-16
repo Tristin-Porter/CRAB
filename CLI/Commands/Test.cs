@@ -251,8 +251,9 @@ class Test : Command
                 LogInfo($"Saved WASM/WAT output to {watDest}");
                 
                 // Also copy JS and HTML files if they exist with project name
-                string jsSource = Path.Combine(binDir, "output.js");
-                string htmlSource = Path.Combine(binDir, "index.html");
+                string jsSource = Path.Combine(binDir, $"{projectName}.js");
+                string htmlSource = Path.Combine(binDir, $"{projectName}.html");
+                string wasmSource = Path.Combine(binDir, $"{projectName}.wasm");
                 
                 if (File.Exists(jsSource))
                 {
@@ -272,6 +273,16 @@ class Test : Command
                     
                     if (verbose || debugMode)
                         System.Console.WriteLine($"Saved {projectName}.html to {wasmSaveDir}");
+                }
+                
+                if (File.Exists(wasmSource))
+                {
+                    string wasmDest = Path.Combine(wasmSaveDir, $"{projectName}.wasm");
+                    File.Copy(wasmSource, wasmDest, overwrite: true);
+                    LogInfo($"Saved WASM binary to {wasmDest}");
+                    
+                    if (verbose || debugMode)
+                        System.Console.WriteLine($"Saved {projectName}.wasm to {wasmSaveDir}");
                 }
                 
                 // Final summary log after all files are copied
@@ -418,6 +429,8 @@ class Test : Command
 class Program {
     static void Main() {
         Console.WriteLine(""Hello World!"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }",
                     "Calculator" => @"using System;
@@ -435,6 +448,8 @@ class Calculator {
 class Program {
     static void Main() {
         Console.WriteLine(""Calculator: 5 + 3 = 8"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }",
                     "ClassHierarchy" => @"using System;
@@ -454,6 +469,8 @@ class Derived {
 class Program {
     static void Main() {
         Console.WriteLine(""Base: 10, Derived: 20"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }",
                     "GenericCollections" => @"using System;
@@ -467,6 +484,8 @@ class Container {
 class Program {
     static void Main() {
         Console.WriteLine(""Container Data: 100"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }",
                     _ => @"using System;
@@ -474,6 +493,8 @@ class Program {
 class Program {
     static void Main() {
         Console.WriteLine(""Default Test"");
+        Console.WriteLine(""Press any key to exit..."");
+        Console.ReadKey();
     }
 }"
                 };

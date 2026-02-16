@@ -197,34 +197,58 @@ class Build : Command
                     var (wasmBinary, jsWrapper) = WasmJS.Emit(watText);
                     if (verbose) System.Console.WriteLine($"      BADGER generated {wasmBinary.Length} bytes of WASM binary");
                     
+                    // Determine project name for file naming
+                    string projectNameForFiles;
+                    if (discovery.ProjectFiles.Count > 0)
+                    {
+                        // Use project file name
+                        projectNameForFiles = Path.GetFileNameWithoutExtension(discovery.ProjectFiles[0]);
+                    }
+                    else if (!string.IsNullOrEmpty(discovery.SolutionFile))
+                    {
+                        // Use solution file name
+                        projectNameForFiles = Path.GetFileNameWithoutExtension(discovery.SolutionFile);
+                    }
+                    else if (Directory.Exists(projectPath))
+                    {
+                        // Use directory name
+                        projectNameForFiles = Path.GetFileName(Path.GetFullPath(projectPath));
+                    }
+                    else
+                    {
+                        // Fallback to "output"
+                        projectNameForFiles = "output";
+                    }
+                    
                     // Save WASM binary
-                    string wasmBinaryPath = Path.Combine(outputPath, "output.wasm");
+                    string wasmBinaryPath = Path.Combine(outputPath, $"{projectNameForFiles}.wasm");
                     File.WriteAllBytes(wasmBinaryPath, wasmBinary);
                     if (verbose) System.Console.WriteLine($"      Saved {wasmBinaryPath} ({wasmBinary.Length} bytes)");
                     
                     // Save JS wrapper
-                    string jsPath = Path.Combine(outputPath, "output.js");
+                    string jsPath = Path.Combine(outputPath, $"{projectNameForFiles}.js");
                     File.WriteAllText(jsPath, jsWrapper);
                     if (verbose) System.Console.WriteLine($"      Saved {jsPath}");
                     
-                    // Generate HTML file
-                    string projectNameForHtml = discovery.ProjectFiles.Count > 0 
-                        ? Path.GetFileNameWithoutExtension(discovery.ProjectFiles[0])
-                        : "CRAB Project";
-                    string htmlContent = HtmlGenerator.GenerateHtml(projectNameForHtml);
-                    string htmlPath = Path.Combine(outputPath, "index.html");
+                    // Generate HTML file with project-specific filenames
+                    string projectNameForTitle = projectNameForFiles;
+                    string htmlContent = HtmlGenerator.GenerateHtml(
+                        projectNameForTitle, 
+                        $"{projectNameForFiles}.wasm", 
+                        $"{projectNameForFiles}.js");
+                    string htmlPath = Path.Combine(outputPath, $"{projectNameForFiles}.html");
                     File.WriteAllText(htmlPath, htmlContent);
                     if (verbose) System.Console.WriteLine($"      Saved {htmlPath}");
                     
-                    // Also save the original WAT as output.wat for debugging
-                    string watPath = Path.Combine(outputPath, "output.wat");
+                    // Also save the original WAT for debugging
+                    string watPath = Path.Combine(outputPath, $"{projectNameForFiles}.wat");
                     File.WriteAllText(watPath, watText);
                     if (verbose) System.Console.WriteLine($"      Saved {watPath} (WebAssembly text format)");
                     
                     if (verbose)
                     {
                         System.Console.WriteLine("\n[5/6] Browser files generated.");
-                        System.Console.WriteLine("      Open index.html in a browser to run the WebAssembly module.");
+                        System.Console.WriteLine($"      Open {projectNameForFiles}.html in a browser to run the WebAssembly module.");
                     }
                 }
                 catch (IOException ioEx)
@@ -261,10 +285,33 @@ class Build : Command
             // Show additional outputs if generated
             if (!toAsm && outputFile.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase))
             {
-                string wasmBinaryPath = Path.Combine(outputPath, "output.wasm");
-                string jsPath = Path.Combine(outputPath, "output.js");
-                string htmlPath = Path.Combine(outputPath, "index.html");
-                string watPath = Path.Combine(outputPath, "output.wat");
+                // Determine project name for file naming (same logic as above)
+                string projectNameForFiles = "output";  // Default fallback
+                try
+                {
+                    var fileDiscovery = ProjectDiscovery.Discover(projectPath);
+                    if (fileDiscovery.ProjectFiles.Count > 0)
+                    {
+                        projectNameForFiles = Path.GetFileNameWithoutExtension(fileDiscovery.ProjectFiles[0]);
+                    }
+                    else if (!string.IsNullOrEmpty(fileDiscovery.SolutionFile))
+                    {
+                        projectNameForFiles = Path.GetFileNameWithoutExtension(fileDiscovery.SolutionFile);
+                    }
+                    else if (Directory.Exists(projectPath))
+                    {
+                        projectNameForFiles = Path.GetFileName(Path.GetFullPath(projectPath));
+                    }
+                }
+                catch
+                {
+                    // If discovery fails, use default
+                }
+                
+                string wasmBinaryPath = Path.Combine(outputPath, $"{projectNameForFiles}.wasm");
+                string jsPath = Path.Combine(outputPath, $"{projectNameForFiles}.js");
+                string htmlPath = Path.Combine(outputPath, $"{projectNameForFiles}.html");
+                string watPath = Path.Combine(outputPath, $"{projectNameForFiles}.wat");
                 
                 if (File.Exists(wasmBinaryPath))
                     System.Console.WriteLine($"  WASM binary: {wasmBinaryPath} ({new FileInfo(wasmBinaryPath).Length} bytes)");

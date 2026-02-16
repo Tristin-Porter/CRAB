@@ -1196,6 +1196,9 @@ public static class Assembler
             case "ret":
                 EncodeRet();
                 break;
+            case "syscall":
+                EncodeSyscall();
+                break;
             case "nop":
                 EncodeNop();
                 break;
@@ -1464,6 +1467,13 @@ public static class Assembler
     private static void EncodeRet()
     {
         code.Add(0xC3);
+    }
+    
+    private static void EncodeSyscall()
+    {
+        // syscall instruction: 0F 05
+        code.Add(0x0F);
+        code.Add(0x05);
     }
     
     private static void EncodeNop()
