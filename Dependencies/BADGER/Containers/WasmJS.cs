@@ -216,8 +216,16 @@ public static class WasmJS
         var tokens = TokenizeWat(watText);
         if (tokens.Count == 0) return info;
         
-        // Find module boundaries
-        int moduleStart = FindToken(tokens, 0, "(module");
+        // Find module boundaries  
+        int moduleStart = -1;
+        for (int i = 0; i < tokens.Count - 1; i++)
+        {
+            if (tokens[i] == "(" && tokens[i + 1] == "module")
+            {
+                moduleStart = i;
+                break;
+            }
+        }
         if (moduleStart == -1) return info;
         
         // Parse sections within module
@@ -227,25 +235,33 @@ public static class WasmJS
             if (tokens[pos] == ")")
                 break;
                 
-            if (tokens[pos] == "(import")
+            if (tokens[pos] == "(" && pos + 1 < tokens.Count)
             {
-                pos = ParseImport(tokens, pos, info);
-            }
-            else if (tokens[pos] == "(memory")
-            {
-                pos = ParseMemory(tokens, pos, info);
-            }
-            else if (tokens[pos] == "(func")
-            {
-                pos = ParseFunction(tokens, pos, info);
-            }
-            else if (tokens[pos] == "(export")
-            {
-                pos = ParseExport(tokens, pos, info);
-            }
-            else if (tokens[pos] == "(data")
-            {
-                pos = ParseData(tokens, pos, info);
+                string keyword = tokens[pos + 1];
+                if (keyword == "import")
+                {
+                    pos = ParseImport(tokens, pos, info);
+                }
+                else if (keyword == "memory")
+                {
+                    pos = ParseMemory(tokens, pos, info);
+                }
+                else if (keyword == "func")
+                {
+                    pos = ParseFunction(tokens, pos, info);
+                }
+                else if (keyword == "export")
+                {
+                    pos = ParseExport(tokens, pos, info);
+                }
+                else if (keyword == "data")
+                {
+                    pos = ParseData(tokens, pos, info);
+                }
+                else
+                {
+                    pos++;
+                }
             }
             else
             {
@@ -347,8 +363,8 @@ public static class WasmJS
     
     private static int ParseImport(List<string> tokens, int pos, ModuleInfo info)
     {
-        // (import "module" "field" (kind ...))
-        pos++; // skip (import
+        // pos points to '(', next is 'import'
+        pos += 2; // skip ( and import
         
         var import_ = new Import();
         
@@ -387,8 +403,8 @@ public static class WasmJS
     
     private static int ParseMemory(List<string> tokens, int pos, ModuleInfo info)
     {
-        // (memory N) or (memory N M)
-        pos++; // skip (memory
+        // pos points to '(', next is 'memory'
+        pos += 2; // skip ( and memory
         
         var memory = new Memory();
         if (pos < tokens.Count && char.IsDigit(tokens[pos][0]))
@@ -403,8 +419,8 @@ public static class WasmJS
     
     private static int ParseFunction(List<string> tokens, int pos, ModuleInfo info)
     {
-        // (func $name (param ...) (result ...) (local ...) instructions...)
-        pos++; // skip (func
+        // pos points to '(', next is 'func'  
+        pos += 2; // skip ( and func
         
         var funcType = new FunctionType();
         var funcCode = new FunctionCode();
@@ -488,8 +504,8 @@ public static class WasmJS
     
     private static int ParseExport(List<string> tokens, int pos, ModuleInfo info)
     {
-        // (export "name" (kind index))
-        pos++; // skip (export
+        // pos points to '(', next is 'export'
+        pos += 2; // skip ( and export
         
         var export_ = new Export();
         
