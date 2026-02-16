@@ -292,7 +292,7 @@ class Test : Command
             }
             else
             {
-                RunComprehensiveTest(outputFile, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
+                RunComprehensiveTest(outputFile, projectName, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
             }
 
             // Cleanup if requested
@@ -581,7 +581,7 @@ EndGlobal
         LogInfo("Quick test completed");
     }
 
-    private void RunComprehensiveTest(string outputFile, bool verbose, bool debug, string? saveDir, out int testsPassed, out int testsTotal)
+    private void RunComprehensiveTest(string outputFile, string projectName, bool verbose, bool debug, string? saveDir, out int testsPassed, out int testsTotal)
     {
         System.Console.WriteLine("[3/3] Running comprehensive test suite...");
         System.Console.WriteLine();
@@ -644,12 +644,16 @@ EndGlobal
                         
                         LogInfo($"Test {arch}/{format} PASSED in {sw.ElapsedMilliseconds}ms");
                         
-                        // Save output if requested
+                        // Save output if requested with proper naming
                         if (saveDir != null && File.Exists(outputFileName))
                         {
                             string extension = format == "pe" ? "exe" : "bin";
                             string binarySaveDir = Path.Combine(saveDir, "binaries");
-                            string destPath = Path.Combine(binarySaveDir, $"{arch}_{format}.{extension}");
+                            
+                            // Use format: HelloWorld.x86-64.exe or HelloWorld.x86-64.bin
+                            string archName = arch.Replace("_", "-");
+                            string destFileName = $"{projectName}.{archName}.{extension}";
+                            string destPath = Path.Combine(binarySaveDir, destFileName);
                             File.Copy(outputFileName, destPath, overwrite: true);
                             
                             LogDebug($"Saved {arch}/{format} binary to {destPath}");
@@ -713,19 +717,19 @@ EndGlobal
             LogInfo($"Test WASM format PASSED in {wasmSw.ElapsedMilliseconds}ms");
             LogInfo($"Generated {wasmBinary.Length} bytes of WASM binary");
             
-            // Save WASM and JS if requested
+            // Save WASM, HTML, and JS if requested with proper naming
             if (saveDir != null)
             {
                 string wasmSaveDir = Path.Combine(saveDir, "wasm");
                 
-                // Save WASM binary
-                string wasmPath = Path.Combine(wasmSaveDir, "output.wasm");
+                // Save WASM binary as HelloWorld.wasm
+                string wasmPath = Path.Combine(wasmSaveDir, $"{projectName}.wasm");
                 File.WriteAllBytes(wasmPath, wasmBinary);
                 
-                // Copy JS wrapper if it exists
+                // Copy/rename JS wrapper if it exists as HelloWorld.js
                 if (File.Exists("output.js"))
                 {
-                    string jsPath = Path.Combine(wasmSaveDir, "output.js");
+                    string jsPath = Path.Combine(wasmSaveDir, $"{projectName}.js");
                     File.Copy("output.js", jsPath, overwrite: true);
                     
                     LogInfo($"Saved WASM binary ({wasmBinary.Length} bytes) and JS wrapper to {wasmSaveDir}");
@@ -736,12 +740,27 @@ EndGlobal
                         System.Console.WriteLine($"    Saved JS wrapper to {jsPath}");
                     }
                 }
+                
+                // Copy/rename HTML if it exists as HelloWorld.html
+                if (File.Exists("index.html"))
+                {
+                    string htmlPath = Path.Combine(wasmSaveDir, $"{projectName}.html");
+                    File.Copy("index.html", htmlPath, overwrite: true);
+                    
+                    LogInfo($"Saved HTML runner to {htmlPath}");
+                    
+                    if (verbose || debug)
+                        System.Console.WriteLine($"    Saved HTML to {htmlPath}");
+                }
             }
             
-            // Cleanup output.js if not saving
-            if (saveDir == null && File.Exists("output.js"))
+            // Cleanup output.js and index.html if not saving
+            if (saveDir == null)
             {
-                File.Delete("output.js");
+                if (File.Exists("output.js"))
+                    File.Delete("output.js");
+                if (File.Exists("index.html"))
+                    File.Delete("index.html");
             }
         }
         catch (Exception ex)
