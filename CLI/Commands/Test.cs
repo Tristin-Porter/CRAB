@@ -294,7 +294,7 @@ class Test : Command
             }
             else
             {
-                RunComprehensiveTest(outputFile, projectName, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
+                RunComprehensiveTest(outputFile, projectName, projectPath, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
             }
 
             // Cleanup if requested
@@ -611,7 +611,7 @@ EndGlobal
         LogInfo("Quick test completed");
     }
 
-    private void RunComprehensiveTest(string outputFile, string projectName, bool verbose, bool debug, string? saveDir, out int testsPassed, out int testsTotal)
+    private void RunComprehensiveTest(string outputFile, string projectName, string projectPath, bool verbose, bool debug, string? saveDir, out int testsPassed, out int testsTotal)
     {
         System.Console.WriteLine("[3/3] Running comprehensive test suite...");
         System.Console.WriteLine();
