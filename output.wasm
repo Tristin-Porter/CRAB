@@ -3,7 +3,6 @@
   (import "env" "memory" (memory 1))
   
   ;; Generated members
-;; using ;
 ;; class Program
 (type $Program (struct
 (func $
@@ -13,6 +12,12 @@ Main
 
   ;; Deallocation instructions inserted here based on AutomaticModel analysis
 )
+)
+(func $i32
+Add
+  (result ;; modifiers: )
+(param $x i32)
+  (param $y i32)
 )
 ))
 )
