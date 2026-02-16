@@ -3356,8 +3356,15 @@ public class WASM : MapSet
             System.Console.WriteLine($"DEBUG field {kvp.Key}: type={value?.GetType().Name}, AstNode type={(value as AstNode)?.Type}");
         }
         
-        // Find the NamespaceBody in any field
+        // WORKAROUND for CDTk field shifting bug:
+        // Due to the @KwNamespace token at the start, fields may be shifted.
+        // Expected: name=QualifiedName, body=NamespaceBody
+        // Actual due to bug: name=KwNamespace, body=QualifiedName, and NamespaceBody in next field
+        
+        // Try to find NamespaceBody - it might be in 'body' or any other field
         AstNode? bodyNode = null;
+        
+        // First try to find it explicitly by type
         foreach (var kvp in nsNode.Fields)
         {
             if (kvp.Value is AstNode astNode && astNode.Type == "NamespaceBody")
@@ -3368,9 +3375,42 @@ public class WASM : MapSet
             }
         }
         
+        // If not found by type, check if there's an AstNode with "items" field that could be NamespaceBody
         if (bodyNode == null)
         {
-            System.Console.WriteLine($"DEBUG No NamespaceBody found in any field");
+            foreach (var kvp in nsNode.Fields)
+            {
+                if (kvp.Value is AstNode astNode && astNode.Fields.ContainsKey("items"))
+                {
+                    System.Console.WriteLine($"DEBUG Found potential NamespaceBody (has items field) in field: {kvp.Key}, type={astNode.Type}");
+                    bodyNode = astNode;
+                    break;
+                }
+            }
+        }
+        
+        if (bodyNode == null)
+        {
+            System.Console.WriteLine($"DEBUG No NamespaceBody found in any field - checking if we can find class directly");
+            
+            // Last resort: check if any field contains a ClassDeclaration directly
+            // This handles the case where the namespace is being skipped entirely
+            foreach (var kvp in nsNode.Fields)
+            {
+                if (kvp.Value is AstNode astNode)
+                {
+                    // Check if this looks like it might contain type declarations
+                    if (astNode.Type.Contains("Class") || astNode.Type.Contains("Type") || 
+                        astNode.Type.Contains("Member") || astNode.Type.Contains("Declaration"))
+                    {
+                        System.Console.WriteLine($"DEBUG Trying to process {astNode.Type} as potential type container");
+                        var result = ProcessTypeDeclaration(astNode);
+                        if (!string.IsNullOrWhiteSpace(result))
+                            return result;
+                    }
+                }
+            }
+            
             return "";
         }
         

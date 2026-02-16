@@ -5,14 +5,11 @@
 // === BEGIN CSHARP ===
 using System;
 
-namespace HelloWorld
+class Program
 {
-    class Program
+    static void Main()
     {
-        static void Main()
-        {
-            Console.WriteLine("Hello World!");
-        }
+        Console.WriteLine("Hello World!");
     }
 }
 // === END CSHARP ===
