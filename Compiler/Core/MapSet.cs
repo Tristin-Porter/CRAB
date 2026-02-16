@@ -1710,6 +1710,78 @@ public static class WasmEmit
         
         return null;
     }
+    
+    /// <summary>
+    /// Generate WASM data section for string literals.
+    /// Emits all registered strings with proper null termination.
+    /// </summary>
+    public static string GenerateDataSection()
+    {
+        var sb = new System.Text.StringBuilder();
+        var allStrings = StringRegistry.GetAllStrings();
+        
+        foreach (var kvp in allStrings.OrderBy(x => x.Key))
+        {
+            var stringId = kvp.Key;
+            var text = kvp.Value;
+            var offset = StringRegistry.GetStringOffset(stringId);
+            
+            // Escape special characters in string
+            var escapedText = EscapeString(text);
+            
+            // Emit data directive: (data (i32.const offset) "text\00")
+            sb.AppendLine($"  (data (i32.const {offset}) \"{escapedText}\\00\")");
+        }
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Escape special characters in strings for WASM text format.
+    /// </summary>
+    private static string EscapeString(string text)
+    {
+        return text
+            .Replace("\\", "\\\\")  // Backslash
+            .Replace("\"", "\\\"")  // Quote
+            .Replace("\n", "\\n")   // Newline
+            .Replace("\r", "\\r")   // Carriage return
+            .Replace("\t", "\\t");  // Tab
+    }
+    
+    /// <summary>
+    /// Emit a compilation unit item (using directive, class, etc.).
+    /// </summary>
+    public static string EmitCompilationUnitItem(AstNode node)
+    {
+        if (node.Type == "CompilationUnitItem" && node.Fields.ContainsKey("item"))
+        {
+            var item = node.Fields["item"];
+            if (item is AstNode itemNode)
+            {
+                return EmitCompilationUnitItem(itemNode);
+            }
+        }
+        
+        // Handle different item types
+        if (node.Type.Contains("Using"))
+        {
+            return ";; using ;";
+        }
+        
+        if (node.Type == "NamespaceMemberDeclaration" && node.Fields.ContainsKey("member"))
+        {
+            var member = node.Fields["member"];
+            if (member is AstNode memberNode)
+            {
+                return EmitCompilationUnitItem(memberNode);
+            }
+        }
+        
+        // For type declarations, we need to use the WASM class's processing
+        // This will be handled by the existing TypeDeclaration maps
+        return "";
+    }
 }
 
 /// <summary>
@@ -1867,17 +1939,114 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Top-level compilation unit - generates complete WASM module</summary>
-    public Map CompilationUnit = @"(module
-  ;; Imports
-  (import ""env"" ""memory"" (memory 1))
-  (import ""env"" ""console_log"" (func $console_log (param i32)))
-  
-  ;; Generated members
-{items}
-  
-  ;; Exports
-  (export ""main"" (func $Main))
-)";
+    /// <summary>
+    /// CompilationUnit template - generates the complete WASM module.
+    /// Uses TypedMap to allow custom emission that includes data section.
+    /// </summary>
+    public Map<AstNode, string> CompilationUnit = TypedMap.For<string>()
+        .Emit(node => {
+            // Clear string registry for new compilation
+            StringRegistry.Clear();
+            LocalVariableRegistry.Clear();
+            
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("(module");
+            sb.AppendLine("  ;; Imports");
+            sb.AppendLine("  (import \"env\" \"memory\" (memory 1))");
+            sb.AppendLine("  (import \"env\" \"console_log\" (func $console_log (param i32)))");
+            sb.AppendLine();
+            
+            // First, process items to register strings
+            var itemsCode = new System.Text.StringBuilder();
+            if (node.Fields.ContainsKey("items"))
+            {
+                var items = node.Fields["items"];
+                if (items is List<AstNode> itemList)
+                {
+                    foreach (var item in itemList)
+                    {
+                        // Use the CompilationUnitItem map to process each item
+                        var itemCode = "";
+                        try
+                        {
+                            // Try to use the map if it exists in context
+                            itemCode = ProcessCompilationUnitItem(item);
+                        }
+                        catch
+                        {
+                            itemCode = "";
+                        }
+                        
+                        if (!string.IsNullOrWhiteSpace(itemCode))
+                        {
+                            itemsCode.AppendLine(itemCode);
+                        }
+                    }
+                }
+            }
+            
+            // Now generate data section with all registered strings
+            var dataSection = WasmEmit.GenerateDataSection();
+            if (!string.IsNullOrWhiteSpace(dataSection))
+            {
+                sb.AppendLine("  ;; Data section (string literals)");
+                sb.Append(dataSection);
+                sb.AppendLine();
+            }
+            
+            sb.AppendLine("  ;; Generated members");
+            sb.Append(itemsCode);
+            
+            sb.AppendLine();
+            sb.AppendLine("  ;; Exports");
+            sb.AppendLine("  (export \"main\" (func $Main))");
+            sb.AppendLine(")");
+            
+            return sb.ToString();
+        });
+    
+    /// <summary>
+    /// Process a compilation unit item using the existing infrastructure.
+    /// </summary>
+    private static string ProcessCompilationUnitItem(AstNode node)
+    {
+        if (node == null) return "";
+        
+        if (node.Type == "CompilationUnitItem" && node.Fields.ContainsKey("item"))
+        {
+            var item = node.Fields["item"];
+            if (item is AstNode itemNode)
+            {
+                return ProcessCompilationUnitItem(itemNode);
+            }
+        }
+        
+        // Handle different item types
+        if (node.Type.Contains("Using"))
+        {
+            return ";; using ;";
+        }
+        
+        if (node.Type == "NamespaceMemberDeclaration" && node.Fields.ContainsKey("member"))
+        {
+            var member = node.Fields["member"];
+            if (member is AstNode memberNode)
+            {
+                // Could be NamespaceDeclaration or TypeDeclaration
+                if (memberNode.Type == "NamespaceDeclaration")
+                {
+                    return ProcessNamespaceDeclarationInline(memberNode);
+                }
+                else
+                {
+                    return ProcessTypeDeclaration(memberNode);
+                }
+            }
+        }
+        
+        return "";
+    }
+
     
     /// <summary>Namespace member declarations</summary>
     public Map NamespaceMemberDeclarations = "{members}";
