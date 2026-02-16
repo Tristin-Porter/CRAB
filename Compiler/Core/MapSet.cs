@@ -1100,7 +1100,7 @@ public class WASM : MapSet
     /// Variable declaration - potential allocation site.
     /// If initialized with 'new', AutomaticModel tracks this allocation and computes deallocation point.
     /// </summary>
-    public Map LocalVariableDeclaration = "(local ${name} {type})";
+    public Map LocalVariableDeclaration = "{modifier} (local {type} {declarators})";
     
     /// <summary>
     /// Constant declaration - if initialized with allocation, tracked by AutomaticModel.
@@ -1172,7 +1172,7 @@ public class WASM : MapSet
 (struct.new $Range {start} {end})";
     
     /// <summary>Unary expression dispatcher</summary>
-    public Map UnaryExpression = "{expr}";
+    public Map UnaryExpression = "{base}{suffix}{expr}";
     
     /// <summary>Unary operator expression</summary>
     public Map UnaryOperatorExpression = "({op} {operand})";
@@ -1374,7 +1374,7 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Type dispatcher</summary>
-    public Map Type = "{base}";
+    public Map Type = "{base}{suffixes}";
     
     /// <summary>Primitive type - signed byte</summary>
     public Map SByteType = "i32";
@@ -1453,13 +1453,13 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Simple name (identifier)</summary>
-    public Map SimpleName = "{name}";
+    public Map SimpleName = "{name}{typeArgs}";
     
     /// <summary>Identifier name</summary>
     public Map IdentifierName = "(local.get ${name})";
     
     /// <summary>Qualified name (namespace.type)</summary>
-    public Map QualifiedName = "{segments}";
+    public Map QualifiedName = "{global}{segments}";
     
     // ============================================================
     // MODIFIERS AND ATTRIBUTES
@@ -1469,7 +1469,7 @@ public class WASM : MapSet
     public Map Modifiers = ";; modifiers: {mods}";
     
     /// <summary>Single modifier</summary>
-    public Map Modifier = "";
+    public Map Modifier = "{mod}";
     
     /// <summary>Attribute sections (ignored in basic WASM)</summary>
     public Map AttributeSections = "";
@@ -1629,7 +1629,7 @@ public class WASM : MapSet
     public Map FixedParameter = "(param ${name} {type})";
     
     /// <summary>Argument list</summary>
-    public Map ArgumentList = "{args}";
+    public Map ArgumentList = "{first}{rest}";
     
     /// <summary>Positional argument</summary>
     public Map PositionalArgument = "{expr}";
@@ -1924,7 +1924,7 @@ public class WASM : MapSet
     public Map AttributeList = "{attributes}";
     
     /// <summary>Attribute section</summary>
-    public Map AttributeSection = ";; {attributes}";
+    public Map AttributeSection = ";; {target} {attributes}";
     
     /// <summary>Attribute target (assembly, module, etc.)</summary>
     public Map AttributeTarget = "{target}";
@@ -2009,7 +2009,7 @@ public class WASM : MapSet
     public Map TypeParameterConstraints = "{constraints}";
     
     /// <summary>Type parameter constraints clause</summary>
-    public Map TypeParameterConstraintsClause = ";; where {typeParam} : {constraints}";
+    public Map TypeParameterConstraintsClause = ";; where {name} : {constraints}";
     
     /// <summary>Type parameter constraints clauses</summary>
     public Map TypeParameterConstraintsClauses = "{clauses}";
@@ -2022,7 +2022,7 @@ public class WASM : MapSet
     /// - Constraint checking at instantiation sites
     /// - Generic method specialization
     /// </summary>
-    public Map TypeParameter = "{name}";
+    public Map TypeParameter = "{attrs}{variance}{name}";
     
     /// <summary>
     /// Type parameter list - <T1, T2, ...>
@@ -2159,7 +2159,7 @@ public class WASM : MapSet
     public Map ArgumentModifier = "{modifier}";
     
     /// <summary>Argument rest (additional arguments)</summary>
-    public Map ArgumentRest = "{rest}";
+    public Map ArgumentRest = "{arg}";
     
     /// <summary>Named argument list</summary>
     public Map NamedArgumentList = "{args}";
@@ -2341,7 +2341,7 @@ public class WASM : MapSet
     public Map UnaryExpressionSuffixes = "{suffixes}";
     
     /// <summary>Member access suffix (.member)</summary>
-    public Map MemberAccessSuffix = ".{member}";
+    public Map MemberAccessSuffix = "{accessor}.{member}{typeArgs}";
     
     /// <summary>Element access suffix ([index])</summary>
     public Map ElementAccessSuffix = "[{indices}]";
@@ -2399,7 +2399,7 @@ public class WASM : MapSet
     public Map FloatingPointType = "f64";
     
     /// <summary>Named type (user-defined type)</summary>
-    public Map NamedType = "(ref ${name})";
+    public Map NamedType = "(ref ${name}{typeArgs})";
     
     /// <summary>Ref type (ref T)</summary>
     public Map RefType = "(ref {type})";
@@ -2455,10 +2455,10 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Name segment</summary>
-    public Map NameSegment = "{segment}";
+    public Map NameSegment = "{name}{typeArgs}";
     
     /// <summary>Name segment rest</summary>
-    public Map NameSegmentRest = "{rest}";
+    public Map NameSegmentRest = "{segment}";
     
     /// <summary>Name segments</summary>
     public Map NameSegments = "{first}{rest}";
