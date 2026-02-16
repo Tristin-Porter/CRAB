@@ -1,5 +1,6 @@
 using CDTk;
 using System;
+using System.Linq;
 
 namespace CRAB;
 
@@ -865,6 +866,17 @@ public static class WasmEmit
             "Block" => EmitBlock(node),
             "EmptyStatement" => "nop",
             
+            // Control flow statements
+            "IfStatement" => EmitIfStatement(node),
+            "WhileStatement" => EmitWhileStatement(node),
+            "DoStatement" => EmitDoStatement(node),
+            "ForStatement" => EmitForStatement(node),
+            "ForEachStatement" => EmitForEachStatement(node),
+            "SwitchStatement" => EmitSwitchStatement(node),
+            "BreakStatement" => "br 0 ;; break",
+            "ContinueStatement" => "br 1 ;; continue",
+            "DeclarationStatement" => EmitDeclarationStatement(node),
+            
             // Statement dispatchers - pass through to child
             "Statement" or "EmbeddedStatement" or "JumpStatement" or "SelectionStatement" or "IterationStatement" =>
                 node.Fields.ContainsKey("stmt") ? EmitStatement(node.Fields["stmt"]) : "",
@@ -936,10 +948,16 @@ public static class WasmEmit
             return "";
         }
         
-        // Handle List<object> directly (if CDTk ever returns this)
-        if (stmtsNode is List<object> stmtList)
+        // Handle List<object> directly (if CDTk returns this)
+        if (stmtsNode is List<object> objList)
         {
-            return string.Join("\n", stmtList.Select(EmitStatement));
+            return string.Join("\n", objList.Select(EmitStatement));
+        }
+        
+        // Handle List<AstNode>
+        if (stmtsNode is List<AstNode> astList)
+        {
+            return string.Join("\n", astList.Select(EmitStatement));
         }
         
         // Handle single AstNode
@@ -956,8 +974,22 @@ public static class WasmEmit
         
         if (node.Type == "Statements" && node.Fields.ContainsKey("stmts"))
         {
-            // Start with the first statement
-            var current = node.Fields["stmts"];
+            var stmtsField = node.Fields["stmts"];
+            
+            // Handle if stmts field is a List<AstNode>
+            if (stmtsField is List<AstNode> stmtAstList)
+            {
+                return string.Join("\n", stmtAstList.Select(EmitStatement));
+            }
+            
+            // Handle if stmts field is a List<object>
+            if (stmtsField is List<object> stmtObjList)
+            {
+                return string.Join("\n", stmtObjList.Select(EmitStatement));
+            }
+            
+            // Handle single AstNode in stmts field
+            var current = stmtsField;
             while (current != null)
             {
                 if (current is AstNode currentNode)
@@ -970,7 +1002,6 @@ public static class WasmEmit
                     }
                     
                     // Move to next statement if it exists
-                    // The Statement node might have a 'stmt' field pointing to the next one
                     if (currentNode.Fields.ContainsKey("next") && currentNode.Fields["next"] is AstNode)
                     {
                         current = currentNode.Fields["next"];
@@ -991,6 +1022,256 @@ public static class WasmEmit
         
         // Single statement node
         return EmitStatement(stmtsNode);
+    }
+    
+    /// <summary>
+    /// Emit if statement.
+    /// </summary>
+    private static string EmitIfStatement(AstNode node)
+    {
+        // Extract condition, thenStmt, and elseClause from fields
+        // Note: Due to CDTk field shifting, the actual fields may not be in expected positions
+        var condition = node.Fields.ContainsKey("condition") ? node.Fields["condition"] : null;
+        var thenStmt = node.Fields.ContainsKey("thenStmt") ? node.Fields["thenStmt"] : null;
+        var elseClause = node.Fields.ContainsKey("elseClause") ? node.Fields["elseClause"] : null;
+        
+        // If condition is not found, try to extract from field list
+        if (condition == null)
+        {
+            // Check if the node has fields that might contain the condition
+            foreach (var kvp in node.Fields)
+            {
+                if (kvp.Value is AstNode astNode && astNode.Type.Contains("Expression"))
+                {
+                    condition = astNode;
+                    break;
+                }
+            }
+        }
+        
+        // Find the statement nodes
+        if (thenStmt == null)
+        {
+            // Look for Statement nodes
+            var stmtFields = node.Fields.Values.Where(v => v is AstNode an && an.Type.Contains("Statement")).ToList();
+            if (stmtFields.Count >= 1)
+                thenStmt = stmtFields[0];
+            if (stmtFields.Count >= 2)
+                elseClause = stmtFields[1];  // Treat second statement as else
+        }
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; if statement");
+        
+        // Emit condition
+        if (condition != null)
+        {
+            var condCode = EmitExpression(condition);
+            if (!string.IsNullOrWhiteSpace(condCode))
+            {
+                sb.AppendLine(condCode);
+            }
+            else
+            {
+                sb.AppendLine("i32.const 0  ;; TODO: fix condition");
+            }
+        }
+        else
+        {
+            sb.AppendLine("i32.const 0  ;; TODO: missing condition");
+        }
+        
+        sb.AppendLine("if");
+        
+        // Emit then branch
+        if (thenStmt is AstNode thenNode)
+        {
+            var thenCode = EmitStatement(thenNode);
+            if (!string.IsNullOrWhiteSpace(thenCode))
+            {
+                sb.AppendLine(thenCode);
+            }
+        }
+        
+        // Emit else branch if present
+        if (elseClause is AstNode elseNode)
+        {
+            sb.AppendLine("else");
+            // If elseNode has stmt field, use that
+            if (elseNode.Fields.ContainsKey("stmt"))
+            {
+                sb.AppendLine(EmitStatement(elseNode.Fields["stmt"]));
+            }
+            else
+            {
+                sb.AppendLine(EmitStatement(elseNode));
+            }
+        }
+        
+        sb.AppendLine("end");
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit while statement.
+    /// </summary>
+    private static string EmitWhileStatement(AstNode node)
+    {
+        var condition = node.Fields.ContainsKey("condition") ? node.Fields["condition"] : null;
+        var body = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; while loop");
+        sb.AppendLine("block");  // Exit label
+        sb.AppendLine("loop");   // Loop label
+        
+        // Emit condition
+        if (condition != null)
+        {
+            sb.AppendLine(EmitExpression(condition));
+        }
+        
+        // If condition is false, break out
+        sb.AppendLine("i32.eqz");
+        sb.AppendLine("br_if 1");  // Break to outer block
+        
+        // Emit loop body
+        if (body is AstNode bodyNode)
+        {
+            sb.AppendLine(EmitStatement(bodyNode));
+        }
+        
+        // Jump back to loop start
+        sb.AppendLine("br 0");
+        sb.AppendLine("end");    // End loop
+        sb.AppendLine("end");    // End block
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit do-while statement.
+    /// </summary>
+    private static string EmitDoStatement(AstNode node)
+    {
+        var condition = node.Fields.ContainsKey("condition") ? node.Fields["condition"] : null;
+        var body = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; do-while loop");
+        sb.AppendLine("block");  // Exit label
+        sb.AppendLine("loop");   // Loop label
+        
+        // Emit loop body first (do-while executes at least once)
+        if (body is AstNode bodyNode)
+        {
+            sb.AppendLine(EmitStatement(bodyNode));
+        }
+        
+        // Emit condition
+        if (condition != null)
+        {
+            sb.AppendLine(EmitExpression(condition));
+        }
+        
+        // If condition is true, continue loop
+        sb.AppendLine("br_if 0");  // Branch back if true
+        sb.AppendLine("end");      // End loop
+        sb.AppendLine("end");      // End block
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit for statement.
+    /// </summary>
+    private static string EmitForStatement(AstNode node)
+    {
+        var init = node.Fields.ContainsKey("init") ? node.Fields["init"] : null;
+        var condition = node.Fields.ContainsKey("condition") ? node.Fields["condition"] : null;
+        var iterator = node.Fields.ContainsKey("iterator") ? node.Fields["iterator"] : null;
+        var body = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; for loop");
+        
+        // Emit initializer
+        if (init is AstNode initNode)
+        {
+            sb.AppendLine(EmitStatement(initNode));
+        }
+        
+        sb.AppendLine("block");  // Exit label
+        sb.AppendLine("loop");   // Loop label
+        
+        // Emit condition (if present)
+        if (condition is AstNode condNode)
+        {
+            sb.AppendLine(EmitExpression(condNode));
+            sb.AppendLine("i32.eqz");
+            sb.AppendLine("br_if 1");  // Break to outer block if false
+        }
+        
+        // Emit loop body
+        if (body is AstNode bodyNode)
+        {
+            sb.AppendLine(EmitStatement(bodyNode));
+        }
+        
+        // Emit iterator
+        if (iterator is AstNode iterNode)
+        {
+            sb.AppendLine(EmitStatement(iterNode));
+        }
+        
+        // Jump back to loop start
+        sb.AppendLine("br 0");
+        sb.AppendLine("end");    // End loop
+        sb.AppendLine("end");    // End block
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit foreach statement.
+    /// </summary>
+    private static string EmitForEachStatement(AstNode node)
+    {
+        // For now, emit a simplified version
+        // Full implementation would need iterator protocol
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; foreach loop");
+        sb.AppendLine(";; TODO: Implement full foreach with iterator protocol");
+        sb.AppendLine("nop");
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit switch statement.
+    /// </summary>
+    private static string EmitSwitchStatement(AstNode node)
+    {
+        // For now, emit a simplified version
+        // Full implementation would need br_table
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; switch statement");
+        sb.AppendLine(";; TODO: Implement full switch with br_table");
+        sb.AppendLine("nop");
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit declaration statement (variable declaration).
+    /// </summary>
+    private static string EmitDeclarationStatement(AstNode node)
+    {
+        // For now, emit a comment
+        // Full implementation would need local variable allocation
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; variable declaration");
+        sb.AppendLine("nop");
+        return sb.ToString();
     }
     
     /// <summary>
