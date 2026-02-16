@@ -737,9 +737,10 @@ public class Rules : RuleSet
     // RANGE EXPRESSION (C# 8)
     public Rule RangeExpression = "start:UnaryExpression @RangeOperator end:UnaryExpression | @RangeOperator end:UnaryExpression | start:UnaryExpression @RangeOperator | expr:UnaryExpression";
 
-    // UNARY EXPRESSION - Made suffixes explicit to fix GLL parser bug  
-    public Rule UnaryExpression = new Rule("expr:UnaryExpressionBase suffix:UnaryExpressionSuffix | expr:UnaryExpressionBase")
-        .Returns("expr", "suffix");
+    // UNARY EXPRESSION - Using left recursion to support multiple suffixes
+    // GLL parser can handle left recursion properly
+    public Rule UnaryExpression = new Rule("base:UnaryExpression suffix:UnaryExpressionSuffix | expr:UnaryExpressionBase")
+        .Returns("base", "suffix", "expr");
 
     public Rule UnaryExpressionBase = "expr:UnaryOperatorExpression | expr:CastExpression | expr:AwaitExpression | expr:DefaultExpression | expr:NameofExpression | expr:SizeofExpression | expr:CheckedExpression | expr:UncheckedExpression | expr:PrimaryExpressionCore";
 
