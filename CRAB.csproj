@@ -32,6 +32,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Include="Testing\Utilities\HtmlGenerator.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="Dependencies\BADGER\Badger.csproj" />
     <ProjectReference Include="Dependencies\CDTk\CDTk.csproj" />
   </ItemGroup>
