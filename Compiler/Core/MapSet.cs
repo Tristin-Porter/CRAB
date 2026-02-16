@@ -1368,6 +1368,30 @@ public static class WasmEmit
     {
         var sb = new System.Text.StringBuilder();
         
+        // DEBUG: Print complete structure
+        System.Console.WriteLine($"=== EmitLocalVariableDeclaration ===");
+        System.Console.WriteLine($"Node type: {node.Type}");
+        System.Console.WriteLine($"Fields: {string.Join(", ", node.Fields.Keys)}");
+        foreach (var kvp in node.Fields)
+        {
+            var val = kvp.Value;
+            System.Console.WriteLine($"  {kvp.Key}: {val?.GetType().Name}");
+            if (val is AstNode an)
+            {
+                System.Console.WriteLine($"    -> AstNode type: {an.Type}");
+                System.Console.WriteLine($"    -> AstNode fields: {string.Join(", ", an.Fields.Keys)}");
+            }
+            else if (val is List<AstNode> lan)
+            {
+                System.Console.WriteLine($"    -> List<AstNode> count: {lan.Count}");
+                for (int i = 0; i < lan.Count && i < 3; i++)
+                {
+                    System.Console.WriteLine($"    -> [{i}] type: {lan[i].Type}, fields: {string.Join(", ", lan[i].Fields.Keys)}");
+                }
+            }
+        }
+        System.Console.WriteLine("===================================");
+        
         // If this is a LocalDeclaration, unwrap to LocalVariableDeclaration
         if (node.Type == "LocalDeclaration")
         {
