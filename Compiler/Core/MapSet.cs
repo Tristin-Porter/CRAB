@@ -97,6 +97,10 @@ public static class WasmEmit
             "NameSegmentRest" => EmitExpressionDispatcher(node),  // Pass through to child
             "SimpleName" => EmitExpressionDispatcher(node),  // Pass through to child
             "QualifiedName" => EmitExpressionDispatcher(node),  // Pass through to child
+            "Argument" => 
+                (node.Fields.ContainsKey("expr") && node.Fields["expr"] != null) ?
+                    EmitExpression(node.Fields["expr"]) 
+                    : "",  // Unwrap argument to get expression
             
             // Binary operations
             // ONLY call EmitBinaryExpression if the node has left/op/right fields
@@ -123,6 +127,7 @@ public static class WasmEmit
             // Expression dispatchers - pass through to child
             // CDTk may return different field names due to field shifting
             "Expression" or "NonAssignmentExpression" or "UnaryExpression" or "UnaryExpressionBase" or
+            "UnaryExpressionSuffix" or
             "PrimaryExpression" or "PrimaryNoArrayCreationExpression" or "Sequence" or
             "SwitchExpression" or "RangeExpression" or "NullCoalescingExpression" or
             "ConditionalOrExpression" or "ConditionalAndExpression" or "InclusiveOrExpression" or
@@ -148,6 +153,9 @@ public static class WasmEmit
         {
             return "";
         }
+        
+        // DEBUG: Print what we're dispatching
+        System.Console.WriteLine($"DEBUG EmitExpressionDispatcher: type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
         
         // For debugging complex expressions
         if (node.Type == "Sequence" && node.Fields.Count > 0)
@@ -223,6 +231,49 @@ public static class WasmEmit
         }
         
         // Try common field names in order
+        
+        // Try 'base' and 'suffix' (for member access like Console.WriteLine)
+        if (node.Fields.ContainsKey("base"))
+        {
+            // This might be a member access or invocation
+            var baseExpr = node.Fields["base"];
+            var suffix = node.Fields.ContainsKey("suffix") ? node.Fields["suffix"] : null;
+            
+            System.Console.WriteLine($"DEBUG Found base/suffix: base type={((baseExpr as AstNode)?.Type ?? baseExpr?.GetType().Name)}, suffix type={((suffix as AstNode)?.Type ?? suffix?.GetType().Name)}");
+            
+            // If suffix is UnaryExpressionSuffix with args, this is a method call
+            if (suffix is AstNode suffixNode && suffixNode.Type == "UnaryExpressionSuffix")
+            {
+                // This is a method invocation - base is the method name, suffix has args
+                // But we need to look deeper into base to get the actual method name
+                var baseName = GetFullMemberName(baseExpr);
+                System.Console.WriteLine($"DEBUG Base name: {baseName}");
+                
+                // Check if this is Console.WriteLine (base will be "Console", method is WriteLine)
+                if (baseName == "Console" || baseName.EndsWith(".Console") || baseName.EndsWith("WriteLine"))
+                {
+                    // Emit arguments
+                    var args = suffixNode.Fields.ContainsKey("args") ? suffixNode.Fields["args"] : null;
+                    var argCode = "";
+                    if (args != null)
+                    {
+                        argCode = EmitArgumentList(args);
+                    }
+                    
+                    // Call imported console_log function
+                    return $";; Console.WriteLine\n{argCode}\ncall $console_log";
+                }
+            }
+            
+            // If suffix exists and is not handled above, process it
+            if (suffix != null)
+            {
+                return EmitExpression(suffix);
+            }
+            
+            return EmitExpression(baseExpr);
+        }
+        
         if (node.Fields.ContainsKey("expr"))
             return EmitExpression(node.Fields["expr"]);
         if (node.Fields.ContainsKey("literal"))
@@ -234,6 +285,16 @@ public static class WasmEmit
             // If lexeme is a string representing a number, emit it as a literal
             if (lexeme is string str)
             {
+                // Check if it's a quoted string (string literal)
+                if (str.StartsWith("\"") && str.EndsWith("\""))
+                {
+                    // This is a string literal - remove quotes and emit
+                    var text = str.Substring(1, str.Length - 2);
+                    var stringId = StringRegistry.RegisterString(text);
+                    var offset = StringRegistry.GetStringOffset(stringId);
+                    return $";; string \"{text}\" at offset {offset}\ni32.const {offset}";
+                }
+                
                 // Try to parse as integer
                 if (int.TryParse(str, out var intValue))
                 {
@@ -440,12 +501,47 @@ public static class WasmEmit
     {
         if (argsNode == null) return "";
         
+        System.Console.WriteLine($"DEBUG EmitArgumentList: type={argsNode?.GetType().Name}, AstNode type={(argsNode as AstNode)?.Type}");
+        
         if (argsNode is AstNode node)
         {
+            // Print fields for debugging
+            System.Console.WriteLine($"DEBUG EmitArgumentList fields: {string.Join(", ", node.Fields.Keys)}");
+            
+            // ArgumentList has 'first' field (CDTk structure)
+            if (node.Fields.ContainsKey("first"))
+            {
+                var first = node.Fields["first"];
+                System.Console.WriteLine($"DEBUG first field type: {first?.GetType().Name}, AstNode type: {(first as AstNode)?.Type}");
+                
+                // First might be an Argument wrapper
+                if (first is AstNode firstNode)
+                {
+                    System.Console.WriteLine($"DEBUG first node type: {firstNode.Type}, fields: {string.Join(", ", firstNode.Fields.Keys)}");
+                    
+                    // Argument has 'base' field (not 'expr' as expected - CDTk quirk)
+                    if (firstNode.Type == "Argument")
+                    {
+                        var expr = firstNode.Fields.ContainsKey("base") ? firstNode.Fields["base"] : 
+                                   firstNode.Fields.ContainsKey("expr") ? firstNode.Fields["expr"] : null;
+                        
+                        if (expr != null)
+                        {
+                            System.Console.WriteLine($"DEBUG expr type: {(expr as AstNode)?.Type ?? expr?.GetType().Name}");
+                            return EmitExpression(expr);
+                        }
+                    }
+                    
+                    return EmitExpression(firstNode);
+                }
+            }
+            
             // ArgumentList has 'args' field with list of arguments
             if (node.Fields.ContainsKey("args"))
             {
                 var args = node.Fields["args"];
+                
+                System.Console.WriteLine($"DEBUG args field type: {args?.GetType().Name}");
                 
                 if (args is List<AstNode> argList)
                 {
@@ -467,6 +563,7 @@ public static class WasmEmit
                 }
                 else if (args is AstNode singleArg)
                 {
+                    System.Console.WriteLine($"DEBUG single arg type: {singleArg.Type}");
                     return EmitExpression(singleArg);
                 }
             }
@@ -531,6 +628,105 @@ public static class WasmEmit
         }
         
         return node.Type;
+    }
+    
+    /// <summary>
+    /// Get full member name from AST node (e.g., "Console.WriteLine").
+    /// </summary>
+    private static string GetFullMemberName(object? node)
+    {
+        if (node == null) return "";
+        
+        if (!(node is AstNode astNode)) return "";
+        
+        // Handle UnaryExpression with base/suffix
+        if (astNode.Type == "UnaryExpression" && astNode.Fields.ContainsKey("base"))
+        {
+            var baseObj = astNode.Fields["base"];
+            return GetFullMemberName(baseObj);
+        }
+        
+        // Handle MemberAccessExpression or similar
+        if (astNode.Fields.ContainsKey("target") && astNode.Fields.ContainsKey("member"))
+        {
+            var target = GetFullMemberName(astNode.Fields["target"]);
+            var member = GetFullMemberName(astNode.Fields["member"]);
+            return $"{target}.{member}";
+        }
+        
+        // Handle QualifiedName with segments
+        if (astNode.Type == "QualifiedName" && astNode.Fields.ContainsKey("segments"))
+        {
+            var segments = astNode.Fields["segments"];
+            if (segments is AstNode segNode)
+            {
+                return GetNameFromSegments(segNode);
+            }
+        }
+        
+        // Handle NameSegments
+        if (astNode.Type == "NameSegments")
+        {
+            return GetNameFromSegments(astNode);
+        }
+        
+        // Handle NameSegment
+        if (astNode.Type == "NameSegment" && astNode.Fields.ContainsKey("name"))
+        {
+            var name = astNode.Fields["name"];
+            return GetNodeName(name as AstNode ?? astNode);
+        }
+        
+        // Try to get lexeme
+        return GetNodeName(astNode);
+    }
+    
+    /// <summary>
+    /// Get name from NameSegments structure.
+    /// </summary>
+    private static string GetNameFromSegments(AstNode node)
+    {
+        var parts = new List<string>();
+        
+        // Get first segment
+        if (node.Fields.ContainsKey("first"))
+        {
+            var first = node.Fields["first"];
+            if (first is AstNode firstNode)
+            {
+                var firstName = GetFullMemberName(firstNode);
+                if (!string.IsNullOrEmpty(firstName))
+                    parts.Add(firstName);
+            }
+        }
+        
+        // Get rest of segments
+        if (node.Fields.ContainsKey("rest"))
+        {
+            var rest = node.Fields["rest"];
+            if (rest is AstNode restNode)
+            {
+                // rest might be NameSegmentRest or another NameSegments
+                if (restNode.Type == "NameSegmentRest" && restNode.Fields.ContainsKey("segment"))
+                {
+                    var seg = restNode.Fields["segment"];
+                    if (seg is AstNode segNode)
+                    {
+                        var segName = GetFullMemberName(segNode);
+                        if (!string.IsNullOrEmpty(segName))
+                            parts.Add(segName);
+                    }
+                }
+                else
+                {
+                    var restName = GetFullMemberName(restNode);
+                    if (!string.IsNullOrEmpty(restName))
+                        parts.Add(restName);
+                }
+            }
+        }
+        
+        return string.Join(".", parts);
     }
     
     /// <summary>
