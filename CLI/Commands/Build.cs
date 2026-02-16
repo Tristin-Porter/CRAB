@@ -219,11 +219,6 @@ class Build : Command
                     string watText = File.ReadAllText(outputFile);
                     if (verbose) System.Console.WriteLine($"      Read {watText.Length} characters of WAT text");
                     
-                    // Generate WASM binary and JS wrapper using BADGER
-                    if (verbose) System.Console.WriteLine("      Calling BADGER WasmJS.Emit()...");
-                    var (wasmBinary, jsWrapper) = WasmJS.Emit(watText);
-                    if (verbose) System.Console.WriteLine($"      BADGER generated {wasmBinary.Length} bytes of WASM binary");
-                    
                     // Determine project name for file naming
                     string projectNameForFiles;
                     if (discovery.ProjectFiles.Count > 0)
@@ -246,6 +241,11 @@ class Build : Command
                         // Fallback to "output"
                         projectNameForFiles = "output";
                     }
+                    
+                    // Generate WASM binary and JS wrapper using BADGER
+                    if (verbose) System.Console.WriteLine("      Calling BADGER WasmJS.Emit()...");
+                    var (wasmBinary, jsWrapper) = WasmJS.Emit(watText, $"{projectNameForFiles}.wasm");
+                    if (verbose) System.Console.WriteLine($"      BADGER generated {wasmBinary.Length} bytes of WASM binary");
                     
                     // Save WASM binary, JS, HTML to Web folder
                     string wasmBinaryPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.wasm");

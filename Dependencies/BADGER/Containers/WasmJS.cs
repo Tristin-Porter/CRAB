@@ -16,14 +16,15 @@ public static class WasmJS
     /// Emit WASM binary and JavaScript wrapper from WAT text
     /// </summary>
     /// <param name="watText">WebAssembly Text format input</param>
+    /// <param name="wasmFileName">Name of the WASM file to reference in JS (default: output.wasm)</param>
     /// <returns>Tuple of (wasm binary, javascript wrapper)</returns>
-    public static (byte[] wasm, string javascript) Emit(string watText)
+    public static (byte[] wasm, string javascript) Emit(string watText, string wasmFileName = "output.wasm")
     {
         // Convert WAT to WASM binary
         byte[] wasmBinary = ConvertWatToWasm(watText);
         
         // Generate JavaScript wrapper
-        string jsWrapper = GenerateJavaScriptWrapper(watText);
+        string jsWrapper = GenerateJavaScriptWrapper(watText, wasmFileName);
         
         return (wasmBinary, jsWrapper);
     }
@@ -239,7 +240,9 @@ public static class WasmJS
     /// <summary>
     /// Generate JavaScript wrapper for loading and running the WASM module
     /// </summary>
-    private static string GenerateJavaScriptWrapper(string watText)
+    /// <param name="watText">WebAssembly Text format input</param>
+    /// <param name="wasmFileName">Name of the WASM file to reference</param>
+    private static string GenerateJavaScriptWrapper(string watText, string wasmFileName)
     {
         var sb = new StringBuilder();
         
@@ -329,10 +332,10 @@ public static class WasmJS
         sb.AppendLine("// Auto-detect environment and run");
         sb.AppendLine("if (typeof window !== 'undefined') {");
         sb.AppendLine("    // Browser environment");
-        sb.AppendLine("    loadAndRunWasm('output.wasm').catch(console.error);");
+        sb.AppendLine($"    loadAndRunWasm('{wasmFileName}').catch(console.error);");
         sb.AppendLine("} else if (typeof require !== 'undefined') {");
         sb.AppendLine("    // Node.js environment");
-        sb.AppendLine("    loadAndRunWasmNode('./output.wasm').catch(console.error);");
+        sb.AppendLine($"    loadAndRunWasmNode('./{wasmFileName}').catch(console.error);");
         sb.AppendLine("}");
         
         return sb.ToString();
