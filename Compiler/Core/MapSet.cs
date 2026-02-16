@@ -1,5 +1,6 @@
 using CDTk;
 using System;
+using System.Linq;
 
 namespace CRAB;
 
@@ -43,6 +44,51 @@ public static class StringRegistry
         offsets.Clear();
         nextId = 0;
         currentOffset = 0;
+    }
+}
+
+/// <summary>
+/// Manages local variables for current function scope.
+/// Tracks variable names, types, and generates WASM local declarations.
+/// </summary>
+public static class LocalVariableRegistry
+{
+    private static Dictionary<string, string> variables = new();  // name -> type
+    private static HashSet<string> currentFunctionVars = new();
+    
+    public static void RegisterVariable(string name, string wasmType)
+    {
+        if (!variables.ContainsKey(name))
+        {
+            variables[name] = wasmType;
+            currentFunctionVars.Add(name);
+        }
+    }
+    
+    public static string GetVariableType(string name)
+    {
+        return variables.ContainsKey(name) ? variables[name] : "i32";
+    }
+    
+    public static bool HasVariable(string name)
+    {
+        return variables.ContainsKey(name);
+    }
+    
+    public static List<(string name, string type)> GetCurrentFunctionVariables()
+    {
+        return currentFunctionVars.Select(name => (name, variables[name])).ToList();
+    }
+    
+    public static void ClearCurrentFunction()
+    {
+        currentFunctionVars.Clear();
+    }
+    
+    public static void Clear()
+    {
+        variables.Clear();
+        currentFunctionVars.Clear();
     }
 }
 
@@ -155,7 +201,6 @@ public static class WasmEmit
         }
         
         // DEBUG: Print what we're dispatching
-        System.Console.WriteLine($"DEBUG EmitExpressionDispatcher: type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
         
         // For debugging complex expressions
         if (node.Type == "Sequence" && node.Fields.Count > 0)
@@ -239,7 +284,6 @@ public static class WasmEmit
             var baseExpr = node.Fields["base"];
             var suffix = node.Fields.ContainsKey("suffix") ? node.Fields["suffix"] : null;
             
-            System.Console.WriteLine($"DEBUG Found base/suffix: base type={((baseExpr as AstNode)?.Type ?? baseExpr?.GetType().Name)}, suffix type={((suffix as AstNode)?.Type ?? suffix?.GetType().Name)}");
             
             // If suffix is UnaryExpressionSuffix with args, this is a method call
             if (suffix is AstNode suffixNode && suffixNode.Type == "UnaryExpressionSuffix")
@@ -247,7 +291,6 @@ public static class WasmEmit
                 // This is a method invocation - base is the method name, suffix has args
                 // But we need to look deeper into base to get the actual method name
                 var baseName = GetFullMemberName(baseExpr);
-                System.Console.WriteLine($"DEBUG Base name: {baseName}");
                 
                 // Check if this is Console.WriteLine (base will be "Console", method is WriteLine)
                 if (baseName == "Console" || baseName.EndsWith(".Console") || baseName.EndsWith("WriteLine"))
@@ -501,23 +544,19 @@ public static class WasmEmit
     {
         if (argsNode == null) return "";
         
-        System.Console.WriteLine($"DEBUG EmitArgumentList: type={argsNode?.GetType().Name}, AstNode type={(argsNode as AstNode)?.Type}");
         
         if (argsNode is AstNode node)
         {
             // Print fields for debugging
-            System.Console.WriteLine($"DEBUG EmitArgumentList fields: {string.Join(", ", node.Fields.Keys)}");
             
             // ArgumentList has 'first' field (CDTk structure)
             if (node.Fields.ContainsKey("first"))
             {
                 var first = node.Fields["first"];
-                System.Console.WriteLine($"DEBUG first field type: {first?.GetType().Name}, AstNode type: {(first as AstNode)?.Type}");
                 
                 // First might be an Argument wrapper
                 if (first is AstNode firstNode)
                 {
-                    System.Console.WriteLine($"DEBUG first node type: {firstNode.Type}, fields: {string.Join(", ", firstNode.Fields.Keys)}");
                     
                     // Argument has 'base' field (not 'expr' as expected - CDTk quirk)
                     if (firstNode.Type == "Argument")
@@ -527,7 +566,6 @@ public static class WasmEmit
                         
                         if (expr != null)
                         {
-                            System.Console.WriteLine($"DEBUG expr type: {(expr as AstNode)?.Type ?? expr?.GetType().Name}");
                             return EmitExpression(expr);
                         }
                     }
@@ -541,7 +579,6 @@ public static class WasmEmit
             {
                 var args = node.Fields["args"];
                 
-                System.Console.WriteLine($"DEBUG args field type: {args?.GetType().Name}");
                 
                 if (args is List<AstNode> argList)
                 {
@@ -563,7 +600,6 @@ public static class WasmEmit
                 }
                 else if (args is AstNode singleArg)
                 {
-                    System.Console.WriteLine($"DEBUG single arg type: {singleArg.Type}");
                     return EmitExpression(singleArg);
                 }
             }
@@ -865,6 +901,17 @@ public static class WasmEmit
             "Block" => EmitBlock(node),
             "EmptyStatement" => "nop",
             
+            // Control flow statements
+            "IfStatement" => EmitIfStatement(node),
+            "WhileStatement" => EmitWhileStatement(node),
+            "DoStatement" => EmitDoStatement(node),
+            "ForStatement" => EmitForStatement(node),
+            "ForEachStatement" => EmitForEachStatement(node),
+            "SwitchStatement" => EmitSwitchStatement(node),
+            "BreakStatement" => "br 0 ;; break",
+            "ContinueStatement" => "br 1 ;; continue",
+            "DeclarationStatement" => EmitDeclarationStatement(node),
+            
             // Statement dispatchers - pass through to child
             "Statement" or "EmbeddedStatement" or "JumpStatement" or "SelectionStatement" or "IterationStatement" =>
                 node.Fields.ContainsKey("stmt") ? EmitStatement(node.Fields["stmt"]) : "",
@@ -936,10 +983,16 @@ public static class WasmEmit
             return "";
         }
         
-        // Handle List<object> directly (if CDTk ever returns this)
-        if (stmtsNode is List<object> stmtList)
+        // Handle List<object> directly (if CDTk returns this)
+        if (stmtsNode is List<object> objList)
         {
-            return string.Join("\n", stmtList.Select(EmitStatement));
+            return string.Join("\n", objList.Select(EmitStatement));
+        }
+        
+        // Handle List<AstNode>
+        if (stmtsNode is List<AstNode> astList)
+        {
+            return string.Join("\n", astList.Select(EmitStatement));
         }
         
         // Handle single AstNode
@@ -956,8 +1009,22 @@ public static class WasmEmit
         
         if (node.Type == "Statements" && node.Fields.ContainsKey("stmts"))
         {
-            // Start with the first statement
-            var current = node.Fields["stmts"];
+            var stmtsField = node.Fields["stmts"];
+            
+            // Handle if stmts field is a List<AstNode>
+            if (stmtsField is List<AstNode> stmtAstList)
+            {
+                return string.Join("\n", stmtAstList.Select(EmitStatement));
+            }
+            
+            // Handle if stmts field is a List<object>
+            if (stmtsField is List<object> stmtObjList)
+            {
+                return string.Join("\n", stmtObjList.Select(EmitStatement));
+            }
+            
+            // Handle single AstNode in stmts field
+            var current = stmtsField;
             while (current != null)
             {
                 if (current is AstNode currentNode)
@@ -970,7 +1037,6 @@ public static class WasmEmit
                     }
                     
                     // Move to next statement if it exists
-                    // The Statement node might have a 'stmt' field pointing to the next one
                     if (currentNode.Fields.ContainsKey("next") && currentNode.Fields["next"] is AstNode)
                     {
                         current = currentNode.Fields["next"];
@@ -991,6 +1057,567 @@ public static class WasmEmit
         
         // Single statement node
         return EmitStatement(stmtsNode);
+    }
+    
+    /// <summary>
+    /// Emit if statement.
+    /// </summary>
+    private static string EmitIfStatement(AstNode node)
+    {
+        // WORKAROUND for CDTk field shifting bug in IfStatement:
+        // Expected fields: condition=Expression, thenStmt=Statement, elseClause=ElseClause
+        // Actual due to @KwIf at start: condition=KwIf, thenStmt=Expression, elseClause=Statement
+        // So we need to shift: thenStmt IS the condition, elseClause IS the then statement
+        
+        var conditionField = node.Fields.ContainsKey("condition") ? node.Fields["condition"] : null;
+        var thenStmtField = node.Fields.ContainsKey("thenStmt") ? node.Fields["thenStmt"] : null;
+        var elseClauseField = node.Fields.ContainsKey("elseClause") ? node.Fields["elseClause"] : null;
+        
+        // Apply field shifting workaround
+        object? condition = thenStmtField;  // thenStmt field actually contains the condition
+        object? thenStmt = elseClauseField;  // elseClause field actually contains the then statement
+        object? elseClause = null;  // Actual else clause is lost or in another field
+        
+        // Try to find else clause if it exists
+        // It might be in a "next" field or other unnamed field
+        foreach (var kvp in node.Fields)
+        {
+            if (kvp.Key != "condition" && kvp.Key != "thenStmt" && kvp.Key != "elseClause")
+            {
+                if (kvp.Value is AstNode an && an.Type == "ElseClause")
+                {
+                    elseClause = an;
+                    break;
+                }
+            }
+        }
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; if statement");
+        
+        // Emit condition
+        if (condition != null)
+        {
+            var condCode = EmitExpression(condition);
+            if (!string.IsNullOrWhiteSpace(condCode))
+            {
+                sb.AppendLine(condCode);
+            }
+            else
+            {
+                sb.AppendLine("i32.const 1  ;; default true");
+            }
+        }
+        else
+        {
+            sb.AppendLine("i32.const 1  ;; default true");
+        }
+        
+        sb.AppendLine("if");
+        
+        // Emit then branch
+        if (thenStmt is AstNode thenNode)
+        {
+            var thenCode = EmitStatement(thenNode);
+            if (!string.IsNullOrWhiteSpace(thenCode))
+            {
+                sb.AppendLine(thenCode);
+            }
+        }
+        
+        // Emit else branch if present
+        if (elseClause is AstNode elseNode)
+        {
+            sb.AppendLine("else");
+            // If elseNode has stmt field, use that
+            if (elseNode.Fields.ContainsKey("stmt"))
+            {
+                sb.AppendLine(EmitStatement(elseNode.Fields["stmt"]));
+            }
+            else
+            {
+                sb.AppendLine(EmitStatement(elseNode));
+            }
+        }
+        
+        sb.AppendLine("end");
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit while statement.
+    /// </summary>
+    private static string EmitWhileStatement(AstNode node)
+    {
+        var condition = node.Fields.ContainsKey("condition") ? node.Fields["condition"] : null;
+        var body = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; while loop");
+        sb.AppendLine("block");  // Exit label
+        sb.AppendLine("loop");   // Loop label
+        
+        // Emit condition
+        if (condition != null)
+        {
+            sb.AppendLine(EmitExpression(condition));
+        }
+        
+        // If condition is false, break out
+        sb.AppendLine("i32.eqz");
+        sb.AppendLine("br_if 1");  // Break to outer block
+        
+        // Emit loop body
+        if (body is AstNode bodyNode)
+        {
+            sb.AppendLine(EmitStatement(bodyNode));
+        }
+        
+        // Jump back to loop start
+        sb.AppendLine("br 0");
+        sb.AppendLine("end");    // End loop
+        sb.AppendLine("end");    // End block
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit do-while statement.
+    /// </summary>
+    private static string EmitDoStatement(AstNode node)
+    {
+        var condition = node.Fields.ContainsKey("condition") ? node.Fields["condition"] : null;
+        var body = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; do-while loop");
+        sb.AppendLine("block");  // Exit label
+        sb.AppendLine("loop");   // Loop label
+        
+        // Emit loop body first (do-while executes at least once)
+        if (body is AstNode bodyNode)
+        {
+            sb.AppendLine(EmitStatement(bodyNode));
+        }
+        
+        // Emit condition
+        if (condition != null)
+        {
+            sb.AppendLine(EmitExpression(condition));
+        }
+        
+        // If condition is true, continue loop
+        sb.AppendLine("br_if 0");  // Branch back if true
+        sb.AppendLine("end");      // End loop
+        sb.AppendLine("end");      // End block
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit for statement.
+    /// </summary>
+    private static string EmitForStatement(AstNode node)
+    {
+        var init = node.Fields.ContainsKey("init") ? node.Fields["init"] : null;
+        var condition = node.Fields.ContainsKey("condition") ? node.Fields["condition"] : null;
+        var iterator = node.Fields.ContainsKey("iterator") ? node.Fields["iterator"] : null;
+        var body = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
+        
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; for loop");
+        
+        // Emit initializer
+        if (init is AstNode initNode)
+        {
+            sb.AppendLine(EmitStatement(initNode));
+        }
+        
+        sb.AppendLine("block");  // Exit label
+        sb.AppendLine("loop");   // Loop label
+        
+        // Emit condition (if present)
+        if (condition is AstNode condNode)
+        {
+            sb.AppendLine(EmitExpression(condNode));
+            sb.AppendLine("i32.eqz");
+            sb.AppendLine("br_if 1");  // Break to outer block if false
+        }
+        
+        // Emit loop body
+        if (body is AstNode bodyNode)
+        {
+            sb.AppendLine(EmitStatement(bodyNode));
+        }
+        
+        // Emit iterator
+        if (iterator is AstNode iterNode)
+        {
+            sb.AppendLine(EmitStatement(iterNode));
+        }
+        
+        // Jump back to loop start
+        sb.AppendLine("br 0");
+        sb.AppendLine("end");    // End loop
+        sb.AppendLine("end");    // End block
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit foreach statement.
+    /// </summary>
+    private static string EmitForEachStatement(AstNode node)
+    {
+        // For now, emit a simplified version
+        // Full implementation would need iterator protocol
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; foreach loop");
+        sb.AppendLine(";; TODO: Implement full foreach with iterator protocol");
+        sb.AppendLine("nop");
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit switch statement.
+    /// </summary>
+    private static string EmitSwitchStatement(AstNode node)
+    {
+        // For now, emit a simplified version
+        // Full implementation would need br_table
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine(";; switch statement");
+        sb.AppendLine(";; TODO: Implement full switch with br_table");
+        sb.AppendLine("nop");
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit declaration statement (variable declaration).
+    /// </summary>
+    /// <summary>
+    /// Emit declaration statement (variable declaration).
+    /// Handles: int x; int x = 5; string s = "hello";
+    /// </summary>
+    private static string EmitDeclarationStatement(AstNode node)
+    {
+        var sb = new System.Text.StringBuilder();
+        
+        // DeclarationStatement has a 'decl' field containing LocalDeclaration
+        if (!node.Fields.ContainsKey("decl"))
+        {
+            sb.AppendLine(";; variable declaration (no decl field)");
+            sb.AppendLine("nop");
+            return sb.ToString();
+        }
+        
+        var decl = node.Fields["decl"];
+        
+        // Handle if decl is a List
+        if (decl is List<AstNode> declList)
+        {
+            if (declList.Count > 0)
+            {
+                return EmitLocalVariableDeclaration(declList[0]);
+            }
+        }
+        else if (decl is List<object> objList)
+        {
+            if (objList.Count > 0 && objList[0] is AstNode declNode)
+            {
+                return EmitLocalVariableDeclaration(declNode);
+            }
+        }
+        else if (decl is AstNode declNode)
+        {
+            // LocalDeclaration has a 'decl' field containing LocalVariableDeclaration
+            if (declNode.Fields.ContainsKey("decl"))
+            {
+                var innerDecl = declNode.Fields["decl"];
+                if (innerDecl is AstNode varDecl)
+                {
+                    return EmitLocalVariableDeclaration(varDecl);
+                }
+            }
+            
+            // Try processing the declNode directly
+            return EmitLocalVariableDeclaration(declNode);
+        }
+        
+        sb.AppendLine($";; variable declaration (decl type: {decl?.GetType().Name})");
+        sb.AppendLine("nop");
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit local variable declaration with optional initialization.
+    /// LocalVariableDeclaration has: type, declarators
+    /// </summary>
+    private static string EmitLocalVariableDeclaration(AstNode node)
+    {
+        var sb = new System.Text.StringBuilder();
+        
+        // If this is a LocalDeclaration, unwrap to LocalVariableDeclaration
+        if (node.Type == "LocalDeclaration")
+        {
+            // Due to CDTk field shifting, the LocalVariableDeclaration fields might be directly in LocalDeclaration
+            // Or there might be a 'decl' field
+            if (node.Fields.ContainsKey("decl"))
+            {
+                var innerDecl = node.Fields["decl"];
+                if (innerDecl is AstNode declNode)
+                {
+                    return EmitLocalVariableDeclaration(declNode);
+                }
+                else if (innerDecl is List<AstNode> declList && declList.Count > 0)
+                {
+                    return EmitLocalVariableDeclaration(declList[0]);
+                }
+            }
+            // Fall through to process the LocalDeclaration as if it were LocalVariableDeclaration
+        }
+        
+        // WORKAROUND for CDTk field shifting in LocalDeclaration:
+        // Due to optional modifier, when no modifier is present, fields shift:
+        // - modifier field contains LocalVariableType (the actual type)
+        // - type field contains LocalVariableDeclarators (the actual declarators)
+        
+        string wasmType = "i32";  // default
+        object? typeField = null;
+        object? declaratorsField = null;
+        
+        // Check for field shifting pattern
+        if (node.Type == "LocalDeclaration" && node.Fields.ContainsKey("modifier"))
+        {
+            var modifierField = node.Fields["modifier"];
+            if (modifierField is AstNode modNode && modNode.Type == "LocalVariableType")
+            {
+                // Field shifting detected! modifier is actually the type
+                typeField = modifierField;
+                if (node.Fields.ContainsKey("type"))
+                {
+                    var typeActual = node.Fields["type"];
+                    if (typeActual is AstNode typeNode && typeNode.Type == "LocalVariableDeclarators")
+                    {
+                        // type field is actually the declarators
+                        declaratorsField = typeActual;
+                    }
+                }
+            }
+        }
+        
+        // If not field-shifted, extract normally
+        if (typeField == null && node.Fields.ContainsKey("type"))
+        {
+            typeField = node.Fields["type"];
+        }
+        if (declaratorsField == null && node.Fields.ContainsKey("declarators"))
+        {
+            declaratorsField = node.Fields["declarators"];
+        }
+        
+        // Extract WASM type from type field
+        if (typeField is AstNode tn)
+        {
+            wasmType = ExtractWasmTypeFromNode(tn);
+        }
+        else if (typeField is List<AstNode> typeList && typeList.Count > 0)
+        {
+            wasmType = ExtractWasmTypeFromNode(typeList[0]);
+        }
+        
+        // Extract declarators
+        if (declaratorsField is AstNode declaratorNode)
+        {
+            return EmitVariableDeclarators(declaratorNode, wasmType);
+        }
+        else if (declaratorsField is List<AstNode> declList && declList.Count > 0)
+        {
+            return EmitVariableDeclarators(declList[0], wasmType);
+        }
+        
+        sb.AppendLine(";; variable declaration (no declarators found)");
+        sb.AppendLine("nop");
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit variable declarators (one or more variables with optional initializers).
+    /// Example: int x, y = 5, z;
+    /// </summary>
+    private static string EmitVariableDeclarators(AstNode node, string wasmType)
+    {
+        var sb = new System.Text.StringBuilder();
+        
+        // LocalVariableDeclarators has a 'declarators' field or might have 'first'
+        if (node.Fields.ContainsKey("declarators"))
+        {
+            var declarators = node.Fields["declarators"];
+            
+            // Handle list of declarators
+            if (declarators is List<AstNode> declList)
+            {
+                foreach (var decl in declList)
+                {
+                    var declCode = EmitSingleVariableDeclarator(decl, wasmType);
+                    if (!string.IsNullOrWhiteSpace(declCode))
+                    {
+                        sb.AppendLine(declCode);
+                    }
+                }
+            }
+            else if (declarators is AstNode declNode)
+            {
+                // Single declarator or linked list
+                var current = declNode;
+                while (current != null)
+                {
+                    var declCode = EmitSingleVariableDeclarator(current, wasmType);
+                    if (!string.IsNullOrWhiteSpace(declCode))
+                    {
+                        sb.AppendLine(declCode);
+                    }
+                    
+                    // Check for next declarator
+                    if (current.Fields.ContainsKey("next") && current.Fields["next"] is AstNode next)
+                    {
+                        current = next;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        // Try 'first' field (common in CDTk)
+        else if (node.Fields.ContainsKey("first"))
+        {
+            var firstDecl = node.Fields["first"];
+            if (firstDecl is AstNode declNode)
+            {
+                var declCode = EmitSingleVariableDeclarator(declNode, wasmType);
+                if (!string.IsNullOrWhiteSpace(declCode))
+                {
+                    sb.AppendLine(declCode);
+                }
+            }
+        }
+        
+        if (sb.Length == 0)
+        {
+            sb.AppendLine(";; variable declaration (no declarators found)");
+            sb.AppendLine("nop");
+        }
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit a single variable declarator with optional initializer.
+    /// Example: x, y = 5, z = a + b
+    /// </summary>
+    private static string EmitSingleVariableDeclarator(AstNode node, string wasmType)
+    {
+        var sb = new System.Text.StringBuilder();
+        
+        // Extract variable name
+        string varName = "";
+        if (node.Fields.ContainsKey("name"))
+        {
+            var nameNode = node.Fields["name"];
+            if (nameNode is AstNode nn && nn.Fields.ContainsKey("lexeme"))
+            {
+                varName = nn.Fields["lexeme"]?.ToString() ?? "";
+            }
+        }
+        
+        if (string.IsNullOrEmpty(varName))
+        {
+            // Try to find identifier directly
+            if (node.Type == "LocalVariableDeclarator" || node.Type == "VariableDeclarator")
+            {
+                foreach (var kvp in node.Fields)
+                {
+                    if (kvp.Value is AstNode an && an.Type == "Identifier")
+                    {
+                        if (an.Fields.ContainsKey("lexeme"))
+                        {
+                            varName = an.Fields["lexeme"]?.ToString() ?? "";
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (string.IsNullOrEmpty(varName))
+        {
+            return "";  // Can't declare without name
+        }
+        
+        // Register the variable
+        LocalVariableRegistry.RegisterVariable(varName, wasmType);
+        
+        // Check for initializer
+        if (node.Fields.ContainsKey("init") || node.Fields.ContainsKey("initializer"))
+        {
+            var initField = node.Fields.ContainsKey("init") ? node.Fields["init"] : node.Fields["initializer"];
+            
+            // For now, we'll emit a default value since CDTk isn't capturing the actual initializer
+            // TODO: Fix CDTk to properly capture LocalVariableInitializer
+            sb.AppendLine($";; {varName} = ... (initializer not captured by parser)");
+            sb.AppendLine("i32.const 0  ;; default value");
+            sb.AppendLine($"local.set ${varName}");
+        }
+        
+        if (sb.Length == 0)
+        {
+            // Declaration without initializer - just register it
+            sb.AppendLine($";; declare {varName}");
+        }
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Extract WASM type from a type node.
+    /// Maps C# types to WASM types.
+    /// </summary>
+    private static string ExtractWasmTypeFromNode(AstNode typeNode)
+    {
+        // Try to get the type name from the node
+        string typeName = "";
+        
+        // Direct lexeme (simple type like "int")
+        if (typeNode.Fields.ContainsKey("lexeme"))
+        {
+            typeName = typeNode.Fields["lexeme"]?.ToString() ?? "";
+        }
+        // Type has a 'type' field (common pattern)
+        else if (typeNode.Fields.ContainsKey("type"))
+        {
+            var innerType = typeNode.Fields["type"];
+            if (innerType is AstNode innerNode && innerNode.Fields.ContainsKey("lexeme"))
+            {
+                typeName = innerNode.Fields["lexeme"]?.ToString() ?? "";
+            }
+        }
+        
+        // Map C# types to WASM types
+        return typeName switch
+        {
+            "int" or "Int32" or "uint" or "UInt32" => "i32",
+            "long" or "Int64" or "ulong" or "UInt64" => "i64",
+            "float" or "Single" => "f32",
+            "double" or "Double" => "f64",
+            "bool" or "Boolean" => "i32",
+            "byte" or "Byte" or "sbyte" or "SByte" => "i32",
+            "short" or "Int16" or "ushort" or "UInt16" => "i32",
+            "char" or "Char" => "i32",
+            _ => "i32"  // Default to i32 for objects, strings, etc.
+        };
     }
     
     /// <summary>
@@ -1096,6 +1723,78 @@ public static class WasmEmit
         }
         
         return null;
+    }
+    
+    /// <summary>
+    /// Generate WASM data section for string literals.
+    /// Emits all registered strings with proper null termination.
+    /// </summary>
+    public static string GenerateDataSection()
+    {
+        var sb = new System.Text.StringBuilder();
+        var allStrings = StringRegistry.GetAllStrings();
+        
+        foreach (var kvp in allStrings.OrderBy(x => x.Key))
+        {
+            var stringId = kvp.Key;
+            var text = kvp.Value;
+            var offset = StringRegistry.GetStringOffset(stringId);
+            
+            // Escape special characters in string
+            var escapedText = EscapeString(text);
+            
+            // Emit data directive: (data (i32.const offset) "text\00")
+            sb.AppendLine($"  (data (i32.const {offset}) \"{escapedText}\\00\")");
+        }
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Escape special characters in strings for WASM text format.
+    /// </summary>
+    private static string EscapeString(string text)
+    {
+        return text
+            .Replace("\\", "\\\\")  // Backslash
+            .Replace("\"", "\\\"")  // Quote
+            .Replace("\n", "\\n")   // Newline
+            .Replace("\r", "\\r")   // Carriage return
+            .Replace("\t", "\\t");  // Tab
+    }
+    
+    /// <summary>
+    /// Emit a compilation unit item (using directive, class, etc.).
+    /// </summary>
+    public static string EmitCompilationUnitItem(AstNode node)
+    {
+        if (node.Type == "CompilationUnitItem" && node.Fields.ContainsKey("item"))
+        {
+            var item = node.Fields["item"];
+            if (item is AstNode itemNode)
+            {
+                return EmitCompilationUnitItem(itemNode);
+            }
+        }
+        
+        // Handle different item types
+        if (node.Type.Contains("Using"))
+        {
+            return ";; using ;";
+        }
+        
+        if (node.Type == "NamespaceMemberDeclaration" && node.Fields.ContainsKey("member"))
+        {
+            var member = node.Fields["member"];
+            if (member is AstNode memberNode)
+            {
+                return EmitCompilationUnitItem(memberNode);
+            }
+        }
+        
+        // For type declarations, we need to use the WASM class's processing
+        // This will be handled by the existing TypeDeclaration maps
+        return "";
     }
 }
 
@@ -1254,17 +1953,114 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Top-level compilation unit - generates complete WASM module</summary>
-    public Map CompilationUnit = @"(module
-  ;; Imports
-  (import ""env"" ""memory"" (memory 1))
-  (import ""env"" ""console_log"" (func $console_log (param i32)))
-  
-  ;; Generated members
-{items}
-  
-  ;; Exports
-  (export ""main"" (func $Main))
-)";
+    /// <summary>
+    /// CompilationUnit template - generates the complete WASM module.
+    /// Uses TypedMap to allow custom emission that includes data section.
+    /// </summary>
+    public Map<AstNode, string> CompilationUnit = TypedMap.For<string>()
+        .Emit(node => {
+            // Clear string registry for new compilation
+            StringRegistry.Clear();
+            LocalVariableRegistry.Clear();
+            
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("(module");
+            sb.AppendLine("  ;; Imports");
+            sb.AppendLine("  (import \"env\" \"memory\" (memory 1))");
+            sb.AppendLine("  (import \"env\" \"console_log\" (func $console_log (param i32)))");
+            sb.AppendLine();
+            
+            // First, process items to register strings
+            var itemsCode = new System.Text.StringBuilder();
+            if (node.Fields.ContainsKey("items"))
+            {
+                var items = node.Fields["items"];
+                if (items is List<AstNode> itemList)
+                {
+                    foreach (var item in itemList)
+                    {
+                        // Use the CompilationUnitItem map to process each item
+                        var itemCode = "";
+                        try
+                        {
+                            // Try to use the map if it exists in context
+                            itemCode = ProcessCompilationUnitItem(item);
+                        }
+                        catch
+                        {
+                            itemCode = "";
+                        }
+                        
+                        if (!string.IsNullOrWhiteSpace(itemCode))
+                        {
+                            itemsCode.AppendLine(itemCode);
+                        }
+                    }
+                }
+            }
+            
+            // Now generate data section with all registered strings
+            var dataSection = WasmEmit.GenerateDataSection();
+            if (!string.IsNullOrWhiteSpace(dataSection))
+            {
+                sb.AppendLine("  ;; Data section (string literals)");
+                sb.Append(dataSection);
+                sb.AppendLine();
+            }
+            
+            sb.AppendLine("  ;; Generated members");
+            sb.Append(itemsCode);
+            
+            sb.AppendLine();
+            sb.AppendLine("  ;; Exports");
+            sb.AppendLine("  (export \"main\" (func $Main))");
+            sb.AppendLine(")");
+            
+            return sb.ToString();
+        });
+    
+    /// <summary>
+    /// Process a compilation unit item using the existing infrastructure.
+    /// </summary>
+    private static string ProcessCompilationUnitItem(AstNode node)
+    {
+        if (node == null) return "";
+        
+        if (node.Type == "CompilationUnitItem" && node.Fields.ContainsKey("item"))
+        {
+            var item = node.Fields["item"];
+            if (item is AstNode itemNode)
+            {
+                return ProcessCompilationUnitItem(itemNode);
+            }
+        }
+        
+        // Handle different item types
+        if (node.Type.Contains("Using"))
+        {
+            return ";; using ;";
+        }
+        
+        if (node.Type == "NamespaceMemberDeclaration" && node.Fields.ContainsKey("member"))
+        {
+            var member = node.Fields["member"];
+            if (member is AstNode memberNode)
+            {
+                // Could be NamespaceDeclaration or TypeDeclaration
+                if (memberNode.Type == "NamespaceDeclaration")
+                {
+                    return ProcessNamespaceDeclarationInline(memberNode);
+                }
+                else
+                {
+                    return ProcessTypeDeclaration(memberNode);
+                }
+            }
+        }
+        
+        return "";
+    }
+
     
     /// <summary>Namespace member declarations</summary>
     public Map NamespaceMemberDeclarations = "{members}";
@@ -1330,22 +2126,18 @@ public class WASM : MapSet
             // Get class body (in name field due to field shifting)
             if (typeNode.Fields.ContainsKey("name") && typeNode.Fields["name"] is AstNode bodyNode)
             {
-                System.Console.WriteLine($"DEBUG: ClassBody type={bodyNode.Type}, fields={string.Join(", ", bodyNode.Fields.Keys)}");
                 
                 // ClassBody has members field
                 if (bodyNode.Fields.ContainsKey("members") && bodyNode.Fields["members"] is AstNode membersNode)
                 {
-                    System.Console.WriteLine($"DEBUG: ClassMemberDeclarations type={membersNode.Type}, fields={string.Join(", ", membersNode.Fields.Keys)}");
                     
                     // ClassMemberDeclarations has members field (linked list or single node)
                     if (membersNode.Fields.ContainsKey("members"))
                     {
                         var members = membersNode.Fields["members"];
-                        System.Console.WriteLine($"DEBUG: members type={members?.GetType().Name}");
                         
                         if (members is List<AstNode> memberList)
                         {
-                            System.Console.WriteLine($"DEBUG: members list has {memberList.Count} items");
                             
                             foreach (var memberDecl in memberList)
                             {
@@ -1354,7 +2146,6 @@ public class WASM : MapSet
                         }
                         else if (members is AstNode memberNode)
                         {
-                            System.Console.WriteLine($"DEBUG: members is single AstNode, will iterate");
                             
                             // Iterate through linked list of members
                             var current = memberNode;
@@ -1388,19 +2179,15 @@ public class WASM : MapSet
     /// </summary>
     private static void ProcessClassMemberDeclaration(AstNode memberDecl, System.Text.StringBuilder output)
     {
-        System.Console.WriteLine($"DEBUG: memberDecl type={memberDecl.Type}, fields={string.Join(", ", memberDecl.Fields.Keys)}");
         
         // ClassMemberDeclaration has member field
         if (memberDecl.Fields.ContainsKey("member") && memberDecl.Fields["member"] is AstNode actualMember)
         {
-            System.Console.WriteLine($"DEBUG: actualMember type={actualMember.Type}");
             
             // For MethodDeclaration, we need to inline the processing
             if (actualMember.Type == "MethodDeclaration")
             {
-                System.Console.WriteLine($"DEBUG: Calling EmitMethodDeclarationInline");
                 var methodOutput = EmitMethodDeclarationInline(actualMember);
-                System.Console.WriteLine($"DEBUG: methodOutput length={methodOutput?.Length}");
                 if (!string.IsNullOrWhiteSpace(methodOutput))
                     output.Append(methodOutput);
             }
@@ -1418,14 +2205,42 @@ public class WASM : MapSet
         var attrsField = node.Fields.ContainsKey("attrs") ? node.Fields["attrs"] : null;
         var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
         var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
+        var typeParamsField = node.Fields.ContainsKey("typeParams") ? node.Fields["typeParams"] : null;
+        
         
         string funcName = "";
         string resultType = "";
         string parameters = "";
         string body = "";
         
+        // NEW CASE: Detect field shifting when name contains FormalParameterList
+        if (nameField is AstNode nameNode && nameNode.Type == "FormalParameterList" && 
+            typeParamsField is AstNode typeParamsNode && typeParamsNode.Type == "MethodBody")
+        {
+            // Field-shifted case: mods=Type, returnType=Identifier(name), name=FormalParameterList, typeParams=MethodBody
+            
+            // Get function name from returnType field
+            if (returnTypeField is AstNode idNode && idNode.Type == "Identifier" && idNode.Fields.ContainsKey("lexeme"))
+                funcName = idNode.Fields["lexeme"]?.ToString() ?? "";
+            
+            // Get return type from mods field
+            if (modsField is AstNode modsType)
+                resultType = ExtractTypeFromNode(modsType);
+            
+            // Get parameters from name field (which contains FormalParameterList)
+            parameters = EmitParameterList(nameField);
+            
+            // Clear local variables for this function BEFORE emitting body
+            LocalVariableRegistry.ClearCurrentFunction();
+            
+            // Get body from typeParams field (which contains MethodBody)
+            if (typeParamsNode.Fields.ContainsKey("body"))
+                body = WasmEmit.EmitStatement(typeParamsNode.Fields["body"]);
+            else
+                body = WasmEmit.EmitStatement(typeParamsNode);
+        }
         // Detect case by checking if mods is an Identifier
-        if (modsField is AstNode modsNode && modsNode.Type == "Identifier")
+        else if (modsField is AstNode modsNode && modsNode.Type == "Identifier")
         {
             // WITH params case
             funcName = modsNode.Fields.ContainsKey("lexeme") ? modsNode.Fields["lexeme"]?.ToString() ?? "" : "";
@@ -1434,7 +2249,12 @@ public class WASM : MapSet
                 resultType = ExtractTypeFromNode(attrsType);
             
             if (returnTypeField != null)
+            {
                 parameters = EmitParameterList(returnTypeField);
+            }
+            
+            // Clear local variables for this function BEFORE emitting body
+            LocalVariableRegistry.ClearCurrentFunction();
             
             if (nameField is AstNode bodyNode)
             {
@@ -1453,26 +2273,22 @@ public class WASM : MapSet
             if (modsField is AstNode modsType)
                 resultType = ExtractTypeFromNode(modsType);
             
+            // Clear local variables for this function BEFORE emitting body
+            LocalVariableRegistry.ClearCurrentFunction();
+            
             if (nameField is AstNode bodyNode)
             {
                 // DEBUG: Print body structure
-                System.Console.WriteLine($"DEBUG Body node type: {bodyNode.Type}");
-                System.Console.WriteLine($"DEBUG Body fields: {string.Join(", ", bodyNode.Fields.Keys)}");
                 if (bodyNode.Fields.ContainsKey("body"))
                 {
                     var innerBody = bodyNode.Fields["body"];
-                    System.Console.WriteLine($"DEBUG Inner body type: {(innerBody as AstNode)?.Type ?? innerBody?.GetType().Name}");
                     if (innerBody is AstNode ibn)
                     {
-                        System.Console.WriteLine($"DEBUG Inner body fields: {string.Join(", ", ibn.Fields.Keys)}");
                         if (ibn.Fields.ContainsKey("stmts"))
                         {
                             var stmts = ibn.Fields["stmts"];
-                            System.Console.WriteLine($"DEBUG Stmts type: {stmts?.GetType().Name}");
                             if (stmts is AstNode sn)
                             {
-                                System.Console.WriteLine($"DEBUG Stmts node type: {sn.Type}");
-                                System.Console.WriteLine($"DEBUG Stmts fields: {string.Join(", ", sn.Fields.Keys)}");
                             }
                         }
                     }
@@ -1485,6 +2301,7 @@ public class WASM : MapSet
         
         // Build the function
         var sb = new System.Text.StringBuilder();
+        
         sb.Append($"(func ${funcName}");
         
         if (!string.IsNullOrWhiteSpace(parameters))
@@ -1500,10 +2317,32 @@ public class WASM : MapSet
             sb.Append(")");
         }
         
+        // Emit function body (this will register local variables)
+        string bodyCode = "";
         if (!string.IsNullOrWhiteSpace(body))
         {
+            bodyCode = body;
+        }
+        
+        // Now emit local variable declarations based on what was registered
+        var locals = LocalVariableRegistry.GetCurrentFunctionVariables();
+        foreach (var (name, type) in locals)
+        {
+        }
+        if (locals.Count > 0)
+        {
+            sb.AppendLine();
+            foreach (var (name, type) in locals)
+            {
+                sb.AppendLine($"  (local ${name} {type})");
+            }
+        }
+        
+        // Now emit the body code
+        if (!string.IsNullOrWhiteSpace(bodyCode))
+        {
             sb.Append("\n  ");
-            sb.Append(body);
+            sb.Append(bodyCode);
         }
         
         sb.Append("\n)\n");
@@ -2335,9 +3174,14 @@ public class WASM : MapSet
     /// </summary>
     private static string EmitParameterList(object? paramsNode)
     {
+        
         if (paramsNode == null) return "";
         
-        if (!(paramsNode is AstNode node)) return "";
+        if (!(paramsNode is AstNode node))
+        {
+            return "";
+        }
+        
         
         // Handle FormalParameterList -> extract params field
         if (node.Type == "FormalParameterList" && node.Fields.ContainsKey("params"))
@@ -2356,10 +3200,12 @@ public class WASM : MapSet
         {
             var results = new List<string>();
             
+            
             // Check if we have a 'params' field with a list of parameters
             if (node.Fields.ContainsKey("params"))
             {
                 var paramsField = node.Fields["params"];
+                
                 
                 if (paramsField is List<AstNode> paramsList)
                 {
@@ -3301,13 +4147,11 @@ public class WASM : MapSet
         .Emit(node => {
             if (node == null) return "";
             
-            System.Console.WriteLine($"DEBUG CompilationUnitItem: type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
             
             if (!node.Fields.ContainsKey("item")) return "";
             var item = node.Fields["item"];
             if (!(item is AstNode itemNode)) return "";
             
-            System.Console.WriteLine($"DEBUG CompilationUnitItem.item: type={itemNode.Type}");
             
             // Process based on item type
             if (itemNode.Type.Contains("Using"))
@@ -3318,27 +4162,22 @@ public class WASM : MapSet
                 // Unwrap to get the actual member
                 if (itemNode.Fields.ContainsKey("member") && itemNode.Fields["member"] is AstNode member)
                 {
-                    System.Console.WriteLine($"DEBUG NamespaceMemberDeclaration.member: type={member.Type}");
                     
                     // Could be NamespaceDeclaration or TypeDeclaration
                     if (member.Type == "NamespaceDeclaration")
                     {
-                        System.Console.WriteLine($"DEBUG Processing NamespaceDeclaration");
                         return ProcessNamespaceDeclarationInline(member);
                     }
                     else
                     {
-                        System.Console.WriteLine($"DEBUG Processing TypeDeclaration: {member.Type}");
                         return ProcessTypeDeclaration(member);
                     }
                 }
                 else
                 {
-                    System.Console.WriteLine($"DEBUG NamespaceMemberDeclaration has no member field or it's not AstNode");
                 }
             }
             
-            System.Console.WriteLine($"DEBUG Returning empty for item type {itemNode.Type}");
             return "";
         });
     
@@ -3347,51 +4186,81 @@ public class WASM : MapSet
     /// </summary>
     private static string ProcessNamespaceDeclarationInline(AstNode nsNode)
     {
-        System.Console.WriteLine($"DEBUG ProcessNamespaceDeclarationInline: fields={string.Join(", ", nsNode.Fields.Keys)}");
         
         // Check all fields
         foreach (var kvp in nsNode.Fields)
         {
             var value = kvp.Value;
-            System.Console.WriteLine($"DEBUG field {kvp.Key}: type={value?.GetType().Name}, AstNode type={(value as AstNode)?.Type}");
         }
         
-        // Find the NamespaceBody in any field
+        // WORKAROUND for CDTk field shifting bug:
+        // Due to the @KwNamespace token at the start, fields may be shifted.
+        // Expected: name=QualifiedName, body=NamespaceBody
+        // Actual due to bug: name=KwNamespace, body=QualifiedName, and NamespaceBody in next field
+        
+        // Try to find NamespaceBody - it might be in 'body' or any other field
         AstNode? bodyNode = null;
+        
+        // First try to find it explicitly by type
         foreach (var kvp in nsNode.Fields)
         {
             if (kvp.Value is AstNode astNode && astNode.Type == "NamespaceBody")
             {
-                System.Console.WriteLine($"DEBUG Found NamespaceBody in field: {kvp.Key}");
                 bodyNode = astNode;
                 break;
             }
         }
         
+        // If not found by type, check if there's an AstNode with "items" field that could be NamespaceBody
         if (bodyNode == null)
         {
-            System.Console.WriteLine($"DEBUG No NamespaceBody found in any field");
+            foreach (var kvp in nsNode.Fields)
+            {
+                if (kvp.Value is AstNode astNode && astNode.Fields.ContainsKey("items"))
+                {
+                    bodyNode = astNode;
+                    break;
+                }
+            }
+        }
+        
+        if (bodyNode == null)
+        {
+            
+            // Last resort: check if any field contains a ClassDeclaration directly
+            // This handles the case where the namespace is being skipped entirely
+            foreach (var kvp in nsNode.Fields)
+            {
+                if (kvp.Value is AstNode astNode)
+                {
+                    // Check if this looks like it might contain type declarations
+                    if (astNode.Type.Contains("Class") || astNode.Type.Contains("Type") || 
+                        astNode.Type.Contains("Member") || astNode.Type.Contains("Declaration"))
+                    {
+                        var result = ProcessTypeDeclaration(astNode);
+                        if (!string.IsNullOrWhiteSpace(result))
+                            return result;
+                    }
+                }
+            }
+            
             return "";
         }
         
-        System.Console.WriteLine($"DEBUG NamespaceBody: type={bodyNode.Type}, fields={string.Join(", ", bodyNode.Fields.Keys)}");
         
         // NamespaceBody has items field
         if (!bodyNode.Fields.ContainsKey("items"))
         {
-            System.Console.WriteLine($"DEBUG NamespaceBody: no items field");
             return "";
         }
         
         var items = bodyNode.Fields["items"];
-        System.Console.WriteLine($"DEBUG NamespaceBody.items: type={items?.GetType().Name}");
         
         var results = new List<string>();
         
         // Process list of NamespaceBodyItem
         if (items is List<AstNode> itemList)
         {
-            System.Console.WriteLine($"DEBUG NamespaceBody.items is list with {itemList.Count} items");
             
             foreach (var bodyItem in itemList)
             {
@@ -3407,7 +4276,6 @@ public class WASM : MapSet
         }
         else if (items is AstNode itemNode)
         {
-            System.Console.WriteLine($"DEBUG NamespaceBody.items is single AstNode");
             
             // Single item or linked list
             var current = itemNode;
@@ -3433,7 +4301,6 @@ public class WASM : MapSet
         }
         else
         {
-            System.Console.WriteLine($"DEBUG NamespaceBody.items is neither list nor AstNode");
         }
         
         return string.Join("\n", results);
