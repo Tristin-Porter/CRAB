@@ -737,9 +737,10 @@ public class Rules : RuleSet
     // RANGE EXPRESSION (C# 8)
     public Rule RangeExpression = "start:UnaryExpression @RangeOperator end:UnaryExpression | @RangeOperator end:UnaryExpression | start:UnaryExpression @RangeOperator | expr:UnaryExpression";
 
-    // UNARY EXPRESSION - Fixed to use suffix pattern
-    public Rule UnaryExpression = new Rule("expr:UnaryExpressionBase suffixes:UnaryExpressionSuffixes?")
-        .Returns("expr", "suffixes");
+    // UNARY EXPRESSION - Using left recursion to support multiple suffixes
+    // GLL parser can handle left recursion properly
+    public Rule UnaryExpression = new Rule("base:UnaryExpression suffix:UnaryExpressionSuffix | expr:UnaryExpressionBase")
+        .Returns("base", "suffix", "expr");
 
     public Rule UnaryExpressionBase = "expr:UnaryOperatorExpression | expr:CastExpression | expr:AwaitExpression | expr:DefaultExpression | expr:NameofExpression | expr:SizeofExpression | expr:CheckedExpression | expr:UncheckedExpression | expr:PrimaryExpressionCore";
 
@@ -747,12 +748,12 @@ public class Rules : RuleSet
 
     public Rule UnaryExpressionSuffix = "suffix:MemberAccessSuffix | suffix:InvocationSuffix | suffix:ElementAccessSuffix | suffix:PostIncrementSuffix | suffix:PostDecrementSuffix | suffix:WithExpressionSuffix | suffix:IsPatternSuffix | suffix:AsTypeSuffix";
 
-    public Rule MemberAccessSuffix = new Rule("accessor:MemberAccessor member:@Identifier typeArgs:TypeArgumentList?")
+    public Rule MemberAccessSuffix = new Rule("accessor:MemberAccessor member:@Identifier typeArgs:TypeArgumentList | accessor:MemberAccessor member:@Identifier")
         .Returns("accessor", "member", "typeArgs");
 
     public Rule MemberAccessor = "op:@Dot | op:@NullConditional";
 
-    public Rule InvocationSuffix = new Rule("@OpenParen args:ArgumentList? @CloseParen")
+    public Rule InvocationSuffix = new Rule("@OpenParen args:ArgumentList @CloseParen | @OpenParen @CloseParen")
         .Returns("args");
 
     public Rule ElementAccessSuffix = new Rule("@OpenBracket indices:ExpressionList @CloseBracket")
@@ -762,7 +763,7 @@ public class Rules : RuleSet
 
     public Rule PostDecrementSuffix = "@Decrement";
 
-    public Rule WithExpressionSuffix = new Rule("@KwWith @OpenBrace initializers:MemberInitializerList? @CloseBrace")
+    public Rule WithExpressionSuffix = new Rule("@KwWith @OpenBrace initializers:MemberInitializerList @CloseBrace | @KwWith @OpenBrace @CloseBrace")
         .Returns("initializers");
 
     public Rule IsPatternSuffix = new Rule("@KwIs pattern:Pattern")
