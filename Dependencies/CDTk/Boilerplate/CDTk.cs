@@ -11927,7 +11927,21 @@ namespace CDTk
             if (existingSPPF != null)
             {
                 // Reuse existing parse - pop immediately
-                Pop(existingSPPF);
+                // CRITICAL FIX: Set _currentGSSNode to ntGSS before popping
+                // Otherwise Pop will use the wrong GSS node and won't find the edges
+                var savedGSS = _currentGSSNode;
+                var savedPos = _currentPosition;
+                try
+                {
+                    _currentGSSNode = ntGSS;
+                    _currentPosition = existingSPPF.RightExtent;
+                    Pop(existingSPPF);
+                }
+                finally
+                {
+                    _currentGSSNode = savedGSS;
+                    _currentPosition = savedPos;
+                }
             }
             else
             {
@@ -12275,16 +12289,6 @@ namespace CDTk
                 // When a nonterminal completes, we must advance the parser position to where
                 // the nonterminal ended (its RightExtent). Otherwise, continuation descriptors
                 // will try to parse from the wrong position.
-                // 
-                // Example: "return 5;" at tokens [8, 9, 10]
-                // - ReturnStatement starts at position 8
-                // - Matches @KwReturn (token 8), advances to position 9
-                // - Calls Expression nonterminal at position 9
-                // - Expression matches literal "5", creates Expression[9..10]
-                // - WITHOUT THIS FIX: Pop creates continuation at position 9 (wrong!)
-                // - Tries to match @Semicolon at position 9, which is "5", fails
-                // - WITH THIS FIX: Pop creates continuation at position 10 (correct!)
-                // - Matches @Semicolon at position 10, which is ";", succeeds
                 continuationPosition = endPosition;
             }
 

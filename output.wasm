@@ -1,0 +1,25 @@
+(module
+  ;; Imports
+  (import "env" "memory" (memory 1))
+  
+  ;; Generated members
+;; class C
+(type $C (struct
+(func $M
+(block
+local.get $Test
+  ;; Deallocation instructions inserted here based on AutomaticModel analysis
+)
+  (result )
+
+)
+(func $Test
+(block
+
+  ;; Deallocation instructions inserted here based on AutomaticModel analysis
+)
+  (result )
+
+)
+))
+)
