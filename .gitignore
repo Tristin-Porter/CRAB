@@ -4,14 +4,7 @@ obj/
 TestProject/
 testing/
 
-# Allow tests/ folder with test files, but ignore specific test output folders
-!tests/
-tests/*_outputs/
-tests/HelloWorld/
-tests/Calculator/
-tests/ClassHierarchy/
-tests/GenericCollections/
-
+# Ignore generated test output folders
 *_outputs/
 
 # Test command generated projects (at root level only)
