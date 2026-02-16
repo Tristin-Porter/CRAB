@@ -267,10 +267,25 @@ class Build : Command
                     File.WriteAllText(htmlPath, htmlContent);
                     if (verbose) System.Console.WriteLine($"      Saved {htmlPath}");
                     
-                    // Also save the original WAT for debugging
-                    string watPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.wat");
+                    // Save the original WAT as IR in parent directory (not Web folder)
+                    // WAT is the intermediate representation, not a web-specific file
+                    string watPath = Path.Combine(outputPath, $"{projectNameForFiles}.wat");
                     File.WriteAllText(watPath, watText);
-                    if (verbose) System.Console.WriteLine($"      Saved {watPath} (WebAssembly text format)");
+                    if (verbose) System.Console.WriteLine($"      Saved {watPath} (WebAssembly IR)");
+                    
+                    // Remove the intermediate output.wasm file (it was just WAT text)
+                    if (File.Exists(outputFile) && outputFile.EndsWith("output.wasm"))
+                    {
+                        try
+                        {
+                            File.Delete(outputFile);
+                            if (verbose) System.Console.WriteLine($"      Removed intermediate file {outputFile}");
+                        }
+                        catch
+                        {
+                            // Ignore errors deleting intermediate file
+                        }
+                    }
                     
                     if (verbose)
                     {
@@ -306,12 +321,10 @@ class Build : Command
                 System.Console.WriteLine("=".PadRight(60, '='));
             }
 
-            System.Console.WriteLine($"✓ Build successful: {outputFile}");
-            System.Console.WriteLine($"  Output size: {new FileInfo(outputFile).Length} bytes");
-            
-            // Show additional outputs if generated
+            // Show appropriate success message based on output type
             if (!toAsm && outputFile.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase))
             {
+                // For WASM builds, show the actual WASM binary, not the intermediate file
                 // Determine project name for file naming (same logic as above)
                 string projectNameForFiles = "output";  // Default fallback
                 try
@@ -338,8 +351,9 @@ class Build : Command
                 string wasmBinaryPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.wasm");
                 string jsPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.js");
                 string htmlPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.html");
-                string watPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.wat");
+                string watPath = Path.Combine(outputPath, $"{projectNameForFiles}.wat");
                 
+                System.Console.WriteLine($"✓ Build successful");
                 if (File.Exists(wasmBinaryPath))
                     System.Console.WriteLine($"  WASM binary: {wasmBinaryPath} ({new FileInfo(wasmBinaryPath).Length} bytes)");
                 if (File.Exists(jsPath))
@@ -347,12 +361,19 @@ class Build : Command
                 if (File.Exists(htmlPath))
                     System.Console.WriteLine($"  HTML runner: {htmlPath}");
                 if (File.Exists(watPath))
-                    System.Console.WriteLine($"  WAT text: {watPath}");
+                    System.Console.WriteLine($"  WAT IR: {watPath}");
                     
                 System.Console.WriteLine();
                 System.Console.WriteLine("To run in browser:");
                 System.Console.WriteLine($"  1. Open {htmlPath} in your web browser");
                 System.Console.WriteLine("  2. Or serve with: python -m http.server 8000");
+            }
+            else
+            {
+                // For native/PE builds, show the actual output file
+                System.Console.WriteLine($"✓ Build successful: {outputFile}");
+                if (File.Exists(outputFile))
+                    System.Console.WriteLine($"  Output size: {new FileInfo(outputFile).Length} bytes");
             }
         }
         catch (Exception ex)

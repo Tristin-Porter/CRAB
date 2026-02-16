@@ -209,21 +209,19 @@ class Test : Command
 
             buildCommand.Execute(Array.Empty<string>(), buildFlags);
 
-            // Check for compiled output (wasm or wat) in new bin/Debug/crab/Web structure
-            string outputFile = Path.Combine(projectPath, "bin", "Debug", "crab", "Web", "output.wasm");
-            if (!File.Exists(outputFile))
+            // After build, look for the project-named WASM binary in Web folder
+            string webDir = Path.Combine(projectPath, "bin", "Debug", "crab", "Web");
+            string wasmFile = Path.Combine(webDir, $"{projectName}.wasm");
+            
+            if (!File.Exists(wasmFile))
             {
-                outputFile = Path.Combine(projectPath, "bin", "Debug", "crab", "Web", "output.wat");
-                if (!File.Exists(outputFile))
-                {
-                    System.Console.WriteLine($"Error: Build failed - output file not found");
-                    LogDebug($"ERROR: Build failed for {projectName}");
-                    CleanupProject(projectPath, saveOutputs, verbose || debugMode, saveDir);
-                    return false;
-                }
+                System.Console.WriteLine($"Error: Build failed - WASM binary not found at {wasmFile}");
+                LogDebug($"ERROR: Build failed for {projectName}");
+                CleanupProject(projectPath, saveOutputs, verbose || debugMode, saveDir);
+                return false;
             }
             
-            LogInfo($"Build successful, output: {outputFile}");
+            LogInfo($"Build successful, output: {wasmFile}");
 
             if (verbose || debugMode) System.Console.WriteLine();
 
@@ -231,8 +229,6 @@ class Test : Command
             // Just log the locations if requested
             if (saveOutputs && saveDir != null)
             {
-                string webDir = Path.Combine(projectPath, "bin", "Debug", "crab", "Web");
-                
                 // Check what files exist and log them
                 string jsSource = Path.Combine(webDir, $"{projectName}.js");
                 string htmlSource = Path.Combine(webDir, $"{projectName}.html");
@@ -268,7 +264,7 @@ class Test : Command
                 else
                     System.Console.WriteLine($"Testing {projectName}...");
                 
-                RunQuickTest(outputFile, new Dictionary<string, string?>(), verbose || debugMode, saveDir);
+                RunQuickTest(wasmFile, new Dictionary<string, string?>(), verbose || debugMode, saveDir);
                 testsPassed = 1;
                 testsTotal = 1;
             }
@@ -279,7 +275,7 @@ class Test : Command
                 else
                     System.Console.WriteLine($"Testing {projectName}...");
                 
-                RunComprehensiveTest(outputFile, projectName, projectPath, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
+                RunComprehensiveTest(wasmFile, projectName, projectPath, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
             }
 
             // Cleanup project unless --save flag is used
@@ -736,9 +732,9 @@ EndGlobal
         var wasmSw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            // Read WAT file from new bin/Debug/crab/Web structure
-            string webDir = Path.Combine(projectPath, "bin", "Debug", "crab", "Web");
-            string watFile = Path.Combine(webDir, "output.wat");
+            // Read WAT file from IR directory (parent of Web)
+            string cratePath = Path.Combine(projectPath, "bin", "Debug", "crab");
+            string watFile = Path.Combine(cratePath, $"{projectName}.wat");
             string watContent;
             
             if (File.Exists(watFile))
@@ -747,8 +743,12 @@ EndGlobal
             }
             else
             {
-                // Fallback to reading outputFile (might be .wat or text content)
-                watContent = File.ReadAllText(outputFile);
+                // Fallback: try to read from WASM binary and skip test
+                System.Console.WriteLine($"⚠️  SKIP (WAT IR file not found)");
+                results.Add(("wasm", "wasm", false, "WAT file not found", 0));
+                testsPassed = passed;
+                testsTotal = total;
+                return;
             }
             
             // Use BadgerCompiler directly for WASM

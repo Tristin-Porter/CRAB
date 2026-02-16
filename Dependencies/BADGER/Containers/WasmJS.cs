@@ -65,6 +65,9 @@ public static class WasmJS
         if (moduleInfo.CodeSection.Count > 0)
             EmitCodeSection(wasm, moduleInfo.CodeSection);
         
+        if (moduleInfo.DataSection.Count > 0)
+            EmitDataSection(wasm, moduleInfo.DataSection);
+        
         return wasm.ToArray();
     }
     
@@ -110,8 +113,12 @@ public static class WasmJS
             WriteString(sectionData, import.Name);
             // Import kind
             sectionData.Add(import.Kind);
-            // Import description (for memory: limits)
-            if (import.Kind == 0x02) // memory
+            // Import description
+            if (import.Kind == 0x00) // function
+            {
+                WriteULEB128(sectionData, import.TypeIndex);
+            }
+            else if (import.Kind == 0x02) // memory
             {
                 sectionData.Add(0x00); // flags (no maximum)
                 WriteULEB128(sectionData, import.MemoryMinPages);
@@ -202,6 +209,30 @@ public static class WasmJS
         wasm.AddRange(sectionData);
     }
     
+    private static void EmitDataSection(List<byte> wasm, List<DataSegment> dataSegments)
+    {
+        var sectionData = new List<byte>();
+        
+        WriteULEB128(sectionData, (uint)dataSegments.Count);
+        foreach (var data in dataSegments)
+        {
+            sectionData.Add(0x00); // memory index (always 0 for MVP)
+            
+            // Offset expression (i32.const)
+            sectionData.Add(0x41); // i32.const opcode
+            EncodeSLEB128(sectionData, (int)data.Offset);
+            sectionData.Add(0x0B); // end opcode
+            
+            // Data bytes
+            WriteULEB128(sectionData, (uint)data.Data.Length);
+            sectionData.AddRange(data.Data);
+        }
+        
+        wasm.Add(11); // data section id
+        WriteULEB128(wasm, (uint)sectionData.Count);
+        wasm.AddRange(sectionData);
+    }
+    
     private static ModuleInfo ParseWatModule(string watText)
     {
         var info = new ModuleInfo();
@@ -229,7 +260,7 @@ public static class WasmJS
         if (moduleStart == -1) return info;
         
         // Parse sections within module
-        int pos = moduleStart + 1;
+        int pos = moduleStart + 2; // Skip ( and module keyword
         while (pos < tokens.Count)
         {
             if (tokens[pos] == ")")
@@ -260,7 +291,7 @@ public static class WasmJS
                 }
                 else
                 {
-                    pos++;
+                    pos = SkipToClosingParen(tokens, pos);
                 }
             }
             else
@@ -364,6 +395,7 @@ public static class WasmJS
     private static int ParseImport(List<string> tokens, int pos, ModuleInfo info)
     {
         // pos points to '(', next is 'import'
+        int startPos = pos;
         pos += 2; // skip ( and import
         
         var import_ = new Import();
@@ -384,26 +416,82 @@ public static class WasmJS
                 if (kind == "func")
                 {
                     import_.Kind = 0x00;
-                    // Skip function signature
-                    pos = SkipToClosingParen(tokens, pos - 1);
+                    
+                    // Register function name if present
+                    if (pos < tokens.Count && tokens[pos].StartsWith("$"))
+                    {
+                        string funcName = tokens[pos++];
+                        info.Symbols.Functions[funcName] = (uint)info.Symbols.Functions.Count;
+                    }
+                    
+                    // Parse function type signature and add to type section
+                    var funcType = new FunctionType();
+                    
+                    while (pos < tokens.Count && tokens[pos] == "(")
+                    {
+                        int paramStart = pos;
+                        pos++;
+                        if (pos < tokens.Count)
+                        {
+                            if (tokens[pos] == "param")
+                            {
+                                pos++;
+                                while (pos < tokens.Count && tokens[pos] != ")")
+                                {
+                                    if (IsValueType(tokens[pos]))
+                                        funcType.Parameters.Add(tokens[pos++]);
+                                    else
+                                        pos++;
+                                }
+                                pos++; // skip )
+                            }
+                            else if (tokens[pos] == "result")
+                            {
+                                pos++;
+                                while (pos < tokens.Count && tokens[pos] != ")")
+                                {
+                                    if (IsValueType(tokens[pos]))
+                                        funcType.Results.Add(tokens[pos++]);
+                                    else
+                                        pos++;
+                                }
+                                pos++; // skip )
+                            }
+                            else
+                            {
+                                // Not param/result, back up
+                                pos = paramStart;
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // Add function type to type section if it has a signature
+                    if (funcType.Parameters.Count > 0 || funcType.Results.Count > 0)
+                    {
+                        import_.TypeIndex = (uint)info.TypeSection.Count;
+                        info.TypeSection.Add(funcType);
+                    }
                 }
                 else if (kind == "memory")
                 {
                     import_.Kind = 0x02;
                     if (pos < tokens.Count && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
                         import_.MemoryMinPages = uint.Parse(tokens[pos++]);
-                    pos = SkipToClosingParen(tokens, pos - 1);
                 }
             }
         }
         
         info.ImportSection.Add(import_);
-        return SkipToClosingParen(tokens, pos - 1);
+        
+        // Skip to the closing paren of the entire import
+        return SkipToClosingParen(tokens, startPos);
     }
     
     private static int ParseMemory(List<string> tokens, int pos, ModuleInfo info)
     {
         // pos points to '(', next is 'memory'
+        int startPos = pos;
         pos += 2; // skip ( and memory
         
         var memory = new Memory();
@@ -414,21 +502,30 @@ public static class WasmJS
             memory.MaxPages = uint.Parse(tokens[pos++]);
         
         info.MemorySection.Add(memory);
-        return SkipToClosingParen(tokens, pos - 1);
+        return SkipToClosingParen(tokens, startPos);
     }
     
     private static int ParseFunction(List<string> tokens, int pos, ModuleInfo info)
     {
-        // pos points to '(', next is 'func'  
+        // pos points to '(', next is 'func'
+        int startPos = pos;
         pos += 2; // skip ( and func
         
         var funcType = new FunctionType();
         var funcCode = new FunctionCode();
         var instructions = new List<byte>();
         
-        // Skip function name if present
+        // Clear local symbol table for this function
+        info.Symbols.ClearLocals();
+        uint localIndex = 0;
+        
+        // Skip/register function name if present
         if (pos < tokens.Count && tokens[pos].StartsWith("$"))
-            pos++;
+        {
+            string funcName = tokens[pos++];
+            uint funcIndex = (uint)(info.Symbols.Functions.Count + info.FunctionSection.Count);
+            info.Symbols.Functions[funcName] = funcIndex;
+        }
         
         // Parse parameters and results
         while (pos < tokens.Count && tokens[pos] == "(")
@@ -442,7 +539,10 @@ public static class WasmJS
                 while (pos < tokens.Count && tokens[pos] != ")")
                 {
                     if (tokens[pos].StartsWith("$"))
-                        pos++; // skip param name
+                    {
+                        string paramName = tokens[pos++];
+                        info.Symbols.Locals[paramName] = localIndex++;
+                    }
                     if (pos < tokens.Count && IsValueType(tokens[pos]))
                         funcType.Parameters.Add(tokens[pos++]);
                 }
@@ -464,7 +564,10 @@ public static class WasmJS
                 while (pos < tokens.Count && tokens[pos] != ")")
                 {
                     if (tokens[pos].StartsWith("$"))
-                        pos++; // skip local name
+                    {
+                        string localName = tokens[pos++];
+                        info.Symbols.Locals[localName] = localIndex++;
+                    }
                     if (pos < tokens.Count && IsValueType(tokens[pos]))
                         funcCode.Locals.Add(tokens[pos++]);
                 }
@@ -488,7 +591,7 @@ public static class WasmJS
             else
             {
                 var instr = tokens[pos++];
-                EncodeInstruction(instr, tokens, ref pos, instructions);
+                EncodeInstruction(instr, tokens, ref pos, instructions, info.Symbols);
             }
         }
         
@@ -499,12 +602,13 @@ public static class WasmJS
         info.FunctionSection.Add((uint)(info.TypeSection.Count - 1));
         info.CodeSection.Add(funcCode);
         
-        return SkipToClosingParen(tokens, pos);
+        return SkipToClosingParen(tokens, startPos);
     }
     
     private static int ParseExport(List<string> tokens, int pos, ModuleInfo info)
     {
         // pos points to '(', next is 'export'
+        int startPos = pos;
         pos += 2; // skip ( and export
         
         var export_ = new Export();
@@ -523,9 +627,11 @@ public static class WasmJS
                     export_.Kind = 0x00;
                     if (pos < tokens.Count && tokens[pos].StartsWith("$"))
                     {
-                        // Function reference - use index from function list
-                        export_.Index = (uint)(info.FunctionSection.Count > 0 ? info.FunctionSection.Count - 1 : 0);
-                        pos++;
+                        // Function reference - resolve from symbol table
+                        string funcName = tokens[pos++];
+                        export_.Index = info.Symbols.Functions.ContainsKey(funcName) 
+                            ? info.Symbols.Functions[funcName]
+                            : (uint)(info.FunctionSection.Count > 0 ? info.FunctionSection.Count - 1 : 0);
                     }
                     else if (pos < tokens.Count && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
                     {
@@ -536,14 +642,49 @@ public static class WasmJS
         }
         
         info.ExportSection.Add(export_);
-        return SkipToClosingParen(tokens, pos - 1);
+        return SkipToClosingParen(tokens, startPos);
     }
     
     private static int ParseData(List<string> tokens, int pos, ModuleInfo info)
     {
         // (data (i32.const offset) "string")
-        // Skip for now - data section not fully implemented
-        return SkipToClosingParen(tokens, pos);
+        int startPos = pos;
+        pos += 2; // skip ( and data
+        
+        var dataSegment = new DataSegment();
+        
+        // Parse offset expression
+        if (pos < tokens.Count && tokens[pos] == "(")
+        {
+            pos++; // skip (
+            if (pos < tokens.Count && tokens[pos] == "i32.const")
+            {
+                pos++; // skip i32.const
+                if (pos < tokens.Count && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
+                {
+                    dataSegment.Offset = uint.Parse(tokens[pos++]);
+                }
+                pos++; // skip )
+            }
+        }
+        
+        // Parse data string
+        if (pos < tokens.Count && tokens[pos].StartsWith("\""))
+        {
+            string dataStr = tokens[pos++].Trim('"');
+            // Handle escape sequences
+            dataStr = dataStr.Replace("\\00", "\0")
+                            .Replace("\\n", "\n")
+                            .Replace("\\r", "\r")
+                            .Replace("\\t", "\t")
+                            .Replace("\\\"", "\"")
+                            .Replace("\\\\", "\\");
+            dataSegment.Data = Encoding.UTF8.GetBytes(dataStr);
+        }
+        
+        info.DataSection.Add(dataSegment);
+        
+        return SkipToClosingParen(tokens, startPos);
     }
     
     private static bool IsValueType(string token)
@@ -553,23 +694,29 @@ public static class WasmJS
     
     private static int SkipToClosingParen(List<string> tokens, int pos)
     {
-        int depth = 0;
+        // pos should point to the opening '('
+        if (pos >= tokens.Count || tokens[pos] != "(")
+            return pos;
+            
+        int depth = 1; // We're starting inside the paren
+        pos++; // Move past the opening paren
+        
         while (pos < tokens.Count)
         {
             if (tokens[pos] == "(")
                 depth++;
             else if (tokens[pos] == ")")
             {
-                if (depth == 0)
-                    return pos + 1;
                 depth--;
+                if (depth == 0)
+                    return pos + 1; // Return position after the closing paren
             }
             pos++;
         }
         return pos;
     }
     
-    private static void EncodeInstruction(string instr, List<string> tokens, ref int pos, List<byte> output)
+    private static void EncodeInstruction(string instr, List<string> tokens, ref int pos, List<byte> output, SymbolTable symbols)
     {
         // Encode WAT instructions to WASM binary opcodes
         switch (instr)
@@ -597,8 +744,9 @@ public static class WasmJS
                 {
                     if (tokens[pos].StartsWith("$"))
                     {
-                        pos++; // Skip symbolic reference for now (TODO: implement symbol table)
-                        output.Add(0); // Placeholder - should resolve to actual index
+                        string localName = tokens[pos++];
+                        uint idx = symbols.Locals.ContainsKey(localName) ? symbols.Locals[localName] : 0;
+                        WriteULEB128ToList(output, idx);
                     }
                     else
                     {
@@ -613,8 +761,9 @@ public static class WasmJS
                 {
                     if (tokens[pos].StartsWith("$"))
                     {
-                        pos++; // Skip symbolic reference for now (TODO: implement symbol table)
-                        output.Add(0); // Placeholder - should resolve to actual index
+                        string localName = tokens[pos++];
+                        uint idx = symbols.Locals.ContainsKey(localName) ? symbols.Locals[localName] : 0;
+                        WriteULEB128ToList(output, idx);
                     }
                     else
                     {
@@ -629,8 +778,9 @@ public static class WasmJS
                 {
                     if (tokens[pos].StartsWith("$"))
                     {
-                        pos++; // Skip symbolic reference for now (TODO: implement symbol table)
-                        output.Add(0); // Placeholder - should resolve to actual index
+                        string funcName = tokens[pos++];
+                        uint idx = symbols.Functions.ContainsKey(funcName) ? symbols.Functions[funcName] : 0;
+                        WriteULEB128ToList(output, idx);
                     }
                     else
                     {
@@ -846,6 +996,8 @@ public static class WasmJS
         public List<Memory> MemorySection { get; } = new();
         public List<Export> ExportSection { get; } = new();
         public List<FunctionCode> CodeSection { get; } = new();
+        public List<DataSegment> DataSection { get; } = new();
+        public SymbolTable Symbols { get; } = new();
     }
     
     private class FunctionType
@@ -860,6 +1012,7 @@ public static class WasmJS
         public string Name { get; set; } = "";
         public byte Kind { get; set; } // 0x00=func, 0x01=table, 0x02=mem, 0x03=global
         public uint MemoryMinPages { get; set; }
+        public uint TypeIndex { get; set; }
     }
     
     private class Memory
@@ -879,5 +1032,30 @@ public static class WasmJS
     {
         public List<string> Locals { get; set; } = new();
         public List<byte> Instructions { get; set; } = new();
+    }
+    
+    private class DataSegment
+    {
+        public uint Offset { get; set; }
+        public byte[] Data { get; set; } = Array.Empty<byte>();
+    }
+    
+    private class SymbolTable
+    {
+        public Dictionary<string, uint> Functions { get; } = new();
+        public Dictionary<string, uint> Locals { get; } = new();
+        public Dictionary<string, uint> Globals { get; } = new();
+        
+        public void Clear()
+        {
+            Functions.Clear();
+            Locals.Clear();
+            Globals.Clear();
+        }
+        
+        public void ClearLocals()
+        {
+            Locals.Clear();
+        }
     }
 }
