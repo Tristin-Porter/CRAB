@@ -822,6 +822,9 @@ public class WASM : MapSet
   
   ;; Generated members
 {items}
+  
+  ;; Exports
+  (export ""main"" (func $Main))
 )";
     
     /// <summary>Namespace member declarations</summary>
@@ -903,33 +906,26 @@ public class WASM : MapSet
     
     /// <summary>
     /// Method declaration - primary compilation target.
-    /// WORKAROUND for CDTk field-shifting bug.
+    /// ACTUAL field-shifting bug behavior (COMPLEX - differs by params):
     /// 
-    /// Field assignments due to CDTk bug:
-    /// - NO params: attrs=Type, mods=Identifier, returnType=MethodBody, name=empty
-    /// - WITH params: attrs=Type, mods=Identifier, returnType=FormalParameterList, name=MethodBody
+    /// NO params case (e.g., "static int Main()"):
+    /// - attrs = Modifiers ("static")
+    /// - mods = Type ("int" → "i32")
+    /// - returnType = Identifier ("Main")
+    /// - name = MethodBody (block)
     /// 
-    /// We put returnType (params or body) before result, then name (body or empty) after.
-    /// This works because:
-    /// - NO params: body comes first (wrong but at least renders), result after, empty name
-    /// - WITH params: params first (correct!), result after, body last (correct!)
+    /// WITH params case (e.g., "int Add(int x, int y)"):
+    /// - attrs = Type ("int" → "i32") 
+    /// - mods = Identifier ("Add")
+    /// - returnType = FormalParameterList (params)
+    /// - name = MethodBody (block)
     /// 
-    /// TODO: Fix CDTk parser to assign fields by pattern labels, not Returns() order
-    /// 
-    /// Additional context for OOP implementation:
-    /// For virtual methods, a vtable dispatch mechanism should be added by semantic analysis.
-    /// For interface methods, interface dispatch tables should be generated.
-    /// Once CDTk parser is fixed, the proper structure should be:
-    ///   (func ${name}
-    ///     (param {parameters})
-    ///     (result {returnType})
-    ///   {body}
-    ///   )
+    /// Workaround: Use both {mods} and {returnType} - one will be name, other will be type/params.
     /// </summary>
     public Map MethodDeclaration = @"(func ${mods}
-{returnType}
+  {returnType}
   (result {attrs})
-{name}
+  {name}
 )";
     
     /// <summary>Field declaration - TODO: properly handle multiple declarators</summary>
