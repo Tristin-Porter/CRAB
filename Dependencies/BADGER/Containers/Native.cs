@@ -16,14 +16,12 @@ public static class Native
     public static byte[] Emit(byte[] machineCode)
     {
         // Detect platform and emit appropriate format
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        if (IsWindowsPlatform())
         {
             // Windows: use PE format
             return PE.Emit(machineCode);
         }
-        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || 
-                 RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ||
-                 RuntimeInformation.IsOSPlatform(OSPlatform.FreeBSD))
+        else if (IsUnixLikePlatform())
         {
             // Unix-like: use ELF format
             return ELF.Emit(machineCode);
@@ -33,5 +31,17 @@ public static class Native
             // Fallback: raw machine code for unknown platforms
             return machineCode;
         }
+    }
+    
+    private static bool IsWindowsPlatform()
+    {
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
+    }
+    
+    private static bool IsUnixLikePlatform()
+    {
+        return RuntimeInformation.IsOSPlatform(OSPlatform.Linux) || 
+               RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ||
+               RuntimeInformation.IsOSPlatform(OSPlatform.FreeBSD);
     }
 }

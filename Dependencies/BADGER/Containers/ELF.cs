@@ -12,6 +12,11 @@ namespace Badger.Containers;
 /// </summary>
 public static class ELF
 {
+    // ELF constants
+    private const int ELF_HEADER_SIZE = 64;
+    private const int PROGRAM_HEADER_SIZE = 56;
+    private const ulong DEFAULT_LOAD_ADDRESS = 0x400000;  // Standard Linux load address
+    
     public static byte[] Emit(byte[] machineCode)
     {
         var elf = new List<byte>();
@@ -30,7 +35,7 @@ public static class ELF
     
     private static byte[] CreateELFHeader(int codeSize)
     {
-        var header = new byte[64];
+        var header = new byte[ELF_HEADER_SIZE];
         
         // ELF magic number
         header[0] = 0x7F; // DEL
@@ -67,11 +72,10 @@ public static class ELF
         WriteUInt32(header, 20, 0x01);
         
         // Entry point (virtual address where execution starts)
-        // Base address + ELF header + Program header
-        WriteUInt64(header, 24, 0x400000 + 64 + 56);
+        WriteUInt64(header, 24, DEFAULT_LOAD_ADDRESS + ELF_HEADER_SIZE + PROGRAM_HEADER_SIZE);
         
         // Program header offset (starts right after ELF header)
-        WriteUInt64(header, 32, 64);
+        WriteUInt64(header, 32, ELF_HEADER_SIZE);
         
         // Section header offset (0 = no section headers)
         WriteUInt64(header, 40, 0);
@@ -79,11 +83,11 @@ public static class ELF
         // Flags (0)
         WriteUInt32(header, 48, 0);
         
-        // ELF header size (64 bytes)
-        WriteUInt16(header, 52, 64);
+        // ELF header size
+        WriteUInt16(header, 52, ELF_HEADER_SIZE);
         
-        // Program header entry size (56 bytes for ELF64)
-        WriteUInt16(header, 54, 56);
+        // Program header entry size
+        WriteUInt16(header, 54, PROGRAM_HEADER_SIZE);
         
         // Number of program headers (1)
         WriteUInt16(header, 56, 1);
@@ -102,7 +106,7 @@ public static class ELF
     
     private static byte[] CreateProgramHeader(int codeSize)
     {
-        var header = new byte[56];
+        var header = new byte[PROGRAM_HEADER_SIZE];
         
         // Type (1 = PT_LOAD, loadable segment)
         WriteUInt32(header, 0, 0x01);
@@ -113,14 +117,14 @@ public static class ELF
         // Offset in file (0, starts at beginning)
         WriteUInt64(header, 8, 0);
         
-        // Virtual address (0x400000 = standard Linux load address)
-        WriteUInt64(header, 16, 0x400000);
+        // Virtual address
+        WriteUInt64(header, 16, DEFAULT_LOAD_ADDRESS);
         
         // Physical address (same as virtual)
-        WriteUInt64(header, 24, 0x400000);
+        WriteUInt64(header, 24, DEFAULT_LOAD_ADDRESS);
         
         // Size in file (ELF header + Program header + code)
-        int fileSize = 64 + 56 + codeSize;
+        int fileSize = ELF_HEADER_SIZE + PROGRAM_HEADER_SIZE + codeSize;
         WriteUInt64(header, 32, (ulong)fileSize);
         
         // Size in memory (same as file size)

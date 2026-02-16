@@ -73,8 +73,9 @@ CRAB supports two executable formats:
 
 | Format | Platform | Description |
 |--------|----------|-------------|
-| **native** | Linux/Unix | ELF executable format |
-| **pe** | Windows | Portable Executable format |
+| **native** | Auto-detect | Auto-detects platform: ELF on Linux/Unix/macOS, PE on Windows |
+| **pe** | Windows | Portable Executable format (Windows .exe files) |
+| **elf** | Linux/Unix | ELF executable format (Linux/Unix binaries) |
 
 ### Automatic Format Detection
 
