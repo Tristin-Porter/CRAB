@@ -390,7 +390,7 @@ public static class WasmJS
                 else if (kind == "memory")
                 {
                     import_.Kind = 0x02;
-                    if (pos < tokens.Count && char.IsDigit(tokens[pos][0]))
+                    if (pos < tokens.Count && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
                         import_.MemoryMinPages = uint.Parse(tokens[pos++]);
                     pos = SkipToClosingParen(tokens, pos - 1);
                 }
@@ -407,10 +407,10 @@ public static class WasmJS
         pos += 2; // skip ( and memory
         
         var memory = new Memory();
-        if (pos < tokens.Count && char.IsDigit(tokens[pos][0]))
+        if (pos < tokens.Count && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
             memory.MinPages = uint.Parse(tokens[pos++]);
         
-        if (pos < tokens.Count && tokens[pos] != ")" && char.IsDigit(tokens[pos][0]))
+        if (pos < tokens.Count && tokens[pos] != ")" && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
             memory.MaxPages = uint.Parse(tokens[pos++]);
         
         info.MemorySection.Add(memory);
@@ -527,7 +527,7 @@ public static class WasmJS
                         export_.Index = (uint)(info.FunctionSection.Count > 0 ? info.FunctionSection.Count - 1 : 0);
                         pos++;
                     }
-                    else if (pos < tokens.Count && char.IsDigit(tokens[pos][0]))
+                    else if (pos < tokens.Count && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
                     {
                         export_.Index = uint.Parse(tokens[pos++]);
                     }
@@ -595,24 +595,48 @@ public static class WasmJS
                 output.Add(0x20);
                 if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
                 {
-                    uint idx = tokens[pos].StartsWith("$") ? 0 : uint.Parse(tokens[pos++]);
-                    WriteULEB128ToList(output, idx);
+                    if (tokens[pos].StartsWith("$"))
+                    {
+                        pos++; // Skip symbolic reference for now (TODO: implement symbol table)
+                        output.Add(0); // Placeholder - should resolve to actual index
+                    }
+                    else
+                    {
+                        uint idx = uint.Parse(tokens[pos++]);
+                        WriteULEB128ToList(output, idx);
+                    }
                 }
                 break;
             case "local.set":
                 output.Add(0x21);
                 if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
                 {
-                    uint idx = tokens[pos].StartsWith("$") ? 0 : uint.Parse(tokens[pos++]);
-                    WriteULEB128ToList(output, idx);
+                    if (tokens[pos].StartsWith("$"))
+                    {
+                        pos++; // Skip symbolic reference for now (TODO: implement symbol table)
+                        output.Add(0); // Placeholder - should resolve to actual index
+                    }
+                    else
+                    {
+                        uint idx = uint.Parse(tokens[pos++]);
+                        WriteULEB128ToList(output, idx);
+                    }
                 }
                 break;
             case "call":
                 output.Add(0x10);
                 if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
                 {
-                    uint idx = tokens[pos].StartsWith("$") ? 0 : uint.Parse(tokens[pos++]);
-                    WriteULEB128ToList(output, idx);
+                    if (tokens[pos].StartsWith("$"))
+                    {
+                        pos++; // Skip symbolic reference for now (TODO: implement symbol table)
+                        output.Add(0); // Placeholder - should resolve to actual index
+                    }
+                    else
+                    {
+                        uint idx = uint.Parse(tokens[pos++]);
+                        WriteULEB128ToList(output, idx);
+                    }
                 }
                 break;
             case "return":
