@@ -325,20 +325,20 @@ class Test : Command
         }
     }
 
-    private (string csharp, string sln, string slnx) ParseTestFile(string testFilePath)
+    private (string? csharp, string? sln, string? slnx) ParseTestFile(string testFilePath)
     {
         try
         {
             string content = File.ReadAllText(testFilePath);
             
             // Extract C# code
-            string csharpCode = ExtractSection(content, "BEGIN CSHARP", "END CSHARP");
+            string? csharpCode = ExtractSection(content, "BEGIN CSHARP", "END CSHARP");
             
             // Extract .sln content
-            string slnContent = ExtractSection(content, "BEGIN SLN", "END SLN");
+            string? slnContent = ExtractSection(content, "BEGIN SLN", "END SLN");
             
             // Extract .slnx content
-            string slnxContent = ExtractSection(content, "BEGIN SLNX", "END SLNX");
+            string? slnxContent = ExtractSection(content, "BEGIN SLNX", "END SLNX");
             
             return (csharpCode, slnContent, slnxContent);
         }
@@ -349,7 +349,7 @@ class Test : Command
         }
     }
     
-    private string ExtractSection(string content, string beginMarker, string endMarker)
+    private string? ExtractSection(string content, string beginMarker, string endMarker)
     {
         string beginTag = $"// === {beginMarker} ===";
         string endTag = $"// === {endMarker} ===";
@@ -395,9 +395,9 @@ class Test : Command
             
             string testFilePath = Path.Combine(testsDir, $"{projectName}.cs");
             
-            string csharpCode = null;
-            string slnContent = null;
-            string slnxContent = null;
+            string? csharpCode = null;
+            string? slnContent = null;
+            string? slnxContent = null;
             
             // Try to read from test file if it exists
             if (File.Exists(testFilePath))
