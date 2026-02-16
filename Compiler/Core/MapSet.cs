@@ -835,7 +835,10 @@ public class WASM : MapSet
 {body}";
     
     /// <summary>Namespace body</summary>
-    public Map NamespaceBody = "{members}";
+    public Map NamespaceBody = "{items}";
+    
+    /// <summary>Namespace body item</summary>
+    public Map NamespaceBodyItem = "{item}";
     
     // ============================================================
     // TYPE DECLARATIONS
@@ -863,14 +866,13 @@ public class WASM : MapSet
     /// This will be fixed when CDTk parser is updated.
     /// </summary>
     public Map ClassDeclaration = @";; class {mods}
-(type ${mods} (struct
-{name}
-))";
+{name}";
     
     /// <summary>
     /// Class body - generates class members.
     /// Due to CDTk parser bug with field shifting, this Map is referenced via {name} in ClassDeclaration.
     /// Returns the members field from the ClassBody AST node.
+    /// For WASM MVP, we skip the class wrapper and just emit methods at module level.
     /// </summary>
     public Map ClassBody = "{members}";
     
@@ -1457,7 +1459,7 @@ public class WASM : MapSet
     public Map IdentifierName = "(local.get ${name})";
     
     /// <summary>Qualified name (namespace.type)</summary>
-    public Map QualifiedName = "{name}";
+    public Map QualifiedName = "{segments}";
     
     // ============================================================
     // MODIFIERS AND ATTRIBUTES
@@ -2459,13 +2461,10 @@ public class WASM : MapSet
     public Map NameSegmentRest = "{rest}";
     
     /// <summary>Name segments</summary>
-    public Map NameSegments = "{segments}";
+    public Map NameSegments = "{first}{rest}";
     
     /// <summary>Compilation unit item (using, namespace, type)</summary>
     public Map CompilationUnitItem = "{item}";
-    
-    /// <summary>Namespace body item</summary>
-    public Map NamespaceBodyItem = "{item}";
     
     /// <summary>File-scoped namespace declaration (C# 10+)</summary>
     public Map FileScopedNamespaceDeclaration = @";; namespace {name};
@@ -2478,13 +2477,13 @@ public class WASM : MapSet
     public Map ExternAliasDirective = ";; extern alias {name};";
     
     /// <summary>Using directive</summary>
-    public Map UsingDirective = ";; using {name};";
+    public Map UsingDirective = ";; {directive}";
     
     /// <summary>Using namespace directive</summary>
-    public Map UsingNamespaceDirective = ";; using {namespace};";
+    public Map UsingNamespaceDirective = "using ;";
     
     /// <summary>Using alias directive</summary>
-    public Map UsingAliasDirective = ";; using {alias} = {target};";
+    public Map UsingAliasDirective = "using ;";
     
     /// <summary>Using static directive</summary>
     public Map UsingStaticDirective = ";; using static {type};";
