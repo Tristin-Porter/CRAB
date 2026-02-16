@@ -251,8 +251,9 @@ class Test : Command
                 LogInfo($"Saved WASM/WAT output to {watDest}");
                 
                 // Also copy JS and HTML files if they exist with project name
-                string jsSource = Path.Combine(binDir, "output.js");
-                string htmlSource = Path.Combine(binDir, "index.html");
+                string jsSource = Path.Combine(binDir, $"{projectName}.js");
+                string htmlSource = Path.Combine(binDir, $"{projectName}.html");
+                string wasmSource = Path.Combine(binDir, $"{projectName}.wasm");
                 
                 if (File.Exists(jsSource))
                 {
@@ -272,6 +273,16 @@ class Test : Command
                     
                     if (verbose || debugMode)
                         System.Console.WriteLine($"Saved {projectName}.html to {wasmSaveDir}");
+                }
+                
+                if (File.Exists(wasmSource))
+                {
+                    string wasmDest = Path.Combine(wasmSaveDir, $"{projectName}.wasm");
+                    File.Copy(wasmSource, wasmDest, overwrite: true);
+                    LogInfo($"Saved WASM binary to {wasmDest}");
+                    
+                    if (verbose || debugMode)
+                        System.Console.WriteLine($"Saved {projectName}.wasm to {wasmSaveDir}");
                 }
                 
                 // Final summary log after all files are copied
