@@ -833,67 +833,11 @@ public class WASM : MapSet
     /// <summary>Single namespace member</summary>
     public Map NamespaceMemberDeclaration = "{member}";
     
-    /// <summary>Namespace declaration - use typed map to properly handle body items</summary>
+    /// <summary>Namespace declaration - this is now processed inline from CompilationUnitItem, so this shouldn't be called</summary>
     public Map<AstNode, string> NamespaceDeclaration = TypedMap.For<string>()
         .Emit(node => {
-            if (node == null)
-            {
-                System.Console.WriteLine("DEBUG: NamespaceDeclaration node is null");
-                return "";
-            }
-            
-            System.Console.WriteLine($"DEBUG: NamespaceDeclaration fields: {string.Join(", ", node.Fields.Keys)}");
-            
-            // Get the body field
-            if (!node.Fields.ContainsKey("body"))
-            {
-                System.Console.WriteLine("DEBUG: No body field");
-                return "";
-            }
-            var body = node.Fields["body"];
-            if (!(body is AstNode bodyNode))
-            {
-                System.Console.WriteLine($"DEBUG: body is not AstNode, it's {body?.GetType().Name}");
-                return "";
-            }
-            
-            System.Console.WriteLine($"DEBUG: NamespaceBody fields: {string.Join(", ", bodyNode.Fields.Keys)}");
-            
-            // NamespaceBody has items field
-            if (!bodyNode.Fields.ContainsKey("items"))
-            {
-                System.Console.WriteLine("DEBUG: NamespaceBody has no items field");
-                return "";
-            }
-            var items = bodyNode.Fields["items"];
-            
-            System.Console.WriteLine($"DEBUG: items type: {items?.GetType().Name}, value: {items}");
-            
-            var results = new List<string>();
-            
-            // Process list of NamespaceBodyItem
-            if (items is List<AstNode> itemList)
-            {
-                System.Console.WriteLine($"DEBUG: items is a list with {itemList.Count} items");
-                foreach (var bodyItem in itemList)
-                {
-                    System.Console.WriteLine($"DEBUG: Processing item type: {bodyItem.Type}");
-                    // NamespaceBodyItem has item field
-                    if (bodyItem.Fields.ContainsKey("item") && bodyItem.Fields["item"] is AstNode item)
-                    {
-                        // Process based on item type
-                        string itemOutput = ProcessNamespaceItem(item);
-                        if (!string.IsNullOrWhiteSpace(itemOutput))
-                            results.Add(itemOutput);
-                    }
-                }
-            }
-            else
-            {
-                System.Console.WriteLine($"DEBUG: items is not a list");
-            }
-            
-            return string.Join("\n", results);
+            // This should not be called anymore since we process it inline
+            return ProcessNamespaceDeclarationInline(node);
         });
     
     /// <summary>
@@ -923,6 +867,14 @@ public class WASM : MapSet
     /// </summary>
     private static string ProcessTypeDeclaration(AstNode typeNode)
     {
+        // TypeDeclaration is a wrapper - unwrap it
+        if (typeNode.Type == "TypeDeclaration" && typeNode.Fields.ContainsKey("type"))
+        {
+            var actualType = typeNode.Fields["type"];
+            if (actualType is AstNode actualTypeNode)
+                return ProcessTypeDeclaration(actualTypeNode);
+        }
+        
         if (typeNode.Type == "ClassDeclaration")
         {
             // Extract class name (in mods field due to field shifting)
@@ -939,29 +891,46 @@ public class WASM : MapSet
             // Get class body (in name field due to field shifting)
             if (typeNode.Fields.ContainsKey("name") && typeNode.Fields["name"] is AstNode bodyNode)
             {
+                System.Console.WriteLine($"DEBUG: ClassBody type={bodyNode.Type}, fields={string.Join(", ", bodyNode.Fields.Keys)}");
+                
                 // ClassBody has members field
                 if (bodyNode.Fields.ContainsKey("members") && bodyNode.Fields["members"] is AstNode membersNode)
                 {
-                    // ClassMemberDeclarations has members field (list)
+                    System.Console.WriteLine($"DEBUG: ClassMemberDeclarations type={membersNode.Type}, fields={string.Join(", ", membersNode.Fields.Keys)}");
+                    
+                    // ClassMemberDeclarations has members field (linked list or single node)
                     if (membersNode.Fields.ContainsKey("members"))
                     {
                         var members = membersNode.Fields["members"];
+                        System.Console.WriteLine($"DEBUG: members type={members?.GetType().Name}");
+                        
                         if (members is List<AstNode> memberList)
                         {
+                            System.Console.WriteLine($"DEBUG: members list has {memberList.Count} items");
+                            
                             foreach (var memberDecl in memberList)
                             {
-                                // ClassMemberDeclaration has member field
-                                if (memberDecl.Fields.ContainsKey("member") && memberDecl.Fields["member"] is AstNode actualMember)
+                                ProcessClassMemberDeclaration(memberDecl, output);
+                            }
+                        }
+                        else if (members is AstNode memberNode)
+                        {
+                            System.Console.WriteLine($"DEBUG: members is single AstNode, will iterate");
+                            
+                            // Iterate through linked list of members
+                            var current = memberNode;
+                            while (current != null)
+                            {
+                                ProcessClassMemberDeclaration(current, output);
+                                
+                                // Check for next member in the chain
+                                if (current.Fields.ContainsKey("next") && current.Fields["next"] is AstNode next)
                                 {
-                                    // For MethodDeclaration, we need to inline the processing
-                                    // This is a limitation - we can't call the MethodDeclaration typed Map from here
-                                    // So we'll duplicate the logic
-                                    if (actualMember.Type == "MethodDeclaration")
-                                    {
-                                        var methodOutput = EmitMethodDeclarationInline(actualMember);
-                                        if (!string.IsNullOrWhiteSpace(methodOutput))
-                                            output.Append(methodOutput);
-                                    }
+                                    current = next;
+                                }
+                                else
+                                {
+                                    break;
                                 }
                             }
                         }
@@ -973,6 +942,30 @@ public class WASM : MapSet
         }
         
         return "";
+    }
+    
+    /// <summary>
+    /// Process a single class member declaration.
+    /// </summary>
+    private static void ProcessClassMemberDeclaration(AstNode memberDecl, System.Text.StringBuilder output)
+    {
+        System.Console.WriteLine($"DEBUG: memberDecl type={memberDecl.Type}, fields={string.Join(", ", memberDecl.Fields.Keys)}");
+        
+        // ClassMemberDeclaration has member field
+        if (memberDecl.Fields.ContainsKey("member") && memberDecl.Fields["member"] is AstNode actualMember)
+        {
+            System.Console.WriteLine($"DEBUG: actualMember type={actualMember.Type}");
+            
+            // For MethodDeclaration, we need to inline the processing
+            if (actualMember.Type == "MethodDeclaration")
+            {
+                System.Console.WriteLine($"DEBUG: Calling EmitMethodDeclarationInline");
+                var methodOutput = EmitMethodDeclarationInline(actualMember);
+                System.Console.WriteLine($"DEBUG: methodOutput length={methodOutput?.Length}");
+                if (!string.IsNullOrWhiteSpace(methodOutput))
+                    output.Append(methodOutput);
+            }
+        }
     }
     
     /// <summary>
@@ -2843,22 +2836,148 @@ public class WASM : MapSet
     /// <summary>Name segments</summary>
     public Map NameSegments = "{first}{rest}";
     
-    /// <summary>Compilation unit item (using, namespace, type)</summary>
+    /// <summary>Compilation unit item (using, namespace, type) - manually process since typed Maps can't return placeholders</summary>
     public Map<AstNode, string> CompilationUnitItem = TypedMap.For<string>()
         .Emit(node => {
             if (node == null) return "";
             
             System.Console.WriteLine($"DEBUG CompilationUnitItem: type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
             
-            if (node.Fields.ContainsKey("item") && node.Fields["item"] is AstNode item)
+            if (!node.Fields.ContainsKey("item")) return "";
+            var item = node.Fields["item"];
+            if (!(item is AstNode itemNode)) return "";
+            
+            System.Console.WriteLine($"DEBUG CompilationUnitItem.item: type={itemNode.Type}");
+            
+            // Process based on item type
+            if (itemNode.Type.Contains("Using"))
+                return ";; using ;";
+            
+            if (itemNode.Type == "NamespaceMemberDeclaration")
             {
-                System.Console.WriteLine($"DEBUG CompilationUnitItem.item: type={item.Type}");
-                // Let CDTk handle it - return the placeholder
-                // Actually, we can't call Transform from here, so just return empty and let normal processing handle it
+                // Unwrap to get the actual member
+                if (itemNode.Fields.ContainsKey("member") && itemNode.Fields["member"] is AstNode member)
+                {
+                    System.Console.WriteLine($"DEBUG NamespaceMemberDeclaration.member: type={member.Type}");
+                    
+                    // Could be NamespaceDeclaration or TypeDeclaration
+                    if (member.Type == "NamespaceDeclaration")
+                    {
+                        System.Console.WriteLine($"DEBUG Processing NamespaceDeclaration");
+                        return ProcessNamespaceDeclarationInline(member);
+                    }
+                    else
+                    {
+                        System.Console.WriteLine($"DEBUG Processing TypeDeclaration: {member.Type}");
+                        return ProcessTypeDeclaration(member);
+                    }
+                }
+                else
+                {
+                    System.Console.WriteLine($"DEBUG NamespaceMemberDeclaration has no member field or it's not AstNode");
+                }
             }
             
-            return "{item}";  // Let CDTk process this
+            System.Console.WriteLine($"DEBUG Returning empty for item type {itemNode.Type}");
+            return "";
         });
+    
+    /// <summary>
+    /// Process a NamespaceDeclaration inline.
+    /// </summary>
+    private static string ProcessNamespaceDeclarationInline(AstNode nsNode)
+    {
+        System.Console.WriteLine($"DEBUG ProcessNamespaceDeclarationInline: fields={string.Join(", ", nsNode.Fields.Keys)}");
+        
+        // Check all fields
+        foreach (var kvp in nsNode.Fields)
+        {
+            var value = kvp.Value;
+            System.Console.WriteLine($"DEBUG field {kvp.Key}: type={value?.GetType().Name}, AstNode type={(value as AstNode)?.Type}");
+        }
+        
+        // Find the NamespaceBody in any field
+        AstNode? bodyNode = null;
+        foreach (var kvp in nsNode.Fields)
+        {
+            if (kvp.Value is AstNode astNode && astNode.Type == "NamespaceBody")
+            {
+                System.Console.WriteLine($"DEBUG Found NamespaceBody in field: {kvp.Key}");
+                bodyNode = astNode;
+                break;
+            }
+        }
+        
+        if (bodyNode == null)
+        {
+            System.Console.WriteLine($"DEBUG No NamespaceBody found in any field");
+            return "";
+        }
+        
+        System.Console.WriteLine($"DEBUG NamespaceBody: type={bodyNode.Type}, fields={string.Join(", ", bodyNode.Fields.Keys)}");
+        
+        // NamespaceBody has items field
+        if (!bodyNode.Fields.ContainsKey("items"))
+        {
+            System.Console.WriteLine($"DEBUG NamespaceBody: no items field");
+            return "";
+        }
+        
+        var items = bodyNode.Fields["items"];
+        System.Console.WriteLine($"DEBUG NamespaceBody.items: type={items?.GetType().Name}");
+        
+        var results = new List<string>();
+        
+        // Process list of NamespaceBodyItem
+        if (items is List<AstNode> itemList)
+        {
+            System.Console.WriteLine($"DEBUG NamespaceBody.items is list with {itemList.Count} items");
+            
+            foreach (var bodyItem in itemList)
+            {
+                // NamespaceBodyItem has item field
+                if (bodyItem.Fields.ContainsKey("item") && bodyItem.Fields["item"] is AstNode item)
+                {
+                    // Process based on item type
+                    string itemOutput = ProcessNamespaceItem(item);
+                    if (!string.IsNullOrWhiteSpace(itemOutput))
+                        results.Add(itemOutput);
+                }
+            }
+        }
+        else if (items is AstNode itemNode)
+        {
+            System.Console.WriteLine($"DEBUG NamespaceBody.items is single AstNode");
+            
+            // Single item or linked list
+            var current = itemNode;
+            while (current != null)
+            {
+                if (current.Fields.ContainsKey("item") && current.Fields["item"] is AstNode item)
+                {
+                    string itemOutput = ProcessNamespaceItem(item);
+                    if (!string.IsNullOrWhiteSpace(itemOutput))
+                        results.Add(itemOutput);
+                }
+                
+                // Check for next
+                if (current.Fields.ContainsKey("next") && current.Fields["next"] is AstNode next)
+                {
+                    current = next;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+        else
+        {
+            System.Console.WriteLine($"DEBUG NamespaceBody.items is neither list nor AstNode");
+        }
+        
+        return string.Join("\n", results);
+    }
 
     
     /// <summary>File-scoped namespace declaration (C# 10+)</summary>
