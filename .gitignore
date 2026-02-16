@@ -6,12 +6,20 @@ testing/
 
 # Ignore generated test output folders
 *_outputs/
+/tests/
 
 # Test command generated projects (at root level only)
 /HelloWorld/
 /Calculator/
 /ClassHierarchy/
 /GenericCollections/
+
+# Ignore test artifacts
+test_output_*.bin
+*.js
+*.wasm
+*.wat
+*.html
 
 # Allow Examples directory but ignore their bin/obj folders
 !Examples/
