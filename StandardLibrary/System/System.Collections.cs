@@ -791,18 +791,18 @@ namespace System.Collections.Generic
             return false;
         }
         
-        public void CopyTo(T[] targetArray, int arrayIndex)
+        public void CopyTo(T[] array, int arrayIndex)
         {
-            if (targetArray == null)
+            if (array == null)
                 throw new ArgumentNullException("array");
-            if (arrayIndex < 0 || arrayIndex + count > targetArray.Length)
+            if (arrayIndex < 0 || arrayIndex + count > array.Length)
                 throw new ArgumentException();
             
             int index = head;
             for (int i = 0; i < count; i++)
             {
-                targetArray[arrayIndex + i] = array[index];
-                index = (index + 1) % array.Length;
+                array[arrayIndex + i] = this.array[index];
+                index = (index + 1) % this.array.Length;
             }
         }
         
@@ -947,15 +947,15 @@ namespace System.Collections.Generic
             return false;
         }
         
-        public void CopyTo(T[] targetArray, int arrayIndex)
+        public void CopyTo(T[] array, int arrayIndex)
         {
-            if (targetArray == null)
+            if (array == null)
                 throw new ArgumentNullException("array");
-            if (arrayIndex < 0 || arrayIndex + count > targetArray.Length)
+            if (arrayIndex < 0 || arrayIndex + count > array.Length)
                 throw new ArgumentException();
             
             for (int i = 0; i < count; i++)
-                targetArray[arrayIndex + i] = array[count - i - 1];
+                array[arrayIndex + i] = this.array[count - i - 1];
         }
         
         public T[] ToArray()

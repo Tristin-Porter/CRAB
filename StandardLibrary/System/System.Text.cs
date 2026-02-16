@@ -507,7 +507,7 @@ namespace System.Text
                 }
                 else if ((b & 0xE0) == 0xC0)
                 {
-                    if (i + 1 < byteCount)
+                    if (i + 2 <= byteCount)
                     {
                         int c = ((b & 0x1F) << 6) | (bytes[byteIndex + i + 1] & 0x3F);
                         chars[charPos++] = (char)c;
@@ -516,7 +516,7 @@ namespace System.Text
                 }
                 else if ((b & 0xF0) == 0xE0)
                 {
-                    if (i + 2 < byteCount)
+                    if (i + 3 <= byteCount)
                     {
                         int c = ((b & 0x0F) << 12) | ((bytes[byteIndex + i + 1] & 0x3F) << 6) | (bytes[byteIndex + i + 2] & 0x3F);
                         chars[charPos++] = (char)c;

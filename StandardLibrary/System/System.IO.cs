@@ -160,7 +160,8 @@ namespace System.IO
             {
                 if (value < 0)
                     throw new ArgumentOutOfRangeException("value");
-                // Allow setting position up to and including length (for append)
+                // Allow setting position beyond current length if stream is expandable
+                // This is standard behavior for MemoryStream - setting position expands the stream
                 if (value > length)
                 {
                     if (!writable || !expandable)

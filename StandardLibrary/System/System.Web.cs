@@ -240,7 +240,16 @@ namespace System.Net
         
         public string[] AllKeys
         {
-            get { return headers.Keys; }
+            get 
+            { 
+                var keys = new string[headers.Count];
+                int i = 0;
+                foreach (var key in headers.Keys)
+                {
+                    keys[i++] = key;
+                }
+                return keys;
+            }
         }
         
         public int Count

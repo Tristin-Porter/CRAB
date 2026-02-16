@@ -713,13 +713,18 @@ namespace System.Security.Cryptography
     
     // ===== ENUMS =====
     
+    /// <summary>
+    /// Cipher modes for symmetric encryption algorithms.
+    /// WARNING: ECB mode is cryptographically insecure and should NEVER be used in production.
+    /// Use CBC, OFB, CFB, or CTS instead.
+    /// </summary>
     public enum CipherMode
     {
-        CBC = 1,        // Cipher Block Chaining - recommended
-        ECB = 2,        // Electronic Code Book - INSECURE, do not use in production
-        OFB = 3,        // Output Feedback
-        CFB = 4,        // Cipher Feedback
-        CTS = 5         // Cipher Text Stealing
+        CBC = 1,        // Cipher Block Chaining - RECOMMENDED for general use
+        ECB = 2,        // Electronic Code Book - INSECURE: Reveals patterns in plaintext, vulnerable to attacks
+        OFB = 3,        // Output Feedback - Good for streaming data
+        CFB = 4,        // Cipher Feedback - Good for streaming data
+        CTS = 5         // Cipher Text Stealing - Good for non-block-aligned data
     }
     
     public enum PaddingMode
