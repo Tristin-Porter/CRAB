@@ -48,6 +48,51 @@ public static class StringRegistry
 }
 
 /// <summary>
+/// Manages local variables for current function scope.
+/// Tracks variable names, types, and generates WASM local declarations.
+/// </summary>
+public static class LocalVariableRegistry
+{
+    private static Dictionary<string, string> variables = new();  // name -> type
+    private static HashSet<string> currentFunctionVars = new();
+    
+    public static void RegisterVariable(string name, string wasmType)
+    {
+        if (!variables.ContainsKey(name))
+        {
+            variables[name] = wasmType;
+            currentFunctionVars.Add(name);
+        }
+    }
+    
+    public static string GetVariableType(string name)
+    {
+        return variables.ContainsKey(name) ? variables[name] : "i32";
+    }
+    
+    public static bool HasVariable(string name)
+    {
+        return variables.ContainsKey(name);
+    }
+    
+    public static List<(string name, string type)> GetCurrentFunctionVariables()
+    {
+        return currentFunctionVars.Select(name => (name, variables[name])).ToList();
+    }
+    
+    public static void ClearCurrentFunction()
+    {
+        currentFunctionVars.Clear();
+    }
+    
+    public static void Clear()
+    {
+        variables.Clear();
+        currentFunctionVars.Clear();
+    }
+}
+
+/// <summary>
 /// Static helper class for WASM code emission.
 /// Used by typed Maps to generate WASM instructions from AST nodes.
 /// All methods are static so they can be called from field initializers.
@@ -1261,14 +1306,304 @@ public static class WasmEmit
     /// <summary>
     /// Emit declaration statement (variable declaration).
     /// </summary>
+    /// <summary>
+    /// Emit declaration statement (variable declaration).
+    /// Handles: int x; int x = 5; string s = "hello";
+    /// </summary>
     private static string EmitDeclarationStatement(AstNode node)
     {
-        // For now, emit a comment
-        // Full implementation would need local variable allocation
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine(";; variable declaration");
+        
+        // DeclarationStatement has a 'decl' field containing LocalDeclaration
+        if (!node.Fields.ContainsKey("decl"))
+        {
+            sb.AppendLine(";; variable declaration (no decl field)");
+            sb.AppendLine("nop");
+            return sb.ToString();
+        }
+        
+        var decl = node.Fields["decl"];
+        
+        // Handle if decl is a List
+        if (decl is List<AstNode> declList)
+        {
+            if (declList.Count > 0)
+            {
+                return EmitLocalVariableDeclaration(declList[0]);
+            }
+        }
+        else if (decl is List<object> objList)
+        {
+            if (objList.Count > 0 && objList[0] is AstNode declNode)
+            {
+                return EmitLocalVariableDeclaration(declNode);
+            }
+        }
+        else if (decl is AstNode declNode)
+        {
+            // LocalDeclaration has a 'decl' field containing LocalVariableDeclaration
+            if (declNode.Fields.ContainsKey("decl"))
+            {
+                var innerDecl = declNode.Fields["decl"];
+                if (innerDecl is AstNode varDecl)
+                {
+                    return EmitLocalVariableDeclaration(varDecl);
+                }
+            }
+            
+            // Try processing the declNode directly
+            return EmitLocalVariableDeclaration(declNode);
+        }
+        
+        sb.AppendLine($";; variable declaration (decl type: {decl?.GetType().Name})");
         sb.AppendLine("nop");
         return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit local variable declaration with optional initialization.
+    /// LocalVariableDeclaration has: type, declarators
+    /// </summary>
+    private static string EmitLocalVariableDeclaration(AstNode node)
+    {
+        var sb = new System.Text.StringBuilder();
+        
+        // If this is a LocalDeclaration, unwrap to LocalVariableDeclaration
+        if (node.Type == "LocalDeclaration")
+        {
+            // Due to CDTk field shifting, the LocalVariableDeclaration fields might be directly in LocalDeclaration
+            // Or there might be a 'decl' field
+            if (node.Fields.ContainsKey("decl"))
+            {
+                var innerDecl = node.Fields["decl"];
+                if (innerDecl is AstNode declNode)
+                {
+                    return EmitLocalVariableDeclaration(declNode);
+                }
+                else if (innerDecl is List<AstNode> declList && declList.Count > 0)
+                {
+                    return EmitLocalVariableDeclaration(declList[0]);
+                }
+            }
+            // Fall through to process the LocalDeclaration as if it were LocalVariableDeclaration
+        }
+        
+        // Extract type
+        string wasmType = "i32";  // default
+        if (node.Fields.ContainsKey("type"))
+        {
+            var typeNode = node.Fields["type"];
+            if (typeNode is AstNode tn)
+            {
+                wasmType = ExtractWasmTypeFromNode(tn);
+            }
+            else if (typeNode is List<AstNode> typeList && typeList.Count > 0)
+            {
+                wasmType = ExtractWasmTypeFromNode(typeList[0]);
+            }
+        }
+        
+        // Extract declarators (variable names and initializers)
+        if (node.Fields.ContainsKey("declarators"))
+        {
+            var declarators = node.Fields["declarators"];
+            if (declarators is AstNode declNode)
+            {
+                return EmitVariableDeclarators(declNode, wasmType);
+            }
+            else if (declarators is List<AstNode> declList && declList.Count > 0)
+            {
+                return EmitVariableDeclarators(declList[0], wasmType);
+            }
+        }
+        
+        // If no declarators field, check if type field contains LocalVariableType which might have declarators
+        if (node.Fields.ContainsKey("type"))
+        {
+            var typeNode = node.Fields["type"];
+            if (typeNode is List<AstNode> typeList)
+            {
+                // Type list might contain [type, declarators]
+                if (typeList.Count >= 2)
+                {
+                    return EmitVariableDeclarators(typeList[1], wasmType);
+                }
+            }
+        }
+        
+        sb.AppendLine(";; variable declaration (no declarators found)");
+        sb.AppendLine("nop");
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit variable declarators (one or more variables with optional initializers).
+    /// Example: int x, y = 5, z;
+    /// </summary>
+    private static string EmitVariableDeclarators(AstNode node, string wasmType)
+    {
+        var sb = new System.Text.StringBuilder();
+        
+        // LocalVariableDeclarators has a 'declarators' field
+        if (node.Fields.ContainsKey("declarators"))
+        {
+            var declarators = node.Fields["declarators"];
+            
+            // Handle list of declarators
+            if (declarators is List<AstNode> declList)
+            {
+                foreach (var decl in declList)
+                {
+                    var declCode = EmitSingleVariableDeclarator(decl, wasmType);
+                    if (!string.IsNullOrWhiteSpace(declCode))
+                    {
+                        sb.AppendLine(declCode);
+                    }
+                }
+            }
+            else if (declarators is AstNode declNode)
+            {
+                // Single declarator or linked list
+                var current = declNode;
+                while (current != null)
+                {
+                    var declCode = EmitSingleVariableDeclarator(current, wasmType);
+                    if (!string.IsNullOrWhiteSpace(declCode))
+                    {
+                        sb.AppendLine(declCode);
+                    }
+                    
+                    // Check for next declarator
+                    if (current.Fields.ContainsKey("next") && current.Fields["next"] is AstNode next)
+                    {
+                        current = next;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (sb.Length == 0)
+        {
+            sb.AppendLine(";; variable declaration (no declarators found)");
+            sb.AppendLine("nop");
+        }
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Emit a single variable declarator with optional initializer.
+    /// Example: x, y = 5, z = a + b
+    /// </summary>
+    private static string EmitSingleVariableDeclarator(AstNode node, string wasmType)
+    {
+        var sb = new System.Text.StringBuilder();
+        
+        // Extract variable name
+        string varName = "";
+        if (node.Fields.ContainsKey("name"))
+        {
+            var nameNode = node.Fields["name"];
+            if (nameNode is AstNode nn && nn.Fields.ContainsKey("lexeme"))
+            {
+                varName = nn.Fields["lexeme"]?.ToString() ?? "";
+            }
+        }
+        
+        if (string.IsNullOrEmpty(varName))
+        {
+            // Try to find identifier directly
+            if (node.Type == "LocalVariableDeclarator" || node.Type == "VariableDeclarator")
+            {
+                foreach (var kvp in node.Fields)
+                {
+                    if (kvp.Value is AstNode an && an.Type == "Identifier")
+                    {
+                        if (an.Fields.ContainsKey("lexeme"))
+                        {
+                            varName = an.Fields["lexeme"]?.ToString() ?? "";
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        
+        if (string.IsNullOrEmpty(varName))
+        {
+            return "";  // Can't declare without name
+        }
+        
+        // Register the variable
+        LocalVariableRegistry.RegisterVariable(varName, wasmType);
+        
+        // Check for initializer
+        if (node.Fields.ContainsKey("init") || node.Fields.ContainsKey("initializer"))
+        {
+            var initField = node.Fields.ContainsKey("init") ? node.Fields["init"] : node.Fields["initializer"];
+            if (initField is AstNode initNode)
+            {
+                // Emit initializer expression
+                var initCode = EmitExpression(initNode);
+                if (!string.IsNullOrWhiteSpace(initCode))
+                {
+                    sb.AppendLine($";; {varName} = ...");
+                    sb.AppendLine(initCode);
+                    sb.AppendLine($"local.set ${varName}");
+                }
+            }
+        }
+        
+        if (sb.Length == 0)
+        {
+            // Declaration without initializer - just register it
+            sb.AppendLine($";; declare {varName}");
+        }
+        
+        return sb.ToString();
+    }
+    
+    /// <summary>
+    /// Extract WASM type from a type node.
+    /// Maps C# types to WASM types.
+    /// </summary>
+    private static string ExtractWasmTypeFromNode(AstNode typeNode)
+    {
+        // Try to get the type name from the node
+        string typeName = "";
+        
+        // Direct lexeme (simple type like "int")
+        if (typeNode.Fields.ContainsKey("lexeme"))
+        {
+            typeName = typeNode.Fields["lexeme"]?.ToString() ?? "";
+        }
+        // Type has a 'type' field (common pattern)
+        else if (typeNode.Fields.ContainsKey("type"))
+        {
+            var innerType = typeNode.Fields["type"];
+            if (innerType is AstNode innerNode && innerNode.Fields.ContainsKey("lexeme"))
+            {
+                typeName = innerNode.Fields["lexeme"]?.ToString() ?? "";
+            }
+        }
+        
+        // Map C# types to WASM types
+        return typeName switch
+        {
+            "int" or "Int32" or "uint" or "UInt32" => "i32",
+            "long" or "Int64" or "ulong" or "UInt64" => "i64",
+            "float" or "Single" => "f32",
+            "double" or "Double" => "f64",
+            "bool" or "Boolean" => "i32",
+            "byte" or "Byte" or "sbyte" or "SByte" => "i32",
+            "short" or "Int16" or "ushort" or "UInt16" => "i32",
+            "char" or "Char" => "i32",
+            _ => "i32"  // Default to i32 for objects, strings, etc.
+        };
     }
     
     /// <summary>
@@ -1763,6 +2098,10 @@ public class WASM : MapSet
         
         // Build the function
         var sb = new System.Text.StringBuilder();
+        
+        // Clear local variables for this function
+        LocalVariableRegistry.ClearCurrentFunction();
+        
         sb.Append($"(func ${funcName}");
         
         if (!string.IsNullOrWhiteSpace(parameters))
@@ -1778,10 +2117,29 @@ public class WASM : MapSet
             sb.Append(")");
         }
         
+        // Emit function body (this will register local variables)
+        string bodyCode = "";
         if (!string.IsNullOrWhiteSpace(body))
         {
+            bodyCode = body;
+        }
+        
+        // Now emit local variable declarations based on what was registered
+        var locals = LocalVariableRegistry.GetCurrentFunctionVariables();
+        if (locals.Count > 0)
+        {
+            sb.AppendLine();
+            foreach (var (name, type) in locals)
+            {
+                sb.AppendLine($"  (local ${name} {type})");
+            }
+        }
+        
+        // Now emit the body code
+        if (!string.IsNullOrWhiteSpace(bodyCode))
+        {
             sb.Append("\n  ");
-            sb.Append(body);
+            sb.Append(bodyCode);
         }
         
         sb.Append("\n)\n");
