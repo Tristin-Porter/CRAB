@@ -469,7 +469,7 @@ public class Rules : RuleSet
     public Rule EmbeddedStatement = new Rule("stmt:EmptyStatement | stmt:ExpressionStatement | stmt:SelectionStatement | stmt:IterationStatement | stmt:JumpStatement | stmt:TryStatement | stmt:CheckedStatement | stmt:UncheckedStatement | stmt:UnsafeStatement | stmt:ManualStatement | stmt:LockStatement | stmt:UsingStatement | stmt:YieldStatement | stmt:LocalFunctionStatement")
         .Returns("stmt");
 
-    public Rule Block = new Rule("@OpenBrace stmts:Statements? @CloseBrace")
+    public Rule Block = new Rule("@OpenBrace stmts:Statements @CloseBrace | @OpenBrace @CloseBrace")
         .Returns("stmts");
 
     public Rule Statements = new Rule("stmts:Statement+")
@@ -737,22 +737,22 @@ public class Rules : RuleSet
     // RANGE EXPRESSION (C# 8)
     public Rule RangeExpression = "start:UnaryExpression @RangeOperator end:UnaryExpression | @RangeOperator end:UnaryExpression | start:UnaryExpression @RangeOperator | expr:UnaryExpression";
 
-    // UNARY EXPRESSION - Made suffixes explicit to fix GLL parser bug  
-    public Rule UnaryExpression = new Rule("expr:UnaryExpressionBase suffix:UnaryExpressionSuffix | expr:UnaryExpressionBase")
-        .Returns("expr", "suffix");
+    // UNARY EXPRESSION - Testing single alternative
+    public Rule UnaryExpression = new Rule("expr:PrimaryExpressionCore @OpenParen @CloseParen")
+        .Returns("expr");
 
     public Rule UnaryExpressionBase = "expr:UnaryOperatorExpression | expr:CastExpression | expr:AwaitExpression | expr:DefaultExpression | expr:NameofExpression | expr:SizeofExpression | expr:CheckedExpression | expr:UncheckedExpression | expr:PrimaryExpressionCore";
 
     public Rule UnaryExpressionSuffixes = "suffixes:UnaryExpressionSuffix+";
 
-    public Rule UnaryExpressionSuffix = "suffix:MemberAccessSuffix | suffix:InvocationSuffix | suffix:ElementAccessSuffix | suffix:PostIncrementSuffix | suffix:PostDecrementSuffix | suffix:WithExpressionSuffix | suffix:IsPatternSuffix | suffix:AsTypeSuffix";
+    public Rule UnaryExpressionSuffix = "suffix:InvocationSuffix";
 
     public Rule MemberAccessSuffix = new Rule("accessor:MemberAccessor member:@Identifier typeArgs:TypeArgumentList | accessor:MemberAccessor member:@Identifier")
         .Returns("accessor", "member", "typeArgs");
 
     public Rule MemberAccessor = "op:@Dot | op:@NullConditional";
 
-    public Rule InvocationSuffix = new Rule("@OpenParen args:ArgumentList @CloseParen | @OpenParen @CloseParen")
+    public Rule InvocationSuffix = new Rule("@OpenParen args:ArgumentList? @CloseParen")
         .Returns("args");
 
     public Rule ElementAccessSuffix = new Rule("@OpenBracket indices:ExpressionList @CloseBracket")
@@ -819,8 +819,8 @@ public class Rules : RuleSet
     public Rule RawStringLiteral = new Rule("@RawStringLiteral");
     public Rule Utf8StringLiteral = new Rule("@Utf8StringLiteral");
 
-    public Rule SimpleName = new Rule("name:@Identifier typeArgs:TypeArgumentList?")
-        .Returns("name", "typeArgs");
+    public Rule SimpleName = new Rule("name:@Identifier")
+        .Returns("name");
 
     public Rule ParenthesizedExpression = new Rule("@OpenParen expr:Expression @CloseParen")
         .Returns("expr");
