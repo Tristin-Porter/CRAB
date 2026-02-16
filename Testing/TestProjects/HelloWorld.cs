@@ -11,9 +11,7 @@ namespace HelloWorld
     {
         static void Main()
         {
-            Console.WriteLine("Hello from CRAB!");
-            Console.WriteLine("Press any key to exit...");
-            Console.ReadKey();
+            Console.WriteLine("Hello World!");
         }
     }
 }

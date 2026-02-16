@@ -244,33 +244,34 @@ class Test : Command
                 string wasmSaveDir = Path.Combine(saveDir, "wasm");
                 string binDir = Path.Combine(projectPath, "bin");
                 
-                // Copy the main output file (WASM or WAT)
-                string watDest = Path.Combine(wasmSaveDir, Path.GetFileName(outputFile));
+                // Copy the main output file (WASM or WAT) with project name
+                string outputExt = Path.GetExtension(outputFile);
+                string watDest = Path.Combine(wasmSaveDir, $"{projectName}{outputExt}");
                 File.Copy(outputFile, watDest, overwrite: true);
                 LogInfo($"Saved WASM/WAT output to {watDest}");
                 
-                // Also copy JS and HTML files if they exist
+                // Also copy JS and HTML files if they exist with project name
                 string jsSource = Path.Combine(binDir, "output.js");
                 string htmlSource = Path.Combine(binDir, "index.html");
                 
                 if (File.Exists(jsSource))
                 {
-                    string jsDest = Path.Combine(wasmSaveDir, "output.js");
+                    string jsDest = Path.Combine(wasmSaveDir, $"{projectName}.js");
                     File.Copy(jsSource, jsDest, overwrite: true);
                     LogInfo($"Saved JS wrapper to {jsDest}");
                     
                     if (verbose || debugMode)
-                        System.Console.WriteLine($"Saved output.js to {wasmSaveDir}");
+                        System.Console.WriteLine($"Saved {projectName}.js to {wasmSaveDir}");
                 }
                 
                 if (File.Exists(htmlSource))
                 {
-                    string htmlDest = Path.Combine(wasmSaveDir, "index.html");
+                    string htmlDest = Path.Combine(wasmSaveDir, $"{projectName}.html");
                     File.Copy(htmlSource, htmlDest, overwrite: true);
                     LogInfo($"Saved HTML runner to {htmlDest}");
                     
                     if (verbose || debugMode)
-                        System.Console.WriteLine($"Saved index.html to {wasmSaveDir}");
+                        System.Console.WriteLine($"Saved {projectName}.html to {wasmSaveDir}");
                 }
                 
                 // Final summary log after all files are copied
@@ -292,7 +293,7 @@ class Test : Command
             }
             else
             {
-                RunComprehensiveTest(outputFile, projectName, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
+                RunComprehensiveTest(outputFile, projectName, projectPath, verbose || debugMode, debugMode, saveDir, out testsPassed, out testsTotal);
             }
 
             // Cleanup if requested
@@ -373,11 +374,11 @@ class Test : Command
         {
             Directory.CreateDirectory(projectPath);
             
-            // Find the CRAB executable directory to locate tests folder
+            // Find the CRAB executable directory to locate Testing/TestProjects folder
             string crabDir = Path.GetDirectoryName(typeof(Test).Assembly.Location);
-            string testsDir = Path.Combine(crabDir, "tests");
+            string testsDir = Path.Combine(crabDir, "Testing", "TestProjects");
             
-            // If tests folder doesn't exist in executable directory, try repository root
+            // If Testing/TestProjects folder doesn't exist in executable directory, try repository root
             if (!Directory.Exists(testsDir))
             {
                 // Try to find repository root by looking for CRAB.csproj
@@ -389,7 +390,7 @@ class Test : Command
                 
                 if (currentDir != null)
                 {
-                    testsDir = Path.Combine(currentDir, "tests");
+                    testsDir = Path.Combine(currentDir, "Testing", "TestProjects");
                 }
             }
             
@@ -412,12 +413,16 @@ class Test : Command
                 LogDebug($"Test file not found or invalid, using fallback content for {projectName}");
                 csharpCode = projectName switch
                 {
-                    "HelloWorld" => @"class Test {
-    int GetValue() {
-        return 42;
+                    "HelloWorld" => @"using System;
+
+class Program {
+    static void Main() {
+        Console.WriteLine(""Hello World!"");
     }
 }",
-                    "Calculator" => @"class Calculator {
+                    "Calculator" => @"using System;
+
+class Calculator {
     int Add(int a, int b) {
         return a + b;
     }
@@ -425,8 +430,16 @@ class Test : Command
     int Multiply(int a, int b) {
         return a * b;
     }
+}
+
+class Program {
+    static void Main() {
+        Console.WriteLine(""Calculator: 5 + 3 = 8"");
+    }
 }",
-                    "ClassHierarchy" => @"class Base {
+                    "ClassHierarchy" => @"using System;
+
+class Base {
     int GetBase() {
         return 10;
     }
@@ -436,15 +449,31 @@ class Derived {
     int GetValue() {
         return 20;
     }
+}
+
+class Program {
+    static void Main() {
+        Console.WriteLine(""Base: 10, Derived: 20"");
+    }
 }",
-                    "GenericCollections" => @"class Container {
+                    "GenericCollections" => @"using System;
+
+class Container {
     int GetData() {
         return 100;
     }
+}
+
+class Program {
+    static void Main() {
+        Console.WriteLine(""Container Data: 100"");
+    }
 }",
-                    _ => @"class Program {
-    int Main() {
-        return 0;
+                    _ => @"using System;
+
+class Program {
+    static void Main() {
+        Console.WriteLine(""Default Test"");
     }
 }"
                 };
@@ -581,7 +610,7 @@ EndGlobal
         LogInfo("Quick test completed");
     }
 
-    private void RunComprehensiveTest(string outputFile, string projectName, bool verbose, bool debug, string? saveDir, out int testsPassed, out int testsTotal)
+    private void RunComprehensiveTest(string outputFile, string projectName, string projectPath, bool verbose, bool debug, string? saveDir, out int testsPassed, out int testsTotal)
     {
         System.Console.WriteLine("[3/3] Running comprehensive test suite...");
         System.Console.WriteLine();
@@ -703,8 +732,20 @@ EndGlobal
         var wasmSw = System.Diagnostics.Stopwatch.StartNew();
         try
         {
-            // Read WAT file
-            string watContent = File.ReadAllText(outputFile);
+            // Read WAT file - use .wat file if available, otherwise try reading as text
+            string binDir = Path.Combine(projectPath, "bin");
+            string watFile = Path.Combine(binDir, "output.wat");
+            string watContent;
+            
+            if (File.Exists(watFile))
+            {
+                watContent = File.ReadAllText(watFile);
+            }
+            else
+            {
+                // Fallback to reading outputFile (might be .wat or text content)
+                watContent = File.ReadAllText(outputFile);
+            }
             
             // Use BadgerCompiler directly for WASM
             byte[] wasmBinary = Badger.BadgerCompiler.Compile(watContent, "wasm", "wasm");
@@ -717,51 +758,8 @@ EndGlobal
             LogInfo($"Test WASM format PASSED in {wasmSw.ElapsedMilliseconds}ms");
             LogInfo($"Generated {wasmBinary.Length} bytes of WASM binary");
             
-            // Save WASM, HTML, and JS if requested with proper naming
-            if (saveDir != null)
-            {
-                string wasmSaveDir = Path.Combine(saveDir, "wasm");
-                
-                // Save WASM binary as HelloWorld.wasm
-                string wasmPath = Path.Combine(wasmSaveDir, $"{projectName}.wasm");
-                File.WriteAllBytes(wasmPath, wasmBinary);
-                
-                // Copy/rename JS wrapper if it exists as HelloWorld.js
-                if (File.Exists("output.js"))
-                {
-                    string jsPath = Path.Combine(wasmSaveDir, $"{projectName}.js");
-                    File.Copy("output.js", jsPath, overwrite: true);
-                    
-                    LogInfo($"Saved WASM binary ({wasmBinary.Length} bytes) and JS wrapper to {wasmSaveDir}");
-                    
-                    if (verbose || debug)
-                    {
-                        System.Console.WriteLine($"    Saved {wasmBinary.Length} bytes to {wasmPath}");
-                        System.Console.WriteLine($"    Saved JS wrapper to {jsPath}");
-                    }
-                }
-                
-                // Copy/rename HTML if it exists as HelloWorld.html
-                if (File.Exists("index.html"))
-                {
-                    string htmlPath = Path.Combine(wasmSaveDir, $"{projectName}.html");
-                    File.Copy("index.html", htmlPath, overwrite: true);
-                    
-                    LogInfo($"Saved HTML runner to {htmlPath}");
-                    
-                    if (verbose || debug)
-                        System.Console.WriteLine($"    Saved HTML to {htmlPath}");
-                }
-            }
-            
-            // Cleanup output.js and index.html if not saving
-            if (saveDir == null)
-            {
-                if (File.Exists("output.js"))
-                    File.Delete("output.js");
-                if (File.Exists("index.html"))
-                    File.Delete("index.html");
-            }
+            // Note: WASM binary, JS and HTML files are already saved after build step
+            // No need to save them again here to avoid duplicate files
         }
         catch (Exception ex)
         {

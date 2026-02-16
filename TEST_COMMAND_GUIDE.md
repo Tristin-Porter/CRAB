@@ -71,10 +71,12 @@ crab test --keep
 ## Test Projects
 
 ### Available Projects
-1. **HelloWorld** - Minimal empty class
-2. **Calculator** - Basic class with fields
-3. **ClassHierarchy** - Inheritance testing
-4. **GenericCollections** - Generic types
+1. **HelloWorld** - Prints "Hello World!"
+2. **Calculator** - Prints "Calculator: 5 + 3 = 8"
+3. **ClassHierarchy** - Prints "Base: 10, Derived: 20"
+4. **GenericCollections** - Prints "Container Data: 100"
+
+Each test project has unique output to verify compilation success.
 
 ### Custom Project
 ```bash

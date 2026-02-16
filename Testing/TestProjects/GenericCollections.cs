@@ -18,9 +18,7 @@ namespace GenericCollections
     {
         static void Main()
         {
-            Console.WriteLine("Generic Collections Test");
-            Console.WriteLine("Press any key to exit...");
-            Console.ReadKey();
+            Console.WriteLine("Container Data: 100");
         }
     }
 }
