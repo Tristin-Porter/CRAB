@@ -906,27 +906,186 @@ public class WASM : MapSet
     
     /// <summary>
     /// Method declaration - primary compilation target.
-    /// ACTUAL field-shifting bug behavior (COMPLEX - differs by params):
-    /// 
-    /// NO params case (e.g., "static int Main()"):
-    /// - attrs = Modifiers ("static")
-    /// - mods = Type ("int" → "i32")
-    /// - returnType = Identifier ("Main")
-    /// - name = MethodBody (block)
-    /// 
-    /// WITH params case (e.g., "int Add(int x, int y)"):
-    /// - attrs = Type ("int" → "i32") 
-    /// - mods = Identifier ("Add")
-    /// - returnType = FormalParameterList (params)
-    /// - name = MethodBody (block)
-    /// 
-    /// Workaround: Use both {mods} and {returnType} - one will be name, other will be type/params.
+    /// Uses typed Map to work around CDTk field-shifting bug.
     /// </summary>
-    public Map MethodDeclaration = @"(func ${mods}
-  {returnType}
-  (result {attrs})
-  {name}
-)";
+    public Map<AstNode, string> MethodDeclaration = TypedMap.For<string>()
+        .Emit(node => {
+            if (node == null) return "";
+            
+            // Extract fields
+            var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
+            var attrsField = node.Fields.ContainsKey("attrs") ? node.Fields["attrs"] : null;
+            var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
+            var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
+            var bodyField = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
+            
+            string funcName = "";
+            string resultType = "";
+            string parameters = "";
+            string body = "";
+            
+            // Detect case by checking if mods is an Identifier
+            if (modsField is AstNode modsNode && modsNode.Type == "Identifier")
+            {
+                // WITH params: mods=Identifier, attrs=Type, returnType=FormalParameterList, name=MethodBody
+                funcName = modsNode.Fields.ContainsKey("lexeme") ? modsNode.Fields["lexeme"]?.ToString() ?? "" : "";
+                
+                // Get result type from attrs (Type node)
+                if (attrsField is AstNode attrsType)
+                {
+                    // Try direct lexeme first
+                    if (attrsType.Fields.ContainsKey("lexeme"))
+                    {
+                        var typeName = attrsType.Fields["lexeme"]?.ToString() ?? "";
+                        resultType = MapCSharpTypeToWasm(typeName);
+                    }
+                    // Try nested type field
+                    else if (attrsType.Fields.ContainsKey("type") && attrsType.Fields["type"] is AstNode innerType && innerType.Fields.ContainsKey("lexeme"))
+                    {
+                        var typeName = innerType.Fields["lexeme"]?.ToString() ?? "";
+                        resultType = MapCSharpTypeToWasm(typeName);
+                    }
+                    // Find any Identifier
+                    else
+                    {
+                        foreach (var field in attrsType.Fields.Values)
+                        {
+                            if (field is AstNode fn && fn.Type == "Identifier" && fn.Fields.ContainsKey("lexeme"))
+                            {
+                                var typeName = fn.Fields["lexeme"]?.ToString() ?? "";
+                                resultType = MapCSharpTypeToWasm(typeName);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Get parameters from returnType (FormalParameterList)
+                if (returnTypeField != null)
+                {
+                    parameters = EmitParameterList(returnTypeField);
+                }
+                
+                // Get body from name (MethodBody -> Block)
+                if (nameField is AstNode bodyNode)
+                {
+                    // MethodBody has a 'body' field containing the actual Block
+                    if (bodyNode.Fields.ContainsKey("body"))
+                    {
+                        body = WasmEmit.EmitStatement(bodyNode.Fields["body"]);
+                    }
+                    else
+                    {
+                        body = WasmEmit.EmitStatement(bodyNode);
+                    }
+                }
+            }
+            else
+            {
+                // NO params: attrs=Modifiers, mods=Type, returnType=Identifier, name=empty or body
+                
+                // Get function name from returnType (Identifier)
+                if (returnTypeField is AstNode idNode && idNode.Type == "Identifier" && idNode.Fields.ContainsKey("lexeme"))
+                {
+                    funcName = idNode.Fields["lexeme"]?.ToString() ?? "";
+                }
+                
+                // Get result type from mods (Type node)
+                if (modsField is AstNode modsType)
+                {
+                    // Try direct lexeme first
+                    if (modsType.Fields.ContainsKey("lexeme"))
+                    {
+                        var typeName = modsType.Fields["lexeme"]?.ToString() ?? "";
+                        resultType = MapCSharpTypeToWasm(typeName);
+                    }
+                    // Try to find type name in nested structure
+                    else if (modsType.Fields.ContainsKey("type") && modsType.Fields["type"] is AstNode innerType && innerType.Fields.ContainsKey("lexeme"))
+                    {
+                        var typeName = innerType.Fields["lexeme"]?.ToString() ?? "";
+                        resultType = MapCSharpTypeToWasm(typeName);
+                    }
+                    // Check for Identifier node
+                    else
+                    {
+                        foreach (var field in modsType.Fields.Values)
+                        {
+                            if (field is AstNode fn && fn.Type == "Identifier" && fn.Fields.ContainsKey("lexeme"))
+                            {
+                                var typeName = fn.Fields["lexeme"]?.ToString() ?? "";
+                                resultType = MapCSharpTypeToWasm(typeName);
+                                break;
+                            }
+                        }
+                    }
+                }
+                
+                // Try to get body from name field (which contains MethodBody for NO params)
+                if (nameField is AstNode bodyNode)
+                {
+                    // MethodBody has a 'body' field containing the actual Block
+                    if (bodyNode.Fields.ContainsKey("body"))
+                    {
+                        body = WasmEmit.EmitStatement(bodyNode.Fields["body"]);
+                    }
+                    else
+                    {
+                        body = WasmEmit.EmitStatement(bodyNode);
+                    }
+                }
+                else if (bodyField != null)
+                {
+                    body = WasmEmit.EmitStatement(bodyField);
+                }
+            }
+            
+            // Build the function
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"(func ${funcName}");
+            
+            if (!string.IsNullOrWhiteSpace(parameters))
+            {
+                sb.Append("\n  ");
+                sb.Append(parameters);
+            }
+            
+            if (!string.IsNullOrWhiteSpace(resultType))
+            {
+                sb.Append("\n  (result ");
+                sb.Append(resultType);
+                sb.Append(")");
+            }
+            
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                sb.Append("\n  ");
+                sb.Append(body);
+            }
+            
+            sb.Append("\n)");
+            return sb.ToString();
+        });
+    
+    private static string MapCSharpTypeToWasm(string typeName)
+    {
+        return typeName switch
+        {
+            "int" => "i32",
+            "uint" => "i32",
+            "byte" => "i32",
+            "sbyte" => "i32",
+            "short" => "i32",
+            "ushort" => "i32",
+            "bool" => "i32",
+            "char" => "i32",
+            "long" => "i64",
+            "ulong" => "i64",
+            "float" => "f32",
+            "double" => "f64",
+            "void" => "",
+            _ => "i32" // Default
+        };
+    }
     
     /// <summary>Field declaration - TODO: properly handle multiple declarators</summary>
     public Map FieldDeclaration = ";; field {type}";
