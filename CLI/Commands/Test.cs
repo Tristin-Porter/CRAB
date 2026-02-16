@@ -245,7 +245,6 @@ class Test : Command
                 string binDir = Path.Combine(projectPath, "bin");
                 
                 // Copy the main output file (WASM or WAT) with project name
-                string outputFileName = Path.GetFileName(outputFile);
                 string outputExt = Path.GetExtension(outputFile);
                 string watDest = Path.Combine(wasmSaveDir, $"{projectName}{outputExt}");
                 File.Copy(outputFile, watDest, overwrite: true);
