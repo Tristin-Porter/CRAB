@@ -933,31 +933,7 @@ public class WASM : MapSet
                 // Get result type from attrs (Type node)
                 if (attrsField is AstNode attrsType)
                 {
-                    // Try direct lexeme first
-                    if (attrsType.Fields.ContainsKey("lexeme"))
-                    {
-                        var typeName = attrsType.Fields["lexeme"]?.ToString() ?? "";
-                        resultType = MapCSharpTypeToWasm(typeName);
-                    }
-                    // Try nested type field
-                    else if (attrsType.Fields.ContainsKey("type") && attrsType.Fields["type"] is AstNode innerType && innerType.Fields.ContainsKey("lexeme"))
-                    {
-                        var typeName = innerType.Fields["lexeme"]?.ToString() ?? "";
-                        resultType = MapCSharpTypeToWasm(typeName);
-                    }
-                    // Find any Identifier
-                    else
-                    {
-                        foreach (var field in attrsType.Fields.Values)
-                        {
-                            if (field is AstNode fn && fn.Type == "Identifier" && fn.Fields.ContainsKey("lexeme"))
-                            {
-                                var typeName = fn.Fields["lexeme"]?.ToString() ?? "";
-                                resultType = MapCSharpTypeToWasm(typeName);
-                                break;
-                            }
-                        }
-                    }
+                    resultType = ExtractTypeFromNode(attrsType);
                 }
                 
                 // Get parameters from returnType (FormalParameterList)
@@ -993,31 +969,7 @@ public class WASM : MapSet
                 // Get result type from mods (Type node)
                 if (modsField is AstNode modsType)
                 {
-                    // Try direct lexeme first
-                    if (modsType.Fields.ContainsKey("lexeme"))
-                    {
-                        var typeName = modsType.Fields["lexeme"]?.ToString() ?? "";
-                        resultType = MapCSharpTypeToWasm(typeName);
-                    }
-                    // Try to find type name in nested structure
-                    else if (modsType.Fields.ContainsKey("type") && modsType.Fields["type"] is AstNode innerType && innerType.Fields.ContainsKey("lexeme"))
-                    {
-                        var typeName = innerType.Fields["lexeme"]?.ToString() ?? "";
-                        resultType = MapCSharpTypeToWasm(typeName);
-                    }
-                    // Check for Identifier node
-                    else
-                    {
-                        foreach (var field in modsType.Fields.Values)
-                        {
-                            if (field is AstNode fn && fn.Type == "Identifier" && fn.Fields.ContainsKey("lexeme"))
-                            {
-                                var typeName = fn.Fields["lexeme"]?.ToString() ?? "";
-                                resultType = MapCSharpTypeToWasm(typeName);
-                                break;
-                            }
-                        }
-                    }
+                    resultType = ExtractTypeFromNode(modsType);
                 }
                 
                 // Try to get body from name field (which contains MethodBody for NO params)
@@ -1087,8 +1039,67 @@ public class WASM : MapSet
         };
     }
     
+    /// <summary>
+    /// Extract WASM type from Type AST node by recursively traversing structure.
+    /// </summary>
+    private static string ExtractTypeFromNode(AstNode typeNode)
+    {
+        if (typeNode == null) return "";
+        
+        // Direct lexeme (simple type like "int")
+        if (typeNode.Fields.ContainsKey("lexeme"))
+        {
+            var typeName = typeNode.Fields["lexeme"]?.ToString() ?? "";
+            return MapCSharpTypeToWasm(typeName);
+        }
+        
+        // Type has a 'type' field (common pattern)
+        if (typeNode.Fields.ContainsKey("type"))
+        {
+            var innerType = typeNode.Fields["type"];
+            if (innerType is AstNode innerNode)
+            {
+                return ExtractTypeFromNode(innerNode);
+            }
+        }
+        
+        // Type has a 'base' field
+        if (typeNode.Fields.ContainsKey("base"))
+        {
+            var baseType = typeNode.Fields["base"];
+            if (baseType is AstNode baseNode)
+            {
+                return ExtractTypeFromNode(baseNode);
+            }
+        }
+        
+        // Look for any Identifier with lexeme
+        foreach (var field in typeNode.Fields.Values)
+        {
+            if (field is AstNode node)
+            {
+                if (node.Type == "Identifier" && node.Fields.ContainsKey("lexeme"))
+                {
+                    var typeName = node.Fields["lexeme"]?.ToString() ?? "";
+                    return MapCSharpTypeToWasm(typeName);
+                }
+                
+                // Recursively search nested nodes
+                if (node.Type == "SimpleName" || node.Type == "NamedType" || node.Type.Contains("Type"))
+                {
+                    var result = ExtractTypeFromNode(node);
+                    if (!string.IsNullOrEmpty(result))
+                        return result;
+                }
+            }
+        }
+        
+        return "";
+    }
+    
     /// <summary>Field declaration - TODO: properly handle multiple declarators</summary>
     public Map FieldDeclaration = ";; field {type}";
+
     
     /// <summary>
     /// Constructor declaration - CTGC analyzes object initialization.
@@ -1654,6 +1665,12 @@ public class WASM : MapSet
         
         if (!(paramsNode is AstNode node)) return "";
         
+        // Handle FormalParameterList -> extract params field
+        if (node.Type == "FormalParameterList" && node.Fields.ContainsKey("params"))
+        {
+            return EmitParameterList(node.Fields["params"]);
+        }
+        
         // Handle FormalParameterListContent
         if (node.Type == "FormalParameterListContent" && node.Fields.ContainsKey("params"))
         {
@@ -1683,6 +1700,13 @@ public class WASM : MapSet
                                 results.Add(paramStr);
                         }
                     }
+                }
+                else if (paramsField is AstNode singleParam)
+                {
+                    // Single parameter
+                    var paramStr = EmitSingleParameter(singleParam);
+                    if (!string.IsNullOrWhiteSpace(paramStr))
+                        results.Add(paramStr);
                 }
             }
             
@@ -1754,27 +1778,7 @@ public class WASM : MapSet
     /// </summary>
     private static string MapTypeNodeToWasm(AstNode typeNode)
     {
-        // For simple types, look for a lexeme
-        if (typeNode.Fields.ContainsKey("lexeme"))
-        {
-            var lexeme = typeNode.Fields["lexeme"];
-            if (lexeme is string str)
-                return WasmEmit.MapCSharpTypeToWasm(str);
-            if (lexeme is TokenInstance token)
-                return WasmEmit.MapCSharpTypeToWasm(token.Lexeme);
-        }
-        
-        // Try the type field
-        if (typeNode.Fields.ContainsKey("type"))
-        {
-            var typeField = typeNode.Fields["type"];
-            if (typeField is AstNode childType)
-                return MapTypeNodeToWasm(childType);
-            if (typeField is string str)
-                return WasmEmit.MapCSharpTypeToWasm(str);
-        }
-        
-        return "i32"; // Default
+        return ExtractTypeFromNode(typeNode);
     }
     
     /// <summary>Formal parameter list</summary>
