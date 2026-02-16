@@ -4,6 +4,49 @@ using System;
 namespace CRAB;
 
 /// <summary>
+/// Manages string literals for WASM data section.
+/// </summary>
+public static class StringRegistry
+{
+    private static Dictionary<int, string> strings = new();
+    private static Dictionary<int, int> offsets = new();
+    private static int nextId = 0;
+    private static int currentOffset = 0;
+    
+    public static int RegisterString(string text)
+    {
+        var id = nextId++;
+        strings[id] = text;
+        offsets[id] = currentOffset;
+        currentOffset += text.Length + 1; // +1 for null terminator
+        return id;
+    }
+    
+    public static int GetStringOffset(int id)
+    {
+        return offsets.ContainsKey(id) ? offsets[id] : 0;
+    }
+    
+    public static string GetString(int id)
+    {
+        return strings.ContainsKey(id) ? strings[id] : "";
+    }
+    
+    public static Dictionary<int, string> GetAllStrings()
+    {
+        return new Dictionary<int, string>(strings);
+    }
+    
+    public static void Clear()
+    {
+        strings.Clear();
+        offsets.Clear();
+        nextId = 0;
+        currentOffset = 0;
+    }
+}
+
+/// <summary>
 /// Static helper class for WASM code emission.
 /// Used by typed Maps to generate WASM instructions from AST nodes.
 /// All methods are static so they can be called from field initializers.
@@ -43,8 +86,21 @@ public static class WasmEmit
             "DecimalIntegerLiteral" or "HexIntegerLiteral" or "BinaryIntegerLiteral" => EmitIntegerLiteral(node),
             "FloatLiteral" => EmitFloatLiteral(node),
             "DoubleLiteral" => EmitDoubleLiteral(node),
+            "StringLiteral" => EmitStringLiteral(node),
             "TrueLiteral" => "i32.const 1",
             "FalseLiteral" => "i32.const 0",
+            
+            // Method calls and member access
+            "InvocationExpression" => EmitInvocationExpression(node),
+            "MemberAccessExpression" => EmitMemberAccessExpression(node),
+            "NameSegment" => EmitNameSegment(node),
+            "NameSegmentRest" => EmitExpressionDispatcher(node),  // Pass through to child
+            "SimpleName" => EmitExpressionDispatcher(node),  // Pass through to child
+            "QualifiedName" => EmitExpressionDispatcher(node),  // Pass through to child
+            "Argument" => 
+                (node.Fields.ContainsKey("expr") && node.Fields["expr"] != null) ?
+                    EmitExpression(node.Fields["expr"]) 
+                    : "",  // Unwrap argument to get expression
             
             // Binary operations
             // ONLY call EmitBinaryExpression if the node has left/op/right fields
@@ -71,6 +127,7 @@ public static class WasmEmit
             // Expression dispatchers - pass through to child
             // CDTk may return different field names due to field shifting
             "Expression" or "NonAssignmentExpression" or "UnaryExpression" or "UnaryExpressionBase" or
+            "UnaryExpressionSuffix" or
             "PrimaryExpression" or "PrimaryNoArrayCreationExpression" or "Sequence" or
             "SwitchExpression" or "RangeExpression" or "NullCoalescingExpression" or
             "ConditionalOrExpression" or "ConditionalAndExpression" or "InclusiveOrExpression" or
@@ -96,6 +153,9 @@ public static class WasmEmit
         {
             return "";
         }
+        
+        // DEBUG: Print what we're dispatching
+        System.Console.WriteLine($"DEBUG EmitExpressionDispatcher: type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
         
         // For debugging complex expressions
         if (node.Type == "Sequence" && node.Fields.Count > 0)
@@ -171,6 +231,49 @@ public static class WasmEmit
         }
         
         // Try common field names in order
+        
+        // Try 'base' and 'suffix' (for member access like Console.WriteLine)
+        if (node.Fields.ContainsKey("base"))
+        {
+            // This might be a member access or invocation
+            var baseExpr = node.Fields["base"];
+            var suffix = node.Fields.ContainsKey("suffix") ? node.Fields["suffix"] : null;
+            
+            System.Console.WriteLine($"DEBUG Found base/suffix: base type={((baseExpr as AstNode)?.Type ?? baseExpr?.GetType().Name)}, suffix type={((suffix as AstNode)?.Type ?? suffix?.GetType().Name)}");
+            
+            // If suffix is UnaryExpressionSuffix with args, this is a method call
+            if (suffix is AstNode suffixNode && suffixNode.Type == "UnaryExpressionSuffix")
+            {
+                // This is a method invocation - base is the method name, suffix has args
+                // But we need to look deeper into base to get the actual method name
+                var baseName = GetFullMemberName(baseExpr);
+                System.Console.WriteLine($"DEBUG Base name: {baseName}");
+                
+                // Check if this is Console.WriteLine (base will be "Console", method is WriteLine)
+                if (baseName == "Console" || baseName.EndsWith(".Console") || baseName.EndsWith("WriteLine"))
+                {
+                    // Emit arguments
+                    var args = suffixNode.Fields.ContainsKey("args") ? suffixNode.Fields["args"] : null;
+                    var argCode = "";
+                    if (args != null)
+                    {
+                        argCode = EmitArgumentList(args);
+                    }
+                    
+                    // Call imported console_log function
+                    return $";; Console.WriteLine\n{argCode}\ncall $console_log";
+                }
+            }
+            
+            // If suffix exists and is not handled above, process it
+            if (suffix != null)
+            {
+                return EmitExpression(suffix);
+            }
+            
+            return EmitExpression(baseExpr);
+        }
+        
         if (node.Fields.ContainsKey("expr"))
             return EmitExpression(node.Fields["expr"]);
         if (node.Fields.ContainsKey("literal"))
@@ -182,6 +285,16 @@ public static class WasmEmit
             // If lexeme is a string representing a number, emit it as a literal
             if (lexeme is string str)
             {
+                // Check if it's a quoted string (string literal)
+                if (str.StartsWith("\"") && str.EndsWith("\""))
+                {
+                    // This is a string literal - remove quotes and emit
+                    var text = str.Substring(1, str.Length - 2);
+                    var stringId = StringRegistry.RegisterString(text);
+                    var offset = StringRegistry.GetStringOffset(stringId);
+                    return $";; string \"{text}\" at offset {offset}\ni32.const {offset}";
+                }
+                
                 // Try to parse as integer
                 if (int.TryParse(str, out var intValue))
                 {
@@ -289,6 +402,331 @@ public static class WasmEmit
     {
         var name = GetField(node, "lexeme") ?? "unknown";
         return $"local.get ${name}";
+    }
+    
+    /// <summary>
+    /// Emit string literal.
+    /// Stores string in data section and returns pointer.
+    /// </summary>
+    private static string EmitStringLiteral(AstNode node)
+    {
+        var text = GetField(node, "lexeme") ?? "";
+        
+        // Store string in a global registry for later data section emission
+        // For now, we'll use a simple approach - just emit a comment and placeholder
+        // In a full implementation, we'd track strings and add them to data section
+        var stringId = StringRegistry.RegisterString(text);
+        var offset = StringRegistry.GetStringOffset(stringId);
+        var length = text.Length;
+        
+        // Return pointer to string in memory (offset) and length
+        // For Console.WriteLine, we'll pass both offset and length
+        return $";; string \"{text}\" at offset {offset}, length {length}\ni32.const {offset}";
+    }
+    
+    /// <summary>
+    /// Emit method invocation (function call).
+    /// </summary>
+    private static string EmitInvocationExpression(AstNode node)
+    {
+        // InvocationExpression has 'target' (the method being called) and 'args' (arguments)
+        var target = node.Fields.ContainsKey("target") ? node.Fields["target"] : null;
+        var args = node.Fields.ContainsKey("args") ? node.Fields["args"] : null;
+        
+        // Check if this is Console.WriteLine
+        if (target is AstNode targetNode)
+        {
+            var targetStr = GetMethodName(targetNode);
+            
+            // Special case for Console.WriteLine
+            if (targetStr == "Console.WriteLine" || targetStr.EndsWith(".WriteLine"))
+            {
+                // Emit arguments (string literal)
+                var argCode = "";
+                if (args != null)
+                {
+                    argCode = EmitArgumentList(args);
+                }
+                
+                // Call imported console_log function
+                return $";; Console.WriteLine\n{argCode}\ncall $console_log";
+            }
+        }
+        
+        // Generic method call
+        var targetExpr = target != null ? EmitExpression(target) : "";
+        var argsExpr = args != null ? EmitArgumentList(args) : "";
+        
+        return $";; method call\n{argsExpr}\n{targetExpr}";
+    }
+    
+    /// <summary>
+    /// Emit member access expression (obj.Member).
+    /// </summary>
+    private static string EmitMemberAccessExpression(AstNode node)
+    {
+        // MemberAccessExpression has 'target' (left side) and 'member' (right side)
+        var target = node.Fields.ContainsKey("target") ? node.Fields["target"] : null;
+        var member = node.Fields.ContainsKey("member") ? node.Fields["member"] : null;
+        
+        // For now, just concatenate with a dot for debugging
+        var targetStr = target is AstNode tn ? GetNodeName(tn) : "";
+        var memberStr = member is AstNode mn ? GetNodeName(mn) : "";
+        
+        // Return as comment for now - this needs proper implementation for field access
+        return $";; {targetStr}.{memberStr}";
+    }
+    
+    /// <summary>
+    /// Emit name segment (part of qualified name like Console.WriteLine).
+    /// </summary>
+    private static string EmitNameSegment(AstNode node)
+    {
+        // NameSegment has 'name' field which is an IdentifierName
+        var name = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
+        
+        if (name is AstNode nameNode)
+        {
+            var nameStr = GetField(nameNode, "lexeme") ?? "";
+            return $";; name segment: {nameStr}";
+        }
+        
+        return ";; name segment";
+    }
+    
+    /// <summary>
+    /// Emit argument list for method call.
+    /// </summary>
+    private static string EmitArgumentList(object? argsNode)
+    {
+        if (argsNode == null) return "";
+        
+        System.Console.WriteLine($"DEBUG EmitArgumentList: type={argsNode?.GetType().Name}, AstNode type={(argsNode as AstNode)?.Type}");
+        
+        if (argsNode is AstNode node)
+        {
+            // Print fields for debugging
+            System.Console.WriteLine($"DEBUG EmitArgumentList fields: {string.Join(", ", node.Fields.Keys)}");
+            
+            // ArgumentList has 'first' field (CDTk structure)
+            if (node.Fields.ContainsKey("first"))
+            {
+                var first = node.Fields["first"];
+                System.Console.WriteLine($"DEBUG first field type: {first?.GetType().Name}, AstNode type: {(first as AstNode)?.Type}");
+                
+                // First might be an Argument wrapper
+                if (first is AstNode firstNode)
+                {
+                    System.Console.WriteLine($"DEBUG first node type: {firstNode.Type}, fields: {string.Join(", ", firstNode.Fields.Keys)}");
+                    
+                    // Argument has 'base' field (not 'expr' as expected - CDTk quirk)
+                    if (firstNode.Type == "Argument")
+                    {
+                        var expr = firstNode.Fields.ContainsKey("base") ? firstNode.Fields["base"] : 
+                                   firstNode.Fields.ContainsKey("expr") ? firstNode.Fields["expr"] : null;
+                        
+                        if (expr != null)
+                        {
+                            System.Console.WriteLine($"DEBUG expr type: {(expr as AstNode)?.Type ?? expr?.GetType().Name}");
+                            return EmitExpression(expr);
+                        }
+                    }
+                    
+                    return EmitExpression(firstNode);
+                }
+            }
+            
+            // ArgumentList has 'args' field with list of arguments
+            if (node.Fields.ContainsKey("args"))
+            {
+                var args = node.Fields["args"];
+                
+                System.Console.WriteLine($"DEBUG args field type: {args?.GetType().Name}");
+                
+                if (args is List<AstNode> argList)
+                {
+                    var results = new List<string>();
+                    foreach (var arg in argList)
+                    {
+                        // Each arg might be an Argument wrapper
+                        if (arg.Type == "Argument" && arg.Fields.ContainsKey("expr"))
+                        {
+                            var expr = arg.Fields["expr"];
+                            results.Add(EmitExpression(expr));
+                        }
+                        else
+                        {
+                            results.Add(EmitExpression(arg));
+                        }
+                    }
+                    return string.Join("\n", results);
+                }
+                else if (args is AstNode singleArg)
+                {
+                    System.Console.WriteLine($"DEBUG single arg type: {singleArg.Type}");
+                    return EmitExpression(singleArg);
+                }
+            }
+            
+            // Might be a single expression
+            return EmitExpression(node);
+        }
+        
+        return "";
+    }
+    
+    /// <summary>
+    /// Get method name from AST node (for Console.WriteLine detection).
+    /// </summary>
+    private static string GetMethodName(AstNode node)
+    {
+        if (node.Type == "MemberAccessExpression")
+        {
+            var target = node.Fields.ContainsKey("target") ? node.Fields["target"] : null;
+            var member = node.Fields.ContainsKey("member") ? node.Fields["member"] : null;
+            
+            var targetName = target is AstNode tn ? GetNodeName(tn) : "";
+            var memberName = member is AstNode mn ? GetNodeName(mn) : "";
+            
+            return $"{targetName}.{memberName}";
+        }
+        
+        return GetNodeName(node);
+    }
+    
+    /// <summary>
+    /// Get name from AST node.
+    /// </summary>
+    private static string GetNodeName(AstNode node)
+    {
+        if (node.Fields.ContainsKey("lexeme"))
+        {
+            return node.Fields["lexeme"]?.ToString() ?? "";
+        }
+        
+        if (node.Type == "IdentifierName" || node.Type == "Identifier")
+        {
+            return GetField(node, "lexeme") ?? "";
+        }
+        
+        if (node.Type == "NameSegment" && node.Fields.ContainsKey("name"))
+        {
+            var name = node.Fields["name"];
+            if (name is AstNode nameNode)
+            {
+                return GetNodeName(nameNode);
+            }
+        }
+        
+        if (node.Type == "SimpleName" && node.Fields.ContainsKey("name"))
+        {
+            var name = node.Fields["name"];
+            if (name is AstNode nameNode)
+            {
+                return GetNodeName(nameNode);
+            }
+        }
+        
+        return node.Type;
+    }
+    
+    /// <summary>
+    /// Get full member name from AST node (e.g., "Console.WriteLine").
+    /// </summary>
+    private static string GetFullMemberName(object? node)
+    {
+        if (node == null) return "";
+        
+        if (!(node is AstNode astNode)) return "";
+        
+        // Handle UnaryExpression with base/suffix
+        if (astNode.Type == "UnaryExpression" && astNode.Fields.ContainsKey("base"))
+        {
+            var baseObj = astNode.Fields["base"];
+            return GetFullMemberName(baseObj);
+        }
+        
+        // Handle MemberAccessExpression or similar
+        if (astNode.Fields.ContainsKey("target") && astNode.Fields.ContainsKey("member"))
+        {
+            var target = GetFullMemberName(astNode.Fields["target"]);
+            var member = GetFullMemberName(astNode.Fields["member"]);
+            return $"{target}.{member}";
+        }
+        
+        // Handle QualifiedName with segments
+        if (astNode.Type == "QualifiedName" && astNode.Fields.ContainsKey("segments"))
+        {
+            var segments = astNode.Fields["segments"];
+            if (segments is AstNode segNode)
+            {
+                return GetNameFromSegments(segNode);
+            }
+        }
+        
+        // Handle NameSegments
+        if (astNode.Type == "NameSegments")
+        {
+            return GetNameFromSegments(astNode);
+        }
+        
+        // Handle NameSegment
+        if (astNode.Type == "NameSegment" && astNode.Fields.ContainsKey("name"))
+        {
+            var name = astNode.Fields["name"];
+            return GetNodeName(name as AstNode ?? astNode);
+        }
+        
+        // Try to get lexeme
+        return GetNodeName(astNode);
+    }
+    
+    /// <summary>
+    /// Get name from NameSegments structure.
+    /// </summary>
+    private static string GetNameFromSegments(AstNode node)
+    {
+        var parts = new List<string>();
+        
+        // Get first segment
+        if (node.Fields.ContainsKey("first"))
+        {
+            var first = node.Fields["first"];
+            if (first is AstNode firstNode)
+            {
+                var firstName = GetFullMemberName(firstNode);
+                if (!string.IsNullOrEmpty(firstName))
+                    parts.Add(firstName);
+            }
+        }
+        
+        // Get rest of segments
+        if (node.Fields.ContainsKey("rest"))
+        {
+            var rest = node.Fields["rest"];
+            if (rest is AstNode restNode)
+            {
+                // rest might be NameSegmentRest or another NameSegments
+                if (restNode.Type == "NameSegmentRest" && restNode.Fields.ContainsKey("segment"))
+                {
+                    var seg = restNode.Fields["segment"];
+                    if (seg is AstNode segNode)
+                    {
+                        var segName = GetFullMemberName(segNode);
+                        if (!string.IsNullOrEmpty(segName))
+                            parts.Add(segName);
+                    }
+                }
+                else
+                {
+                    var restName = GetFullMemberName(restNode);
+                    if (!string.IsNullOrEmpty(restName))
+                        parts.Add(restName);
+                }
+            }
+        }
+        
+        return string.Join(".", parts);
     }
     
     /// <summary>
@@ -819,9 +1257,13 @@ public class WASM : MapSet
     public Map CompilationUnit = @"(module
   ;; Imports
   (import ""env"" ""memory"" (memory 1))
+  (import ""env"" ""console_log"" (func $console_log (param i32)))
   
   ;; Generated members
 {items}
+  
+  ;; Exports
+  (export ""main"" (func $Main))
 )";
     
     /// <summary>Namespace member declarations</summary>
@@ -830,12 +1272,250 @@ public class WASM : MapSet
     /// <summary>Single namespace member</summary>
     public Map NamespaceMemberDeclaration = "{member}";
     
-    /// <summary>Namespace declaration (flattened in WASM)</summary>
-    public Map NamespaceDeclaration = @";; namespace {name}
-{body}";
+    /// <summary>Namespace declaration - this is now processed inline from CompilationUnitItem, so this shouldn't be called</summary>
+    public Map<AstNode, string> NamespaceDeclaration = TypedMap.For<string>()
+        .Emit(node => {
+            // This should not be called anymore since we process it inline
+            return ProcessNamespaceDeclarationInline(node);
+        });
     
-    /// <summary>Namespace body</summary>
-    public Map NamespaceBody = "{members}";
+    /// <summary>
+    /// Process a namespace item (using directive, namespace, or type).
+    /// </summary>
+    private static string ProcessNamespaceItem(AstNode item)
+    {
+        // Skip using directives
+        if (item.Type.Contains("Using"))
+            return ";; using ;";
+        
+        // For NamespaceMemberDeclaration, unwrap to get the actual member
+        if (item.Type == "NamespaceMemberDeclaration" && item.Fields.ContainsKey("member"))
+        {
+            var member = item.Fields["member"];
+            if (member is AstNode memberNode)
+                return ProcessTypeDeclaration(memberNode);
+        }
+        
+        // Direct type declarations
+        return ProcessTypeDeclaration(item);
+    }
+    
+    /// <summary>
+    /// Process a type declaration (class, struct, etc).
+    /// For now, we can only handle classes inline. Methods require the MethodDeclaration typed Map.
+    /// </summary>
+    private static string ProcessTypeDeclaration(AstNode typeNode)
+    {
+        // TypeDeclaration is a wrapper - unwrap it
+        if (typeNode.Type == "TypeDeclaration" && typeNode.Fields.ContainsKey("type"))
+        {
+            var actualType = typeNode.Fields["type"];
+            if (actualType is AstNode actualTypeNode)
+                return ProcessTypeDeclaration(actualTypeNode);
+        }
+        
+        if (typeNode.Type == "ClassDeclaration")
+        {
+            // Extract class name (in mods field due to field shifting)
+            string className = "";
+            if (typeNode.Fields.ContainsKey("mods") && typeNode.Fields["mods"] is AstNode modsNode)
+            {
+                if (modsNode.Type == "Identifier" && modsNode.Fields.ContainsKey("lexeme"))
+                    className = modsNode.Fields["lexeme"]?.ToString() ?? "";
+            }
+            
+            var output = new System.Text.StringBuilder();
+            output.AppendLine($";; class {className}");
+            
+            // Get class body (in name field due to field shifting)
+            if (typeNode.Fields.ContainsKey("name") && typeNode.Fields["name"] is AstNode bodyNode)
+            {
+                System.Console.WriteLine($"DEBUG: ClassBody type={bodyNode.Type}, fields={string.Join(", ", bodyNode.Fields.Keys)}");
+                
+                // ClassBody has members field
+                if (bodyNode.Fields.ContainsKey("members") && bodyNode.Fields["members"] is AstNode membersNode)
+                {
+                    System.Console.WriteLine($"DEBUG: ClassMemberDeclarations type={membersNode.Type}, fields={string.Join(", ", membersNode.Fields.Keys)}");
+                    
+                    // ClassMemberDeclarations has members field (linked list or single node)
+                    if (membersNode.Fields.ContainsKey("members"))
+                    {
+                        var members = membersNode.Fields["members"];
+                        System.Console.WriteLine($"DEBUG: members type={members?.GetType().Name}");
+                        
+                        if (members is List<AstNode> memberList)
+                        {
+                            System.Console.WriteLine($"DEBUG: members list has {memberList.Count} items");
+                            
+                            foreach (var memberDecl in memberList)
+                            {
+                                ProcessClassMemberDeclaration(memberDecl, output);
+                            }
+                        }
+                        else if (members is AstNode memberNode)
+                        {
+                            System.Console.WriteLine($"DEBUG: members is single AstNode, will iterate");
+                            
+                            // Iterate through linked list of members
+                            var current = memberNode;
+                            while (current != null)
+                            {
+                                ProcessClassMemberDeclaration(current, output);
+                                
+                                // Check for next member in the chain
+                                if (current.Fields.ContainsKey("next") && current.Fields["next"] is AstNode next)
+                                {
+                                    current = next;
+                                }
+                                else
+                                {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return output.ToString();
+        }
+        
+        return "";
+    }
+    
+    /// <summary>
+    /// Process a single class member declaration.
+    /// </summary>
+    private static void ProcessClassMemberDeclaration(AstNode memberDecl, System.Text.StringBuilder output)
+    {
+        System.Console.WriteLine($"DEBUG: memberDecl type={memberDecl.Type}, fields={string.Join(", ", memberDecl.Fields.Keys)}");
+        
+        // ClassMemberDeclaration has member field
+        if (memberDecl.Fields.ContainsKey("member") && memberDecl.Fields["member"] is AstNode actualMember)
+        {
+            System.Console.WriteLine($"DEBUG: actualMember type={actualMember.Type}");
+            
+            // For MethodDeclaration, we need to inline the processing
+            if (actualMember.Type == "MethodDeclaration")
+            {
+                System.Console.WriteLine($"DEBUG: Calling EmitMethodDeclarationInline");
+                var methodOutput = EmitMethodDeclarationInline(actualMember);
+                System.Console.WriteLine($"DEBUG: methodOutput length={methodOutput?.Length}");
+                if (!string.IsNullOrWhiteSpace(methodOutput))
+                    output.Append(methodOutput);
+            }
+        }
+    }
+    
+    /// <summary>
+    /// Emit a method declaration inline (duplicate of MethodDeclaration typed Map logic).
+    /// This is needed because we can't call the MethodDeclaration typed Map from within this typed Map.
+    /// </summary>
+    private static string EmitMethodDeclarationInline(AstNode node)
+    {
+        // Extract fields
+        var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
+        var attrsField = node.Fields.ContainsKey("attrs") ? node.Fields["attrs"] : null;
+        var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
+        var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
+        
+        string funcName = "";
+        string resultType = "";
+        string parameters = "";
+        string body = "";
+        
+        // Detect case by checking if mods is an Identifier
+        if (modsField is AstNode modsNode && modsNode.Type == "Identifier")
+        {
+            // WITH params case
+            funcName = modsNode.Fields.ContainsKey("lexeme") ? modsNode.Fields["lexeme"]?.ToString() ?? "" : "";
+            
+            if (attrsField is AstNode attrsType)
+                resultType = ExtractTypeFromNode(attrsType);
+            
+            if (returnTypeField != null)
+                parameters = EmitParameterList(returnTypeField);
+            
+            if (nameField is AstNode bodyNode)
+            {
+                if (bodyNode.Fields.ContainsKey("body"))
+                    body = WasmEmit.EmitStatement(bodyNode.Fields["body"]);
+                else
+                    body = WasmEmit.EmitStatement(bodyNode);
+            }
+        }
+        else
+        {
+            // NO params case
+            if (returnTypeField is AstNode idNode && idNode.Type == "Identifier" && idNode.Fields.ContainsKey("lexeme"))
+                funcName = idNode.Fields["lexeme"]?.ToString() ?? "";
+            
+            if (modsField is AstNode modsType)
+                resultType = ExtractTypeFromNode(modsType);
+            
+            if (nameField is AstNode bodyNode)
+            {
+                // DEBUG: Print body structure
+                System.Console.WriteLine($"DEBUG Body node type: {bodyNode.Type}");
+                System.Console.WriteLine($"DEBUG Body fields: {string.Join(", ", bodyNode.Fields.Keys)}");
+                if (bodyNode.Fields.ContainsKey("body"))
+                {
+                    var innerBody = bodyNode.Fields["body"];
+                    System.Console.WriteLine($"DEBUG Inner body type: {(innerBody as AstNode)?.Type ?? innerBody?.GetType().Name}");
+                    if (innerBody is AstNode ibn)
+                    {
+                        System.Console.WriteLine($"DEBUG Inner body fields: {string.Join(", ", ibn.Fields.Keys)}");
+                        if (ibn.Fields.ContainsKey("stmts"))
+                        {
+                            var stmts = ibn.Fields["stmts"];
+                            System.Console.WriteLine($"DEBUG Stmts type: {stmts?.GetType().Name}");
+                            if (stmts is AstNode sn)
+                            {
+                                System.Console.WriteLine($"DEBUG Stmts node type: {sn.Type}");
+                                System.Console.WriteLine($"DEBUG Stmts fields: {string.Join(", ", sn.Fields.Keys)}");
+                            }
+                        }
+                    }
+                    body = WasmEmit.EmitStatement(bodyNode.Fields["body"]);
+                }
+                else
+                    body = WasmEmit.EmitStatement(bodyNode);
+            }
+        }
+        
+        // Build the function
+        var sb = new System.Text.StringBuilder();
+        sb.Append($"(func ${funcName}");
+        
+        if (!string.IsNullOrWhiteSpace(parameters))
+        {
+            sb.Append("\n  ");
+            sb.Append(parameters);
+        }
+        
+        if (!string.IsNullOrWhiteSpace(resultType))
+        {
+            sb.Append("\n  (result ");
+            sb.Append(resultType);
+            sb.Append(")");
+        }
+        
+        if (!string.IsNullOrWhiteSpace(body))
+        {
+            sb.Append("\n  ");
+            sb.Append(body);
+        }
+        
+        sb.Append("\n)\n");
+        return sb.ToString();
+    }
+
+    
+    /// <summary>Namespace body - emits items (list gets unwrapped by dispatcher patterns)</summary>
+    public Map NamespaceBody = "{items}";
+    
+    /// <summary>Namespace body item</summary>
+    public Map NamespaceBodyItem = "{item}";
     
     // ============================================================
     // TYPE DECLARATIONS
@@ -863,14 +1543,13 @@ public class WASM : MapSet
     /// This will be fixed when CDTk parser is updated.
     /// </summary>
     public Map ClassDeclaration = @";; class {mods}
-(type ${mods} (struct
-{name}
-))";
+{name}";
     
     /// <summary>
     /// Class body - generates class members.
     /// Due to CDTk parser bug with field shifting, this Map is referenced via {name} in ClassDeclaration.
     /// Returns the members field from the ClassBody AST node.
+    /// For WASM MVP, we skip the class wrapper and just emit methods at module level.
     /// </summary>
     public Map ClassBody = "{members}";
     
@@ -901,37 +1580,200 @@ public class WASM : MapSet
     
     /// <summary>
     /// Method declaration - primary compilation target.
-    /// WORKAROUND for CDTk field-shifting bug.
-    /// 
-    /// Field assignments due to CDTk bug:
-    /// - NO params: attrs=Type, mods=Identifier, returnType=MethodBody, name=empty
-    /// - WITH params: attrs=Type, mods=Identifier, returnType=FormalParameterList, name=MethodBody
-    /// 
-    /// We put returnType (params or body) before result, then name (body or empty) after.
-    /// This works because:
-    /// - NO params: body comes first (wrong but at least renders), result after, empty name
-    /// - WITH params: params first (correct!), result after, body last (correct!)
-    /// 
-    /// TODO: Fix CDTk parser to assign fields by pattern labels, not Returns() order
-    /// 
-    /// Additional context for OOP implementation:
-    /// For virtual methods, a vtable dispatch mechanism should be added by semantic analysis.
-    /// For interface methods, interface dispatch tables should be generated.
-    /// Once CDTk parser is fixed, the proper structure should be:
-    ///   (func ${name}
-    ///     (param {parameters})
-    ///     (result {returnType})
-    ///   {body}
-    ///   )
+    /// Uses typed Map to work around CDTk field-shifting bug.
     /// </summary>
-    public Map MethodDeclaration = @"(func ${mods}
-{returnType}
-  (result {attrs})
-{name}
-)";
+    public Map<AstNode, string> MethodDeclaration = TypedMap.For<string>()
+        .Emit(node => {
+            if (node == null) return "";
+            
+            // Extract fields
+            var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
+            var attrsField = node.Fields.ContainsKey("attrs") ? node.Fields["attrs"] : null;
+            var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
+            var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
+            var bodyField = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
+            
+            string funcName = "";
+            string resultType = "";
+            string parameters = "";
+            string body = "";
+            
+            // Detect case by checking if mods is an Identifier
+            if (modsField is AstNode modsNode && modsNode.Type == "Identifier")
+            {
+                // WITH params: mods=Identifier, attrs=Type, returnType=FormalParameterList, name=MethodBody
+                funcName = modsNode.Fields.ContainsKey("lexeme") ? modsNode.Fields["lexeme"]?.ToString() ?? "" : "";
+                
+                // Get result type from attrs (Type node)
+                if (attrsField is AstNode attrsType)
+                {
+                    resultType = ExtractTypeFromNode(attrsType);
+                }
+                
+                // Get parameters from returnType (FormalParameterList)
+                if (returnTypeField != null)
+                {
+                    parameters = EmitParameterList(returnTypeField);
+                }
+                
+                // Get body from name (MethodBody -> Block)
+                if (nameField is AstNode bodyNode)
+                {
+                    // MethodBody has a 'body' field containing the actual Block
+                    if (bodyNode.Fields.ContainsKey("body"))
+                    {
+                        body = WasmEmit.EmitStatement(bodyNode.Fields["body"]);
+                    }
+                    else
+                    {
+                        body = WasmEmit.EmitStatement(bodyNode);
+                    }
+                }
+            }
+            else
+            {
+                // NO params: attrs=Modifiers, mods=Type, returnType=Identifier, name=empty or body
+                
+                // Get function name from returnType (Identifier)
+                if (returnTypeField is AstNode idNode && idNode.Type == "Identifier" && idNode.Fields.ContainsKey("lexeme"))
+                {
+                    funcName = idNode.Fields["lexeme"]?.ToString() ?? "";
+                }
+                
+                // Get result type from mods (Type node)
+                if (modsField is AstNode modsType)
+                {
+                    resultType = ExtractTypeFromNode(modsType);
+                }
+                
+                // Try to get body from name field (which contains MethodBody for NO params)
+                if (nameField is AstNode bodyNode)
+                {
+                    // MethodBody has a 'body' field containing the actual Block
+                    if (bodyNode.Fields.ContainsKey("body"))
+                    {
+                        body = WasmEmit.EmitStatement(bodyNode.Fields["body"]);
+                    }
+                    else
+                    {
+                        body = WasmEmit.EmitStatement(bodyNode);
+                    }
+                }
+                else if (bodyField != null)
+                {
+                    body = WasmEmit.EmitStatement(bodyField);
+                }
+            }
+            
+            // Build the function
+            var sb = new System.Text.StringBuilder();
+            sb.Append($"(func ${funcName}");
+            
+            if (!string.IsNullOrWhiteSpace(parameters))
+            {
+                sb.Append("\n  ");
+                sb.Append(parameters);
+            }
+            
+            if (!string.IsNullOrWhiteSpace(resultType))
+            {
+                sb.Append("\n  (result ");
+                sb.Append(resultType);
+                sb.Append(")");
+            }
+            
+            if (!string.IsNullOrWhiteSpace(body))
+            {
+                sb.Append("\n  ");
+                sb.Append(body);
+            }
+            
+            sb.Append("\n)");
+            return sb.ToString();
+        });
+    
+    private static string MapCSharpTypeToWasm(string typeName)
+    {
+        return typeName switch
+        {
+            "int" => "i32",
+            "uint" => "i32",
+            "byte" => "i32",
+            "sbyte" => "i32",
+            "short" => "i32",
+            "ushort" => "i32",
+            "bool" => "i32",
+            "char" => "i32",
+            "long" => "i64",
+            "ulong" => "i64",
+            "float" => "f32",
+            "double" => "f64",
+            "void" => "",
+            _ => "i32" // Default
+        };
+    }
+    
+    /// <summary>
+    /// Extract WASM type from Type AST node by recursively traversing structure.
+    /// </summary>
+    private static string ExtractTypeFromNode(AstNode typeNode)
+    {
+        if (typeNode == null) return "";
+        
+        // Direct lexeme (simple type like "int")
+        if (typeNode.Fields.ContainsKey("lexeme"))
+        {
+            var typeName = typeNode.Fields["lexeme"]?.ToString() ?? "";
+            return MapCSharpTypeToWasm(typeName);
+        }
+        
+        // Type has a 'type' field (common pattern)
+        if (typeNode.Fields.ContainsKey("type"))
+        {
+            var innerType = typeNode.Fields["type"];
+            if (innerType is AstNode innerNode)
+            {
+                return ExtractTypeFromNode(innerNode);
+            }
+        }
+        
+        // Type has a 'base' field
+        if (typeNode.Fields.ContainsKey("base"))
+        {
+            var baseType = typeNode.Fields["base"];
+            if (baseType is AstNode baseNode)
+            {
+                return ExtractTypeFromNode(baseNode);
+            }
+        }
+        
+        // Look for any Identifier with lexeme
+        foreach (var field in typeNode.Fields.Values)
+        {
+            if (field is AstNode node)
+            {
+                if (node.Type == "Identifier" && node.Fields.ContainsKey("lexeme"))
+                {
+                    var typeName = node.Fields["lexeme"]?.ToString() ?? "";
+                    return MapCSharpTypeToWasm(typeName);
+                }
+                
+                // Recursively search nested nodes
+                if (node.Type == "SimpleName" || node.Type == "NamedType" || node.Type.Contains("Type"))
+                {
+                    var result = ExtractTypeFromNode(node);
+                    if (!string.IsNullOrEmpty(result))
+                        return result;
+                }
+            }
+        }
+        
+        return "";
+    }
     
     /// <summary>Field declaration - TODO: properly handle multiple declarators</summary>
     public Map FieldDeclaration = ";; field {type}";
+
     
     /// <summary>
     /// Constructor declaration - CTGC analyzes object initialization.
@@ -1098,7 +1940,7 @@ public class WASM : MapSet
     /// Variable declaration - potential allocation site.
     /// If initialized with 'new', AutomaticModel tracks this allocation and computes deallocation point.
     /// </summary>
-    public Map LocalVariableDeclaration = "(local ${name} {type})";
+    public Map LocalVariableDeclaration = "{modifier} (local {type} {declarators})";
     
     /// <summary>
     /// Constant declaration - if initialized with allocation, tracked by AutomaticModel.
@@ -1170,7 +2012,7 @@ public class WASM : MapSet
 (struct.new $Range {start} {end})";
     
     /// <summary>Unary expression dispatcher</summary>
-    public Map UnaryExpression = "{expr}";
+    public Map UnaryExpression = "{base}{suffix}{expr}";
     
     /// <summary>Unary operator expression</summary>
     public Map UnaryOperatorExpression = "({op} {operand})";
@@ -1372,7 +2214,7 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Type dispatcher</summary>
-    public Map Type = "{base}";
+    public Map Type = "{base}{suffixes}";
     
     /// <summary>Primitive type - signed byte</summary>
     public Map SByteType = "i32";
@@ -1451,13 +2293,13 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Simple name (identifier)</summary>
-    public Map SimpleName = "{name}";
+    public Map SimpleName = "{name}{typeArgs}";
     
     /// <summary>Identifier name</summary>
-    public Map IdentifierName = "(local.get ${name})";
+    public Map IdentifierName = "";  // Just the name, no WASM code - used in namespaces, types, etc.
     
     /// <summary>Qualified name (namespace.type)</summary>
-    public Map QualifiedName = "{name}";
+    public Map QualifiedName = "{global}{segments}";
     
     // ============================================================
     // MODIFIERS AND ATTRIBUTES
@@ -1467,7 +2309,7 @@ public class WASM : MapSet
     public Map Modifiers = ";; modifiers: {mods}";
     
     /// <summary>Single modifier</summary>
-    public Map Modifier = "";
+    public Map Modifier = "{mod}";
     
     /// <summary>Attribute sections (ignored in basic WASM)</summary>
     public Map AttributeSections = "";
@@ -1496,6 +2338,12 @@ public class WASM : MapSet
         if (paramsNode == null) return "";
         
         if (!(paramsNode is AstNode node)) return "";
+        
+        // Handle FormalParameterList -> extract params field
+        if (node.Type == "FormalParameterList" && node.Fields.ContainsKey("params"))
+        {
+            return EmitParameterList(node.Fields["params"]);
+        }
         
         // Handle FormalParameterListContent
         if (node.Type == "FormalParameterListContent" && node.Fields.ContainsKey("params"))
@@ -1526,6 +2374,13 @@ public class WASM : MapSet
                                 results.Add(paramStr);
                         }
                     }
+                }
+                else if (paramsField is AstNode singleParam)
+                {
+                    // Single parameter
+                    var paramStr = EmitSingleParameter(singleParam);
+                    if (!string.IsNullOrWhiteSpace(paramStr))
+                        results.Add(paramStr);
                 }
             }
             
@@ -1597,27 +2452,7 @@ public class WASM : MapSet
     /// </summary>
     private static string MapTypeNodeToWasm(AstNode typeNode)
     {
-        // For simple types, look for a lexeme
-        if (typeNode.Fields.ContainsKey("lexeme"))
-        {
-            var lexeme = typeNode.Fields["lexeme"];
-            if (lexeme is string str)
-                return WasmEmit.MapCSharpTypeToWasm(str);
-            if (lexeme is TokenInstance token)
-                return WasmEmit.MapCSharpTypeToWasm(token.Lexeme);
-        }
-        
-        // Try the type field
-        if (typeNode.Fields.ContainsKey("type"))
-        {
-            var typeField = typeNode.Fields["type"];
-            if (typeField is AstNode childType)
-                return MapTypeNodeToWasm(childType);
-            if (typeField is string str)
-                return WasmEmit.MapCSharpTypeToWasm(str);
-        }
-        
-        return "i32"; // Default
+        return ExtractTypeFromNode(typeNode);
     }
     
     /// <summary>Formal parameter list</summary>
@@ -1627,7 +2462,7 @@ public class WASM : MapSet
     public Map FixedParameter = "(param ${name} {type})";
     
     /// <summary>Argument list</summary>
-    public Map ArgumentList = "{args}";
+    public Map ArgumentList = "{first}{rest}";
     
     /// <summary>Positional argument</summary>
     public Map PositionalArgument = "{expr}";
@@ -1922,7 +2757,7 @@ public class WASM : MapSet
     public Map AttributeList = "{attributes}";
     
     /// <summary>Attribute section</summary>
-    public Map AttributeSection = ";; {attributes}";
+    public Map AttributeSection = ";; {target} {attributes}";
     
     /// <summary>Attribute target (assembly, module, etc.)</summary>
     public Map AttributeTarget = "{target}";
@@ -2007,7 +2842,7 @@ public class WASM : MapSet
     public Map TypeParameterConstraints = "{constraints}";
     
     /// <summary>Type parameter constraints clause</summary>
-    public Map TypeParameterConstraintsClause = ";; where {typeParam} : {constraints}";
+    public Map TypeParameterConstraintsClause = ";; where {name} : {constraints}";
     
     /// <summary>Type parameter constraints clauses</summary>
     public Map TypeParameterConstraintsClauses = "{clauses}";
@@ -2020,7 +2855,7 @@ public class WASM : MapSet
     /// - Constraint checking at instantiation sites
     /// - Generic method specialization
     /// </summary>
-    public Map TypeParameter = "{name}";
+    public Map TypeParameter = "{attrs}{variance}{name}";
     
     /// <summary>
     /// Type parameter list - <T1, T2, ...>
@@ -2157,7 +2992,7 @@ public class WASM : MapSet
     public Map ArgumentModifier = "{modifier}";
     
     /// <summary>Argument rest (additional arguments)</summary>
-    public Map ArgumentRest = "{rest}";
+    public Map ArgumentRest = "{arg}";
     
     /// <summary>Named argument list</summary>
     public Map NamedArgumentList = "{args}";
@@ -2339,7 +3174,7 @@ public class WASM : MapSet
     public Map UnaryExpressionSuffixes = "{suffixes}";
     
     /// <summary>Member access suffix (.member)</summary>
-    public Map MemberAccessSuffix = ".{member}";
+    public Map MemberAccessSuffix = "{accessor}.{member}{typeArgs}";
     
     /// <summary>Element access suffix ([index])</summary>
     public Map ElementAccessSuffix = "[{indices}]";
@@ -2397,7 +3232,7 @@ public class WASM : MapSet
     public Map FloatingPointType = "f64";
     
     /// <summary>Named type (user-defined type)</summary>
-    public Map NamedType = "(ref ${name})";
+    public Map NamedType = "(ref ${name}{typeArgs})";
     
     /// <summary>Ref type (ref T)</summary>
     public Map RefType = "(ref {type})";
@@ -2453,23 +3288,162 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>Name segment</summary>
-    public Map NameSegment = "{segment}";
+    public Map NameSegment = "{name}{typeArgs}";
     
     /// <summary>Name segment rest</summary>
-    public Map NameSegmentRest = "{rest}";
+    public Map NameSegmentRest = "{segment}";
     
     /// <summary>Name segments</summary>
-    public Map NameSegments = "{segments}";
+    public Map NameSegments = "{first}{rest}";
     
-    /// <summary>Compilation unit item (using, namespace, type)</summary>
-    public Map CompilationUnitItem = "{item}";
+    /// <summary>Compilation unit item (using, namespace, type) - manually process since typed Maps can't return placeholders</summary>
+    public Map<AstNode, string> CompilationUnitItem = TypedMap.For<string>()
+        .Emit(node => {
+            if (node == null) return "";
+            
+            System.Console.WriteLine($"DEBUG CompilationUnitItem: type={node.Type}, fields={string.Join(", ", node.Fields.Keys)}");
+            
+            if (!node.Fields.ContainsKey("item")) return "";
+            var item = node.Fields["item"];
+            if (!(item is AstNode itemNode)) return "";
+            
+            System.Console.WriteLine($"DEBUG CompilationUnitItem.item: type={itemNode.Type}");
+            
+            // Process based on item type
+            if (itemNode.Type.Contains("Using"))
+                return ";; using ;";
+            
+            if (itemNode.Type == "NamespaceMemberDeclaration")
+            {
+                // Unwrap to get the actual member
+                if (itemNode.Fields.ContainsKey("member") && itemNode.Fields["member"] is AstNode member)
+                {
+                    System.Console.WriteLine($"DEBUG NamespaceMemberDeclaration.member: type={member.Type}");
+                    
+                    // Could be NamespaceDeclaration or TypeDeclaration
+                    if (member.Type == "NamespaceDeclaration")
+                    {
+                        System.Console.WriteLine($"DEBUG Processing NamespaceDeclaration");
+                        return ProcessNamespaceDeclarationInline(member);
+                    }
+                    else
+                    {
+                        System.Console.WriteLine($"DEBUG Processing TypeDeclaration: {member.Type}");
+                        return ProcessTypeDeclaration(member);
+                    }
+                }
+                else
+                {
+                    System.Console.WriteLine($"DEBUG NamespaceMemberDeclaration has no member field or it's not AstNode");
+                }
+            }
+            
+            System.Console.WriteLine($"DEBUG Returning empty for item type {itemNode.Type}");
+            return "";
+        });
     
-    /// <summary>Namespace body item</summary>
-    public Map NamespaceBodyItem = "{item}";
+    /// <summary>
+    /// Process a NamespaceDeclaration inline.
+    /// </summary>
+    private static string ProcessNamespaceDeclarationInline(AstNode nsNode)
+    {
+        System.Console.WriteLine($"DEBUG ProcessNamespaceDeclarationInline: fields={string.Join(", ", nsNode.Fields.Keys)}");
+        
+        // Check all fields
+        foreach (var kvp in nsNode.Fields)
+        {
+            var value = kvp.Value;
+            System.Console.WriteLine($"DEBUG field {kvp.Key}: type={value?.GetType().Name}, AstNode type={(value as AstNode)?.Type}");
+        }
+        
+        // Find the NamespaceBody in any field
+        AstNode? bodyNode = null;
+        foreach (var kvp in nsNode.Fields)
+        {
+            if (kvp.Value is AstNode astNode && astNode.Type == "NamespaceBody")
+            {
+                System.Console.WriteLine($"DEBUG Found NamespaceBody in field: {kvp.Key}");
+                bodyNode = astNode;
+                break;
+            }
+        }
+        
+        if (bodyNode == null)
+        {
+            System.Console.WriteLine($"DEBUG No NamespaceBody found in any field");
+            return "";
+        }
+        
+        System.Console.WriteLine($"DEBUG NamespaceBody: type={bodyNode.Type}, fields={string.Join(", ", bodyNode.Fields.Keys)}");
+        
+        // NamespaceBody has items field
+        if (!bodyNode.Fields.ContainsKey("items"))
+        {
+            System.Console.WriteLine($"DEBUG NamespaceBody: no items field");
+            return "";
+        }
+        
+        var items = bodyNode.Fields["items"];
+        System.Console.WriteLine($"DEBUG NamespaceBody.items: type={items?.GetType().Name}");
+        
+        var results = new List<string>();
+        
+        // Process list of NamespaceBodyItem
+        if (items is List<AstNode> itemList)
+        {
+            System.Console.WriteLine($"DEBUG NamespaceBody.items is list with {itemList.Count} items");
+            
+            foreach (var bodyItem in itemList)
+            {
+                // NamespaceBodyItem has item field
+                if (bodyItem.Fields.ContainsKey("item") && bodyItem.Fields["item"] is AstNode item)
+                {
+                    // Process based on item type
+                    string itemOutput = ProcessNamespaceItem(item);
+                    if (!string.IsNullOrWhiteSpace(itemOutput))
+                        results.Add(itemOutput);
+                }
+            }
+        }
+        else if (items is AstNode itemNode)
+        {
+            System.Console.WriteLine($"DEBUG NamespaceBody.items is single AstNode");
+            
+            // Single item or linked list
+            var current = itemNode;
+            while (current != null)
+            {
+                if (current.Fields.ContainsKey("item") && current.Fields["item"] is AstNode item)
+                {
+                    string itemOutput = ProcessNamespaceItem(item);
+                    if (!string.IsNullOrWhiteSpace(itemOutput))
+                        results.Add(itemOutput);
+                }
+                
+                // Check for next
+                if (current.Fields.ContainsKey("next") && current.Fields["next"] is AstNode next)
+                {
+                    current = next;
+                }
+                else
+                {
+                    break;
+                }
+            }
+        }
+        else
+        {
+            System.Console.WriteLine($"DEBUG NamespaceBody.items is neither list nor AstNode");
+        }
+        
+        return string.Join("\n", results);
+    }
+
     
     /// <summary>File-scoped namespace declaration (C# 10+)</summary>
     public Map FileScopedNamespaceDeclaration = @";; namespace {name};
-{body}";
+{members}";
+
     
     /// <summary>Global prefix (::)</summary>
     public Map GlobalPrefix = "::";
@@ -2478,13 +3452,13 @@ public class WASM : MapSet
     public Map ExternAliasDirective = ";; extern alias {name};";
     
     /// <summary>Using directive</summary>
-    public Map UsingDirective = ";; using {name};";
+    public Map UsingDirective = ";; {directive}";
     
     /// <summary>Using namespace directive</summary>
-    public Map UsingNamespaceDirective = ";; using {namespace};";
+    public Map UsingNamespaceDirective = "using ;";
     
     /// <summary>Using alias directive</summary>
-    public Map UsingAliasDirective = ";; using {alias} = {target};";
+    public Map UsingAliasDirective = "using ;";
     
     /// <summary>Using static directive</summary>
     public Map UsingStaticDirective = ";; using static {type};";
