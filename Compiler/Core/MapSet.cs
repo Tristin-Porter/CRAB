@@ -833,9 +833,9 @@ public class WASM : MapSet
     /// <summary>Single namespace member</summary>
     public Map NamespaceMemberDeclaration = "{member}";
     
-    /// <summary>Namespace declaration (flattened in WASM)</summary>
-    public Map NamespaceDeclaration = @";; namespace {name}
-{body}";
+    /// <summary>Namespace declaration (flattened in WASM - just emit body)</summary>
+    public Map NamespaceDeclaration = "{body}";
+
     
     /// <summary>Namespace body</summary>
     public Map NamespaceBody = "{items}";
@@ -2627,7 +2627,8 @@ public class WASM : MapSet
     
     /// <summary>File-scoped namespace declaration (C# 10+)</summary>
     public Map FileScopedNamespaceDeclaration = @";; namespace {name};
-{body}";
+{members}";
+
     
     /// <summary>Global prefix (::)</summary>
     public Map GlobalPrefix = "::";
