@@ -206,53 +206,480 @@ public static class WasmJS
     {
         var info = new ModuleInfo();
         
-        // TODO: CRITICAL - Implement proper WAT text parser
-        // This function currently ignores the watText parameter and returns a hardcoded module.
-        // This is why WASM always outputs 42 regardless of the actual code.
-        //
-        // To fix this properly, we need to:
-        // 1. Parse the WAT text format (WebAssembly Text) into an AST
-        // 2. Extract all sections: imports, functions, exports, data, etc.
-        // 3. Convert WAT instructions to binary opcodes
-        // 4. Encode everything according to WASM binary format spec
-        //
-        // The watText parameter contains valid WAT like:
-        //   (module
-        //     (import "env" "console_log" (func $console_log (param i32)))
-        //     (func $Main
-        //       i32.const 0
-        //       call $console_log)
-        //     (export "main" (func $Main)))
-        //
-        // For now, this returns a minimal placeholder module that returns 42.
-        // Use external tools like wat2wasm to convert WAT to proper WASM binary.
+        // Parse WAT text format into module structure
+        // WAT is S-expression based format: (module ...)
         
-        // Placeholder implementation - always returns 42
-        info.TypeSection.Add(new FunctionType
+        // Remove comments and normalize whitespace
+        watText = RemoveWatComments(watText);
+        
+        // Parse the module
+        var tokens = TokenizeWat(watText);
+        if (tokens.Count == 0) return info;
+        
+        // Find module boundaries  
+        int moduleStart = -1;
+        for (int i = 0; i < tokens.Count - 1; i++)
         {
-            Parameters = new List<string>(),
-            Results = new List<string> { "i32" }
-        });
-        
-        info.FunctionSection.Add(0); // Function uses type 0
-        
-        info.CodeSection.Add(new FunctionCode
-        {
-            Locals = new List<string>(),
-            Instructions = new List<byte> 
-            { 
-                0x41, 0x2A  // i32.const 42 (placeholder)
+            if (tokens[i] == "(" && tokens[i + 1] == "module")
+            {
+                moduleStart = i;
+                break;
             }
-        });
+        }
+        if (moduleStart == -1) return info;
         
-        info.ExportSection.Add(new Export
+        // Parse sections within module
+        int pos = moduleStart + 1;
+        while (pos < tokens.Count)
         {
-            Name = "main",
-            Kind = 0x00, // function
-            Index = 0
-        });
+            if (tokens[pos] == ")")
+                break;
+                
+            if (tokens[pos] == "(" && pos + 1 < tokens.Count)
+            {
+                string keyword = tokens[pos + 1];
+                if (keyword == "import")
+                {
+                    pos = ParseImport(tokens, pos, info);
+                }
+                else if (keyword == "memory")
+                {
+                    pos = ParseMemory(tokens, pos, info);
+                }
+                else if (keyword == "func")
+                {
+                    pos = ParseFunction(tokens, pos, info);
+                }
+                else if (keyword == "export")
+                {
+                    pos = ParseExport(tokens, pos, info);
+                }
+                else if (keyword == "data")
+                {
+                    pos = ParseData(tokens, pos, info);
+                }
+                else
+                {
+                    pos++;
+                }
+            }
+            else
+            {
+                pos++;
+            }
+        }
         
         return info;
+    }
+    
+    private static string RemoveWatComments(string wat)
+    {
+        // Remove line comments (;;...)
+        var lines = wat.Split('\n');
+        var result = new StringBuilder();
+        foreach (var line in lines)
+        {
+            int commentPos = line.IndexOf(";;");
+            if (commentPos >= 0)
+                result.AppendLine(line.Substring(0, commentPos));
+            else
+                result.AppendLine(line);
+        }
+        return result.ToString();
+    }
+    
+    private static List<string> TokenizeWat(string wat)
+    {
+        var tokens = new List<string>();
+        var current = new StringBuilder();
+        bool inString = false;
+        
+        for (int i = 0; i < wat.Length; i++)
+        {
+            char c = wat[i];
+            
+            if (c == '"')
+            {
+                if (inString)
+                {
+                    current.Append(c);
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                    inString = false;
+                }
+                else
+                {
+                    if (current.Length > 0)
+                    {
+                        tokens.Add(current.ToString());
+                        current.Clear();
+                    }
+                    current.Append(c);
+                    inString = true;
+                }
+            }
+            else if (inString)
+            {
+                current.Append(c);
+            }
+            else if (c == '(' || c == ')')
+            {
+                if (current.Length > 0)
+                {
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                }
+                tokens.Add(c.ToString());
+            }
+            else if (char.IsWhiteSpace(c))
+            {
+                if (current.Length > 0)
+                {
+                    tokens.Add(current.ToString());
+                    current.Clear();
+                }
+            }
+            else
+            {
+                current.Append(c);
+            }
+        }
+        
+        if (current.Length > 0)
+            tokens.Add(current.ToString());
+        
+        return tokens;
+    }
+    
+    private static int FindToken(List<string> tokens, int start, string target)
+    {
+        for (int i = start; i < tokens.Count; i++)
+        {
+            if (tokens[i] == target)
+                return i;
+        }
+        return -1;
+    }
+    
+    private static int ParseImport(List<string> tokens, int pos, ModuleInfo info)
+    {
+        // pos points to '(', next is 'import'
+        pos += 2; // skip ( and import
+        
+        var import_ = new Import();
+        
+        if (pos < tokens.Count && tokens[pos].StartsWith("\""))
+            import_.Module = tokens[pos++].Trim('"');
+        
+        if (pos < tokens.Count && tokens[pos].StartsWith("\""))
+            import_.Name = tokens[pos++].Trim('"');
+        
+        // Parse import kind
+        if (pos < tokens.Count && tokens[pos] == "(")
+        {
+            pos++;
+            if (pos < tokens.Count)
+            {
+                string kind = tokens[pos++];
+                if (kind == "func")
+                {
+                    import_.Kind = 0x00;
+                    // Skip function signature
+                    pos = SkipToClosingParen(tokens, pos - 1);
+                }
+                else if (kind == "memory")
+                {
+                    import_.Kind = 0x02;
+                    if (pos < tokens.Count && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
+                        import_.MemoryMinPages = uint.Parse(tokens[pos++]);
+                    pos = SkipToClosingParen(tokens, pos - 1);
+                }
+            }
+        }
+        
+        info.ImportSection.Add(import_);
+        return SkipToClosingParen(tokens, pos - 1);
+    }
+    
+    private static int ParseMemory(List<string> tokens, int pos, ModuleInfo info)
+    {
+        // pos points to '(', next is 'memory'
+        pos += 2; // skip ( and memory
+        
+        var memory = new Memory();
+        if (pos < tokens.Count && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
+            memory.MinPages = uint.Parse(tokens[pos++]);
+        
+        if (pos < tokens.Count && tokens[pos] != ")" && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
+            memory.MaxPages = uint.Parse(tokens[pos++]);
+        
+        info.MemorySection.Add(memory);
+        return SkipToClosingParen(tokens, pos - 1);
+    }
+    
+    private static int ParseFunction(List<string> tokens, int pos, ModuleInfo info)
+    {
+        // pos points to '(', next is 'func'  
+        pos += 2; // skip ( and func
+        
+        var funcType = new FunctionType();
+        var funcCode = new FunctionCode();
+        var instructions = new List<byte>();
+        
+        // Skip function name if present
+        if (pos < tokens.Count && tokens[pos].StartsWith("$"))
+            pos++;
+        
+        // Parse parameters and results
+        while (pos < tokens.Count && tokens[pos] == "(")
+        {
+            pos++;
+            if (pos >= tokens.Count) break;
+            
+            if (tokens[pos] == "param")
+            {
+                pos++;
+                while (pos < tokens.Count && tokens[pos] != ")")
+                {
+                    if (tokens[pos].StartsWith("$"))
+                        pos++; // skip param name
+                    if (pos < tokens.Count && IsValueType(tokens[pos]))
+                        funcType.Parameters.Add(tokens[pos++]);
+                }
+                pos++; // skip )
+            }
+            else if (tokens[pos] == "result")
+            {
+                pos++;
+                while (pos < tokens.Count && tokens[pos] != ")")
+                {
+                    if (IsValueType(tokens[pos]))
+                        funcType.Results.Add(tokens[pos++]);
+                }
+                pos++; // skip )
+            }
+            else if (tokens[pos] == "local")
+            {
+                pos++;
+                while (pos < tokens.Count && tokens[pos] != ")")
+                {
+                    if (tokens[pos].StartsWith("$"))
+                        pos++; // skip local name
+                    if (pos < tokens.Count && IsValueType(tokens[pos]))
+                        funcCode.Locals.Add(tokens[pos++]);
+                }
+                pos++; // skip )
+            }
+            else
+            {
+                // Not a param/result/local, back up
+                pos--;
+                break;
+            }
+        }
+        
+        // Parse instructions
+        while (pos < tokens.Count && tokens[pos] != ")")
+        {
+            if (tokens[pos] == "(")
+            {
+                pos++; // skip nested constructs
+            }
+            else
+            {
+                var instr = tokens[pos++];
+                EncodeInstruction(instr, tokens, ref pos, instructions);
+            }
+        }
+        
+        funcCode.Instructions = instructions;
+        
+        // Add to module info
+        info.TypeSection.Add(funcType);
+        info.FunctionSection.Add((uint)(info.TypeSection.Count - 1));
+        info.CodeSection.Add(funcCode);
+        
+        return SkipToClosingParen(tokens, pos);
+    }
+    
+    private static int ParseExport(List<string> tokens, int pos, ModuleInfo info)
+    {
+        // pos points to '(', next is 'export'
+        pos += 2; // skip ( and export
+        
+        var export_ = new Export();
+        
+        if (pos < tokens.Count && tokens[pos].StartsWith("\""))
+            export_.Name = tokens[pos++].Trim('"');
+        
+        if (pos < tokens.Count && tokens[pos] == "(")
+        {
+            pos++;
+            if (pos < tokens.Count)
+            {
+                string kind = tokens[pos++];
+                if (kind == "func")
+                {
+                    export_.Kind = 0x00;
+                    if (pos < tokens.Count && tokens[pos].StartsWith("$"))
+                    {
+                        // Function reference - use index from function list
+                        export_.Index = (uint)(info.FunctionSection.Count > 0 ? info.FunctionSection.Count - 1 : 0);
+                        pos++;
+                    }
+                    else if (pos < tokens.Count && tokens[pos].Length > 0 && char.IsDigit(tokens[pos][0]))
+                    {
+                        export_.Index = uint.Parse(tokens[pos++]);
+                    }
+                }
+            }
+        }
+        
+        info.ExportSection.Add(export_);
+        return SkipToClosingParen(tokens, pos - 1);
+    }
+    
+    private static int ParseData(List<string> tokens, int pos, ModuleInfo info)
+    {
+        // (data (i32.const offset) "string")
+        // Skip for now - data section not fully implemented
+        return SkipToClosingParen(tokens, pos);
+    }
+    
+    private static bool IsValueType(string token)
+    {
+        return token == "i32" || token == "i64" || token == "f32" || token == "f64";
+    }
+    
+    private static int SkipToClosingParen(List<string> tokens, int pos)
+    {
+        int depth = 0;
+        while (pos < tokens.Count)
+        {
+            if (tokens[pos] == "(")
+                depth++;
+            else if (tokens[pos] == ")")
+            {
+                if (depth == 0)
+                    return pos + 1;
+                depth--;
+            }
+            pos++;
+        }
+        return pos;
+    }
+    
+    private static void EncodeInstruction(string instr, List<string> tokens, ref int pos, List<byte> output)
+    {
+        // Encode WAT instructions to WASM binary opcodes
+        switch (instr)
+        {
+            case "i32.const":
+                output.Add(0x41);
+                if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
+                {
+                    int value = int.Parse(tokens[pos++]);
+                    EncodeSLEB128(output, value);
+                }
+                break;
+            case "i32.add":
+                output.Add(0x6A);
+                break;
+            case "i32.sub":
+                output.Add(0x6B);
+                break;
+            case "i32.mul":
+                output.Add(0x6C);
+                break;
+            case "local.get":
+                output.Add(0x20);
+                if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
+                {
+                    if (tokens[pos].StartsWith("$"))
+                    {
+                        pos++; // Skip symbolic reference for now (TODO: implement symbol table)
+                        output.Add(0); // Placeholder - should resolve to actual index
+                    }
+                    else
+                    {
+                        uint idx = uint.Parse(tokens[pos++]);
+                        WriteULEB128ToList(output, idx);
+                    }
+                }
+                break;
+            case "local.set":
+                output.Add(0x21);
+                if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
+                {
+                    if (tokens[pos].StartsWith("$"))
+                    {
+                        pos++; // Skip symbolic reference for now (TODO: implement symbol table)
+                        output.Add(0); // Placeholder - should resolve to actual index
+                    }
+                    else
+                    {
+                        uint idx = uint.Parse(tokens[pos++]);
+                        WriteULEB128ToList(output, idx);
+                    }
+                }
+                break;
+            case "call":
+                output.Add(0x10);
+                if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
+                {
+                    if (tokens[pos].StartsWith("$"))
+                    {
+                        pos++; // Skip symbolic reference for now (TODO: implement symbol table)
+                        output.Add(0); // Placeholder - should resolve to actual index
+                    }
+                    else
+                    {
+                        uint idx = uint.Parse(tokens[pos++]);
+                        WriteULEB128ToList(output, idx);
+                    }
+                }
+                break;
+            case "return":
+                output.Add(0x0F);
+                break;
+            case "nop":
+                output.Add(0x01);
+                break;
+            // Add more opcodes as needed
+        }
+    }
+    
+    private static void EncodeSLEB128(List<byte> buffer, int value)
+    {
+        bool more = true;
+        while (more)
+        {
+            byte b = (byte)(value & 0x7F);
+            value >>= 7;
+            
+            if ((value == 0 && (b & 0x40) == 0) || (value == -1 && (b & 0x40) != 0))
+            {
+                more = false;
+            }
+            else
+            {
+                b |= 0x80;
+            }
+            
+            buffer.Add(b);
+        }
+    }
+    
+    private static void WriteULEB128ToList(List<byte> buffer, uint value)
+    {
+        do
+        {
+            byte b = (byte)(value & 0x7F);
+            value >>= 7;
+            if (value != 0)
+                b |= 0x80;
+            buffer.Add(b);
+        } while (value != 0);
     }
     
     /// <summary>
