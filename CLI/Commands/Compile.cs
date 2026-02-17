@@ -76,70 +76,69 @@ class Compile : Command
             
             if (verbose) System.Console.WriteLine($"      Read {sourceCode.Length} characters from {inputPath}");
 
-                if (verbose) System.Console.WriteLine("\n[2/6] Compiling with CDTk pipeline...");
-                var compiler = new Compiler()
-                    .WithTokens(new Tokens())
-                    .WithRules(new Rules())
-                    .WithTarget(new WASM())
-                    .Build();
+            if (verbose) System.Console.WriteLine("\n[2/6] Compiling with CDTk pipeline...");
+            var compiler = new Compiler()
+                .WithTokens(new Tokens())
+                .WithRules(new Rules())
+                .WithTarget(new WASM())
+                .Build();
 
-                // CDTk Compile method runs full pipeline: Tokens → Syntax → Structure → Semantics → Emission
-                var result = compiler.Compile(sourceCode);
-                
-                if (result.Diagnostics.HasErrors || result.Ast == null)
+            // CDTk Compile method runs full pipeline: Tokens → Syntax → Structure → Semantics → Emission
+            var result = compiler.Compile(sourceCode);
+            
+            if (result.Diagnostics.HasErrors || result.Ast == null)
+            {
+                System.Console.WriteLine("Error: Compilation failed. Check syntax.");
+                if (result.Diagnostics.HasErrors)
                 {
-                    System.Console.WriteLine("Error: Compilation failed. Check syntax.");
-                    if (result.Diagnostics.HasErrors)
+                    foreach (var diag in result.Diagnostics.Items)
                     {
-                        foreach (var diag in result.Diagnostics.Items)
-                        {
-                            System.Console.WriteLine($"  {diag.Level}: {diag.Message}");
-                        }
+                        System.Console.WriteLine($"  {diag.Level}: {diag.Message}");
                     }
-                    return;
                 }
-                
-                if (verbose) System.Console.WriteLine("      Compilation complete.");
-
-                // Check for deprecated 'unsafe' keyword usage and emit warnings
-                CheckForUnsafeKeywordUsage(result.Ast, sourceCode);
-
-                // Note: CDTk automatically runs semantic analysis during Compile()
-                // The models are integrated as properties in MapSet and called automatically
-                // We can access results from the compilation result
-                if (verbose) System.Console.WriteLine("\n[3/6] Memory analysis complete (automatic via CDTk)...");
-                
-                if (verbose) 
-                {
-                    System.Console.WriteLine("      Memory safety verified");
-                }
-
-                if (verbose) System.Console.WriteLine("\n[4/6] Manual memory verification complete (automatic via CDTk)...");
-                
-                if (verbose)
-                {
-                    System.Console.WriteLine("      All memory operations verified safe");
-                }
-
-                // CDTk Compile() already generated the output
-                if (verbose) System.Console.WriteLine("\n[5/6] WebAssembly generation complete...");
-                wasmText = result.Output ?? "";
-                
-                // Apply post-processing fixes to clean up WASM output
-                // Fixes malformed parameters, removes fallback comments, cleans up formatting
-                wasmText = FixMethodDeclarations(wasmText);
-                
-                if (string.IsNullOrWhiteSpace(wasmText))
-                {
-                    System.Console.WriteLine("Error: WebAssembly generation failed.");
-                    return;
-                }
-                
-                // DEBUG: Save WAT text for inspection
-                File.WriteAllText("/tmp/debug_output.wat", wasmText);
-                
-                if (verbose) System.Console.WriteLine($"      Generated {wasmText.Length} characters of WebAssembly text format");
+                return;
             }
+            
+            if (verbose) System.Console.WriteLine("      Compilation complete.");
+
+            // Check for deprecated 'unsafe' keyword usage and emit warnings
+            CheckForUnsafeKeywordUsage(result.Ast, sourceCode);
+
+            // Note: CDTk automatically runs semantic analysis during Compile()
+            // The models are integrated as properties in MapSet and called automatically
+            // We can access results from the compilation result
+            if (verbose) System.Console.WriteLine("\n[3/6] Memory analysis complete (automatic via CDTk)...");
+            
+            if (verbose) 
+            {
+                System.Console.WriteLine("      Memory safety verified");
+            }
+
+            if (verbose) System.Console.WriteLine("\n[4/6] Manual memory verification complete (automatic via CDTk)...");
+            
+            if (verbose)
+            {
+                System.Console.WriteLine("      All memory operations verified safe");
+            }
+
+            // CDTk Compile() already generated the output
+            if (verbose) System.Console.WriteLine("\n[5/6] WebAssembly generation complete...");
+            wasmText = result.Output ?? "";
+            
+            // Apply post-processing fixes to clean up WASM output
+            // Fixes malformed parameters, removes fallback comments, cleans up formatting
+            wasmText = FixMethodDeclarations(wasmText);
+            
+            if (string.IsNullOrWhiteSpace(wasmText))
+            {
+                System.Console.WriteLine("Error: WebAssembly generation failed.");
+                return;
+            }
+            
+            // DEBUG: Save WAT text for inspection
+            File.WriteAllText("/tmp/debug_output.wat", wasmText);
+            
+            if (verbose) System.Console.WriteLine($"      Generated {wasmText.Length} characters of WebAssembly text format");
 
             if (verbose) System.Console.WriteLine($"\n[6/6] Writing output...");
             
