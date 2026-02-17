@@ -687,11 +687,10 @@ public static class WasmJS
                     // Block type
                     instructions.Add(0x40); // empty block type
                     
-                    // Parse nested instructions recursively
+                    // Parse nested instructions recursively (will include explicit "end" token)
                     pos = ParseFunctionBody(tokens, pos, instructions, funcCode, symbols, ref localIndex);
                     
-                    // Add end instruction for the if
-                    instructions.Add(0x0B);
+                    // Don't add end instruction - it's already encoded from the explicit "end" token
                     
                     if (pos < tokens.Count && tokens[pos] == ")") pos++; // skip )
                 }
