@@ -306,13 +306,22 @@ public static class WasmEmit
                 }
                 
                 // Check if this is Console.ReadKey
-                if ((baseName == "Console" || baseName.EndsWith(".Console")) && 
-                    (baseName.EndsWith("ReadKey") || suffixNode.Fields.ContainsKey("method")))
+                if ((baseName == "Console" || baseName.EndsWith(".Console")))
                 {
-                    // Console.ReadKey() - wait for key press
-                    // For WASM, we'll call an imported function
-                    // For PE, BADGER will emit proper Windows API calls
-                    return ";; Console.ReadKey\ncall $console_readkey";
+                    // Check if the method field is exactly "ReadKey"
+                    if (suffixNode.Fields.ContainsKey("method"))
+                    {
+                        var methodField = suffixNode.Fields["method"];
+                        string? methodName = methodField?.ToString();
+                        // Match exactly "ReadKey" or qualified names ending with ".ReadKey"
+                        if (methodName == "ReadKey" || methodName?.EndsWith(".ReadKey") == true)
+                        {
+                            // Console.ReadKey() - wait for key press
+                            // For WASM, we'll call an imported function
+                            // For PE, BADGER will emit proper Windows API calls
+                            return ";; Console.ReadKey\ncall $console_readkey";
+                        }
+                    }
                 }
             }
             
@@ -2057,6 +2066,9 @@ public class WASM : MapSet
             sb.AppendLine("  )");
             sb.AppendLine();
             sb.AppendLine("  ;; Integer to string conversion helper");
+            sb.AppendLine("  ;; WARNING: This function is NOT YET FULLY IMPLEMENTED");
+            sb.AppendLine("  ;; Currently returns (ptr=0, len=0) as a placeholder");
+            sb.AppendLine("  ;; String concatenation with integers will not work until this is implemented");
             sb.AppendLine("  (func $int_to_string (param $value i32) (result i32) (result i32)");
             sb.AppendLine("    ;; TODO: Implement integer to string conversion");
             sb.AppendLine("    ;; For now, return placeholder");

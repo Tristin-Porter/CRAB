@@ -252,10 +252,11 @@ class Compile : Command
                         System.Console.WriteLine(wasmEx.StackTrace);
                     }
                     
-                    // Fallback: write WAT text
+                    // Fallback: write WAT text with .wat extension
                     System.Console.WriteLine("Falling back to WAT text format...");
-                    File.WriteAllText(outputPath, wasmText);
-                    System.Console.WriteLine($"✓ WAT text written to: {outputPath}");
+                    string watPath = Path.ChangeExtension(outputPath, ".wat");
+                    File.WriteAllText(watPath, wasmText);
+                    System.Console.WriteLine($"✓ WAT text written to: {watPath}");
                     return;
                 }
             }
