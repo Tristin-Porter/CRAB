@@ -47,8 +47,8 @@ class Build : Command
         if (flags.TryGetValue("config", out var flagConfig) && !string.IsNullOrWhiteSpace(flagConfig))
             config = flagConfig.ToLower();
 
-        // Parse output path - default to bin/Debug/crab or bin/Release/crab
-        string outputPath = Path.Combine(baseDir, "bin", config.Substring(0, 1).ToUpper() + config.Substring(1), "crab");
+        // Parse output path - default to bin/Debug/crab1.0 or bin/Release/crab1.0
+        string outputPath = Path.Combine(baseDir, "bin", config.Substring(0, 1).ToUpper() + config.Substring(1), "crab1.0");
         if (flags.TryGetValue("output", out var flagOutput) && !string.IsNullOrWhiteSpace(flagOutput))
             outputPath = flagOutput;
 
@@ -125,39 +125,35 @@ class Build : Command
                 }
             }
 
-            // Create output directory and subdirectories
+            // Create output directory
             if (verbose) System.Console.WriteLine("\n[2/4] Preparing output directory...");
             Directory.CreateDirectory(outputPath);
             
-            // Create organized subdirectories
-            string webOutputDir = Path.Combine(outputPath, "Web");
-            string windowsOutputDir = Path.Combine(outputPath, "Windows");
-            string nativeOutputDir = Path.Combine(outputPath, "Native");
-            
-            Directory.CreateDirectory(webOutputDir);
-            Directory.CreateDirectory(windowsOutputDir);
-            Directory.CreateDirectory(nativeOutputDir);
-            
-            bool toAsm = flags.ContainsKey("to-asm");
-            
-            // For WASM output, place in Web folder
-            // For native/PE output, place in appropriate folders
-            string outputFile;
-            if (toAsm)
+            // Determine project name for output file
+            string projectNameForFiles;
+            if (discovery.ProjectFiles.Count > 0)
             {
-                string format = "native";
-                if (flags.TryGetValue("format", out var fmt) && !string.IsNullOrWhiteSpace(fmt))
-                    format = fmt.ToLower();
-                
-                if (format == "pe")
-                    outputFile = Path.Combine(windowsOutputDir, "output.exe");
-                else
-                    outputFile = Path.Combine(nativeOutputDir, "output.bin");
+                // Use project file name
+                projectNameForFiles = Path.GetFileNameWithoutExtension(discovery.ProjectFiles[0]);
+            }
+            else if (!string.IsNullOrEmpty(discovery.SolutionFile))
+            {
+                // Use solution file name
+                projectNameForFiles = Path.GetFileNameWithoutExtension(discovery.SolutionFile);
+            }
+            else if (Directory.Exists(projectPath))
+            {
+                // Use directory name
+                projectNameForFiles = Path.GetFileName(Path.GetFullPath(projectPath));
             }
             else
             {
-                outputFile = Path.Combine(webOutputDir, "output.wasm");
+                // Fallback to "output"
+                projectNameForFiles = "output";
             }
+            
+            // Output file is ProjectName.wat in the output directory
+            string outputFile = Path.Combine(outputPath, $"{projectNameForFiles}.wat");
 
             // Compile source files
             if (verbose) System.Console.WriteLine("\n[3/4] Compiling project...");
@@ -187,18 +183,6 @@ class Build : Command
             
             if (verbose)
                 compileFlags["verbose"] = null;
-            
-            // Pass through BADGER flags if building to assembly
-            if (toAsm)
-            {
-                compileFlags["to-asm"] = null;
-                
-                if (flags.TryGetValue("arch", out var arch))
-                    compileFlags["arch"] = arch;
-                    
-                if (flags.TryGetValue("format", out var fmt))
-                    compileFlags["format"] = fmt;
-            }
 
             compileCommand.Execute(Array.Empty<string>(), compileFlags);
 
@@ -208,173 +192,14 @@ class Build : Command
                 return;
             }
 
-            // For WAT/WASM output, also generate WASM binary, JS wrapper, and HTML files
-            if (!toAsm && outputFile.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase))
-            {
-                try
-                {
-                    if (verbose) System.Console.WriteLine("\n[4/6] Generating WebAssembly binary and browser files...");
-                    
-                    // Read the WAT text that was generated
-                    string watText = File.ReadAllText(outputFile);
-                    if (verbose) System.Console.WriteLine($"      Read {watText.Length} characters of WAT text");
-                    
-                    // Determine project name for file naming
-                    string projectNameForFiles;
-                    if (discovery.ProjectFiles.Count > 0)
-                    {
-                        // Use project file name
-                        projectNameForFiles = Path.GetFileNameWithoutExtension(discovery.ProjectFiles[0]);
-                    }
-                    else if (!string.IsNullOrEmpty(discovery.SolutionFile))
-                    {
-                        // Use solution file name
-                        projectNameForFiles = Path.GetFileNameWithoutExtension(discovery.SolutionFile);
-                    }
-                    else if (Directory.Exists(projectPath))
-                    {
-                        // Use directory name
-                        projectNameForFiles = Path.GetFileName(Path.GetFullPath(projectPath));
-                    }
-                    else
-                    {
-                        // Fallback to "output"
-                        projectNameForFiles = "output";
-                    }
-                    
-                    // Generate WASM binary and JS wrapper using BADGER
-                    if (verbose) System.Console.WriteLine("      Calling BADGER WasmJS.Emit()...");
-                    var (wasmBinary, jsWrapper) = WasmJS.Emit(watText, $"{projectNameForFiles}.wasm");
-                    if (verbose) System.Console.WriteLine($"      BADGER generated {wasmBinary.Length} bytes of WASM binary");
-                    
-                    // Save WASM binary, JS, HTML to Web folder
-                    string wasmBinaryPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.wasm");
-                    File.WriteAllBytes(wasmBinaryPath, wasmBinary);
-                    if (verbose) System.Console.WriteLine($"      Saved {wasmBinaryPath} ({wasmBinary.Length} bytes)");
-                    
-                    // Save JS wrapper
-                    string jsPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.js");
-                    File.WriteAllText(jsPath, jsWrapper);
-                    if (verbose) System.Console.WriteLine($"      Saved {jsPath}");
-                    
-                    // Generate HTML file with project-specific filenames
-                    string projectNameForTitle = projectNameForFiles;
-                    string htmlContent = HtmlGenerator.GenerateHtml(
-                        projectNameForTitle, 
-                        $"{projectNameForFiles}.wasm", 
-                        $"{projectNameForFiles}.js");
-                    string htmlPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.html");
-                    File.WriteAllText(htmlPath, htmlContent);
-                    if (verbose) System.Console.WriteLine($"      Saved {htmlPath}");
-                    
-                    // Save the original WAT as IR in parent directory (not Web folder)
-                    // WAT is the intermediate representation, not a web-specific file
-                    string watPath = Path.Combine(outputPath, $"{projectNameForFiles}.wat");
-                    File.WriteAllText(watPath, watText);
-                    if (verbose) System.Console.WriteLine($"      Saved {watPath} (WebAssembly IR)");
-                    
-                    // Remove the intermediate output.wasm file (it was just WAT text)
-                    if (File.Exists(outputFile) && outputFile.EndsWith("output.wasm"))
-                    {
-                        try
-                        {
-                            File.Delete(outputFile);
-                            if (verbose) System.Console.WriteLine($"      Removed intermediate file {outputFile}");
-                        }
-                        catch
-                        {
-                            // Ignore errors deleting intermediate file
-                        }
-                    }
-                    
-                    if (verbose)
-                    {
-                        System.Console.WriteLine("\n[5/6] Browser files generated.");
-                        System.Console.WriteLine($"      Open {projectNameForFiles}.html in a browser to run the WebAssembly module.");
-                    }
-                }
-                catch (IOException ioEx)
-                {
-                    System.Console.WriteLine($"Warning: Failed to write browser files to disk - {ioEx.Message}");
-                    if (verbose)
-                    {
-                        System.Console.WriteLine("This may be a file permissions or disk space issue.");
-                        System.Console.WriteLine("Stack trace:");
-                        System.Console.WriteLine(ioEx.StackTrace);
-                    }
-                }
-                catch (Exception wasmEx)
-                {
-                    System.Console.WriteLine($"Warning: Failed to generate WASM binary/browser files - {wasmEx.Message}");
-                    System.Console.WriteLine("This may be due to invalid WAT format or BADGER compilation error.");
-                    if (verbose)
-                    {
-                        System.Console.WriteLine("Stack trace:");
-                        System.Console.WriteLine(wasmEx.StackTrace);
-                    }
-                }
-            }
-
             if (verbose)
             {
-                System.Console.WriteLine($"\n[{(toAsm ? "4/4" : "6/6")}] Build complete.");
+                System.Console.WriteLine("\n[4/4] Build complete.");
                 System.Console.WriteLine("=".PadRight(60, '='));
             }
 
-            // Show appropriate success message based on output type
-            if (!toAsm && outputFile.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase))
-            {
-                // For WASM builds, show the actual WASM binary, not the intermediate file
-                // Determine project name for file naming (same logic as above)
-                string projectNameForFiles = "output";  // Default fallback
-                try
-                {
-                    var fileDiscovery = ProjectDiscovery.Discover(projectPath);
-                    if (fileDiscovery.ProjectFiles.Count > 0)
-                    {
-                        projectNameForFiles = Path.GetFileNameWithoutExtension(fileDiscovery.ProjectFiles[0]);
-                    }
-                    else if (!string.IsNullOrEmpty(fileDiscovery.SolutionFile))
-                    {
-                        projectNameForFiles = Path.GetFileNameWithoutExtension(fileDiscovery.SolutionFile);
-                    }
-                    else if (Directory.Exists(projectPath))
-                    {
-                        projectNameForFiles = Path.GetFileName(Path.GetFullPath(projectPath));
-                    }
-                }
-                catch
-                {
-                    // If discovery fails, use default
-                }
-                
-                string wasmBinaryPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.wasm");
-                string jsPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.js");
-                string htmlPath = Path.Combine(webOutputDir, $"{projectNameForFiles}.html");
-                string watPath = Path.Combine(outputPath, $"{projectNameForFiles}.wat");
-                
-                System.Console.WriteLine($"✓ Build successful");
-                if (File.Exists(wasmBinaryPath))
-                    System.Console.WriteLine($"  WASM binary: {wasmBinaryPath} ({new FileInfo(wasmBinaryPath).Length} bytes)");
-                if (File.Exists(jsPath))
-                    System.Console.WriteLine($"  JS wrapper: {jsPath}");
-                if (File.Exists(htmlPath))
-                    System.Console.WriteLine($"  HTML runner: {htmlPath}");
-                if (File.Exists(watPath))
-                    System.Console.WriteLine($"  WAT IR: {watPath}");
-                    
-                System.Console.WriteLine();
-                System.Console.WriteLine("To run in browser:");
-                System.Console.WriteLine($"  1. Open {htmlPath} in your web browser");
-                System.Console.WriteLine("  2. Or serve with: python -m http.server 8000");
-            }
-            else
-            {
-                // For native/PE builds, show the actual output file
-                System.Console.WriteLine($"✓ Build successful: {outputFile}");
-                if (File.Exists(outputFile))
-                    System.Console.WriteLine($"  Output size: {new FileInfo(outputFile).Length} bytes");
-            }
+            System.Console.WriteLine($"\n✓ Build successful!");
+            System.Console.WriteLine($"  Output: {outputFile}");
         }
         catch (Exception ex)
         {
