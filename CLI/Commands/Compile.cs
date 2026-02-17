@@ -171,6 +171,9 @@ class Compile : Command
                     return;
                 }
                 
+                // DEBUG: Save WAT text for inspection
+                File.WriteAllText("/tmp/debug_output.wat", wasmText);
+                
                 if (verbose) System.Console.WriteLine($"      Generated {wasmText.Length} characters of WebAssembly text format");
             }
 
