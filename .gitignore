@@ -16,10 +16,23 @@ testing/
 
 # Ignore test artifacts
 test_output_*.bin
+*.bin
+*.exe
 *.js
 *.wasm
 *.wat
 *.html
+
+# Ignore generated documentation from agents
+*_SUMMARY.md
+*_REFERENCE.md
+*_GUIDE.md
+*_COMPLETE.md
+*_STATUS.md
+*_WORK.md
+*_ANALYSIS.md
+*_REPORT.md
+*_VERIFICATION.md
 
 # Allow Examples directory but ignore their bin/obj folders
 !Examples/

@@ -309,8 +309,22 @@ public static class WasmEmit
                 // But we need to look deeper into base to get the actual method name
                 var baseName = GetFullMemberName(baseExpr);
                 
+                // Extract the method name from the base expression
+                string? methodName = ExtractMethodName(baseExpr);
+                
+                // Check if this is Console.ReadKey FIRST (before WriteLine)
+                if ((baseName == "Console" || baseName.EndsWith(".Console")) && methodName == "ReadKey")
+                {
+                    // Console.ReadKey() - wait for key press and returns ConsoleKeyInfo (i32)
+                    // In expression statement context, the return value must be dropped
+                    // In assignment context, the caller will handle the return value
+                    // For WASM, we'll call an imported function
+                    // For PE, BADGER will emit proper Windows API calls
+                    return ";; Console.ReadKey\ncall $console_readkey\ndrop  ;; drop return value in statement context";
+                }
+                
                 // Check if this is Console.WriteLine (base will be "Console", method is WriteLine)
-                if (baseName == "Console" || baseName.EndsWith(".Console") || baseName.EndsWith("WriteLine"))
+                if (baseName == "Console" || baseName.EndsWith(".Console") || baseName.EndsWith("WriteLine") || methodName == "WriteLine")
                 {
                     // Emit arguments (should push ptr and len on stack)
                     var args = suffixNode.Fields.ContainsKey("args") ? suffixNode.Fields["args"] : null;
@@ -322,25 +336,6 @@ public static class WasmEmit
                     
                     // Call imported console_log function (expects ptr and len)
                     return $";; Console.WriteLine\n{argCode}\ncall $console_log";
-                }
-                
-                // Check if this is Console.ReadKey
-                if ((baseName == "Console" || baseName.EndsWith(".Console")))
-                {
-                    // Check if the method field is exactly "ReadKey"
-                    if (suffixNode.Fields.ContainsKey("method"))
-                    {
-                        var methodField = suffixNode.Fields["method"];
-                        string? methodName = methodField?.ToString();
-                        // Match exactly "ReadKey" or qualified names ending with ".ReadKey"
-                        if (methodName == "ReadKey" || methodName?.EndsWith(".ReadKey") == true)
-                        {
-                            // Console.ReadKey() - wait for key press
-                            // For WASM, we'll call an imported function
-                            // For PE, BADGER will emit proper Windows API calls
-                            return ";; Console.ReadKey\ncall $console_readkey";
-                        }
-                    }
                 }
             }
             
@@ -637,8 +632,7 @@ public static class WasmEmit
             }
             
             // Special case for Console.ReadKey
-            if (targetStr == "Console.ReadKey" || 
-                (targetStr.StartsWith("System.Console.ReadKey") || targetStr.EndsWith(".Console.ReadKey")))
+            if (targetStr == "Console.ReadKey" || targetStr.EndsWith(".ReadKey"))
             {
                 // Console.ReadKey() - wait for key press
                 // Returns a ConsoleKeyInfo struct, but for now we'll just wait
@@ -690,7 +684,7 @@ public static class WasmEmit
     /// <summary>
     /// Emit argument list for method call.
     /// </summary>
-    private static string EmitArgumentList(object? argsNode)
+    public static string EmitArgumentList(object? argsNode)
     {
         if (argsNode == null) return "";
         
@@ -760,7 +754,7 @@ public static class WasmEmit
     /// <summary>
     /// Get method name from AST node (for Console.WriteLine detection).
     /// </summary>
-    private static string GetMethodName(AstNode node)
+    public static string GetMethodName(AstNode node)
     {
         if (node.Type == "MemberAccessExpression")
         {
@@ -810,6 +804,38 @@ public static class WasmEmit
         }
         
         return node.Type;
+    }
+    
+    /// <summary>
+    /// Extract method name from AST node with base/suffix structure.
+    /// Specifically handles NameSegmentRest structures for Console.ReadKey, Console.WriteLine, etc.
+    /// </summary>
+    private static string? ExtractMethodName(object? baseExpr)
+    {
+        if (baseExpr is not AstNode baseNode || !baseNode.Fields.ContainsKey("suffix"))
+            return null;
+        
+        var baseSuffix = baseNode.Fields["suffix"];
+        if (baseSuffix is not AstNode baseSuffixNode || baseSuffixNode.Type != "NameSegmentRest")
+            return null;
+        
+        if (!baseSuffixNode.Fields.ContainsKey("segment"))
+            return null;
+        
+        var segments = baseSuffixNode.Fields["segment"];
+        if (segments is not List<AstNode> segmentList || segmentList.Count == 0)
+            return null;
+        
+        // Last segment should be the method name
+        var lastSegment = segmentList[segmentList.Count - 1];
+        if (!lastSegment.Fields.ContainsKey("name"))
+            return null;
+        
+        var nameField = lastSegment.Fields["name"];
+        if (nameField is AstNode nameNode && nameNode.Fields.ContainsKey("lexeme"))
+            return nameNode.Fields["lexeme"]?.ToString();
+        
+        return null;
     }
     
     /// <summary>
