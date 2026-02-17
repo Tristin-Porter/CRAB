@@ -212,16 +212,52 @@ class Compile : Command
             }
             else
             {
-                // Standard WAT output
-                File.WriteAllText(outputPath, wasmText);
-                
-                if (verbose)
+                // Generate binary WASM with JavaScript wrapper and HTML loader
+                try
                 {
-                    System.Console.WriteLine($"      Wrote {new FileInfo(outputPath).Length} bytes to {outputPath}");
-                    System.Console.WriteLine("\n" + "=".PadRight(60, '='));
-                }
+                    // Use BADGER's WasmJS container to convert WAT to binary WASM
+                    var (wasmBinary, jsWrapper) = Badger.Containers.WasmJS.Emit(wasmText, Path.GetFileName(outputPath));
+                    
+                    // Write binary WASM file
+                    File.WriteAllBytes(outputPath, wasmBinary);
+                    
+                    // Write JavaScript wrapper
+                    string jsPath = Path.ChangeExtension(outputPath, ".js");
+                    File.WriteAllText(jsPath, jsWrapper);
+                    
+                    // Generate HTML loader
+                    string htmlPath = Path.ChangeExtension(outputPath, ".html");
+                    string htmlContent = GenerateHtmlLoader(Path.GetFileName(outputPath), Path.GetFileName(jsPath));
+                    File.WriteAllText(htmlPath, htmlContent);
+                    
+                    if (verbose)
+                    {
+                        System.Console.WriteLine($"      Wrote {new FileInfo(outputPath).Length} bytes to {outputPath}");
+                        System.Console.WriteLine($"      Wrote {new FileInfo(jsPath).Length} bytes to {jsPath}");
+                        System.Console.WriteLine($"      Wrote {new FileInfo(htmlPath).Length} bytes to {htmlPath}");
+                        System.Console.WriteLine("\n" + "=".PadRight(60, '='));
+                    }
 
-                System.Console.WriteLine($"✓ Compilation successful: {outputPath}");
+                    System.Console.WriteLine($"✓ Compilation successful: {outputPath}");
+                    System.Console.WriteLine($"✓ JavaScript wrapper: {jsPath}");
+                    System.Console.WriteLine($"✓ HTML loader: {htmlPath}");
+                    System.Console.WriteLine($"\nTo run in browser: Open {htmlPath} in a web browser");
+                }
+                catch (Exception wasmEx)
+                {
+                    System.Console.WriteLine($"Error: WASM binary generation failed - {wasmEx.Message}");
+                    if (verbose)
+                    {
+                        System.Console.WriteLine("\nStack trace:");
+                        System.Console.WriteLine(wasmEx.StackTrace);
+                    }
+                    
+                    // Fallback: write WAT text
+                    System.Console.WriteLine("Falling back to WAT text format...");
+                    File.WriteAllText(outputPath, wasmText);
+                    System.Console.WriteLine($"✓ WAT text written to: {outputPath}");
+                    return;
+                }
             }
             
             if (verify && verbose)
@@ -387,5 +423,65 @@ class Compile : Command
         
         // Fallback: return unknown line number
         return 0;
+    }
+    
+    /// <summary>
+    /// Generate an HTML loader file for the WASM module
+    /// </summary>
+    private string GenerateHtmlLoader(string wasmFileName, string jsFileName)
+    {
+        return $@"<!DOCTYPE html>
+<html>
+<head>
+    <meta charset=""utf-8"">
+    <title>CRAB WebAssembly Output</title>
+    <style>
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }}
+        .container {{
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        h1 {{
+            color: #333;
+            border-bottom: 2px solid #007acc;
+            padding-bottom: 10px;
+        }}
+        #output {{
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            white-space: pre-wrap;
+            margin-top: 20px;
+            min-height: 100px;
+        }}
+        .status {{
+            color: #4CAF50;
+            margin-top: 10px;
+        }}
+        .error {{
+            color: #f44336;
+        }}
+    </style>
+</head>
+<body>
+    <div class=""container"">
+        <h1>CRAB WebAssembly Output</h1>
+        <p>Module: <strong>{wasmFileName}</strong></p>
+        <div id=""status"" class=""status"">Loading...</div>
+        <div id=""output""></div>
+    </div>
+    <script src=""{jsFileName}""></script>
+</body>
+</html>";
     }
 }
