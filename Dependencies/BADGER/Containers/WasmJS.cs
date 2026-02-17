@@ -421,7 +421,9 @@ public static class WasmJS
                     if (pos < tokens.Count && tokens[pos].StartsWith("$"))
                     {
                         string funcName = tokens[pos++];
-                        info.Symbols.Functions[funcName] = (uint)info.Symbols.Functions.Count;
+                        // Imported functions get indices starting from 0, in order of import
+                        uint funcIndex = (uint)info.ImportSection.Count(i => i.Kind == 0x00);
+                        info.Symbols.Functions[funcName] = funcIndex;
                     }
                     
                     // Parse function type signature and add to type section
@@ -523,7 +525,9 @@ public static class WasmJS
         if (pos < tokens.Count && tokens[pos].StartsWith("$"))
         {
             string funcName = tokens[pos++];
-            uint funcIndex = (uint)(info.Symbols.Functions.Count + info.FunctionSection.Count);
+            // Function index = number of imported functions + number of defined functions so far
+            uint importedFunctionCount = (uint)info.ImportSection.Count(i => i.Kind == 0x00);
+            uint funcIndex = importedFunctionCount + (uint)info.FunctionSection.Count;
             info.Symbols.Functions[funcName] = funcIndex;
         }
         
