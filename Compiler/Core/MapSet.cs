@@ -149,9 +149,12 @@ public static class WasmEmit
             // Binary operations
             // ONLY call EmitBinaryExpression if the node has left/op/right fields
             // If it only has 'expr' field, it's not a binary operation - pass through
+            // Special case: if it has left/right (but no op), check if this is CDTk field shifting
             "AdditiveExpression" => node.Fields.ContainsKey("left") && node.Fields.ContainsKey("op") && node.Fields.ContainsKey("right") 
                 ? EmitBinaryExpression(node, "+")
-                : EmitExpressionDispatcher(node),
+                : (node.Fields.ContainsKey("left") && node.Fields.ContainsKey("right") 
+                    ? EmitBinaryExpression(node, "+")  // Assume + operation even without explicit op field
+                    : EmitExpressionDispatcher(node)),
             "MultiplicativeExpression" => node.Fields.ContainsKey("left") && node.Fields.ContainsKey("op") && node.Fields.ContainsKey("right")
                 ? EmitBinaryExpression(node, "*")
                 : EmitExpressionDispatcher(node),
@@ -215,14 +218,30 @@ public static class WasmEmit
             // Sequence might be a binary operation - check for common patterns
             if (node.Fields.ContainsKey("left") && node.Fields.ContainsKey("right"))
             {
-                // Check if right is an operator - if so, this is CDTk parsing issue
+                // Check if right is an operator - if so, this is an incomplete binary operation
+                // (just the left operand and operator, missing the right operand)
                 var right = node.Fields["right"];
                 if (right is AstNode rightNode && rightNode.Type.EndsWith("Operator"))
                 {
+                    // This is an incomplete binary operation - just unwrap the left
+                    var left = node.Fields["left"];
+                    return EmitExpression(left);
                 }
                 
-                // This is a binary operation embedded in a sequence
-                return EmitBinaryExpression(node, "+");
+                // Right is not an operator, so this is a complete binary operation
+                // Check if left contains an operator (nested Sequence structure)
+                var leftObj = node.Fields["left"];
+                if (leftObj is AstNode leftNode && leftNode.Type == "Sequence" && 
+                    leftNode.Fields.ContainsKey("right"))
+                {
+                    var leftRight = leftNode.Fields["right"];
+                    if (leftRight is AstNode leftRightNode && leftRightNode.Type.EndsWith("Operator"))
+                    {
+                        // This is the complete binary operation structure:
+                        // Sequence { left: Sequence { left: operand1, right: operator }, right: operand2 }
+                        return EmitBinaryExpression(node, "+");
+                    }
+                }
             }
             
             // Check for expr field
@@ -538,6 +557,22 @@ public static class WasmEmit
             if (astNode.Type == "StringLiteral")
                 return true;
             
+            // Check if UnaryExpressionBase contains a string literal token
+            if (astNode.Type == "UnaryExpressionBase" && astNode.Fields.ContainsKey("lexeme"))
+            {
+                var lexeme = astNode.Fields["lexeme"];
+                // Lexeme can be either a TokenInstance or a string
+                if (lexeme is TokenInstance token)
+                {
+                    if (token.Type == "StringLiteral" || token.Lexeme.StartsWith("\""))
+                        return true;
+                }
+                else if (lexeme is string str && str.StartsWith("\""))
+                {
+                    return true;
+                }
+            }
+            
             // Check if this is a string concatenation (additive expression with strings)
             if (astNode.Type == "AdditiveExpression" && 
                 astNode.Fields.ContainsKey("left") && 
@@ -548,6 +583,18 @@ public static class WasmEmit
                 
                 // If either operand is a string, the result is a string (C# semantics)
                 return IsStringExpression(left) || IsStringExpression(right);
+            }
+            
+            // Check Sequence nodes - they may contain string operations
+            // Sequence with left/right where right is an operator indicates a binary operation
+            if (astNode.Type == "Sequence" && astNode.Fields.ContainsKey("left") && astNode.Fields.ContainsKey("right"))
+            {
+                var left = astNode.Fields["left"];
+                var right = astNode.Fields["right"];
+                
+                // Check if either side is a string
+                if (IsStringExpression(left) || IsStringExpression(right))
+                    return true;
             }
             
             // Unwrap wrapper nodes
@@ -952,6 +999,7 @@ public static class WasmEmit
             // Stack before call: [left_ptr, left_len, right_ptr, right_len]
             return $"{leftStrCode}\n{rightStrCode}\ncall $string_concat  ;; concatenate strings";
         }
+        
         
         // Emit left operand
         var leftCode = EmitExpression(left);
