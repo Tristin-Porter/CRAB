@@ -143,10 +143,8 @@ public static class WasmEmit
             "NameSegmentRest" => EmitExpressionDispatcher(node),  // Pass through to child
             "SimpleName" => EmitExpressionDispatcher(node),  // Pass through to child
             "QualifiedName" => EmitExpressionDispatcher(node),  // Pass through to child
-            "Argument" => 
-                (node.Fields.ContainsKey("expr") && node.Fields["expr"] != null) ?
-                    EmitExpression(node.Fields["expr"]) 
-                    : "",  // Unwrap argument to get expression
+            // Argument (unwrap to get expression)
+            "Argument" => EmitArgumentExpression(node),
             
             // Binary operations
             // ONLY call EmitBinaryExpression if the node has left/op/right fields
@@ -295,7 +293,7 @@ public static class WasmEmit
                 // Check if this is Console.WriteLine (base will be "Console", method is WriteLine)
                 if (baseName == "Console" || baseName.EndsWith(".Console") || baseName.EndsWith("WriteLine"))
                 {
-                    // Emit arguments
+                    // Emit arguments (should push ptr and len on stack)
                     var args = suffixNode.Fields.ContainsKey("args") ? suffixNode.Fields["args"] : null;
                     var argCode = "";
                     if (args != null)
@@ -303,8 +301,18 @@ public static class WasmEmit
                         argCode = EmitArgumentList(args);
                     }
                     
-                    // Call imported console_log function
+                    // Call imported console_log function (expects ptr and len)
                     return $";; Console.WriteLine\n{argCode}\ncall $console_log";
+                }
+                
+                // Check if this is Console.ReadKey
+                if ((baseName == "Console" || baseName.EndsWith(".Console")) && 
+                    (baseName.EndsWith("ReadKey") || suffixNode.Fields.ContainsKey("method")))
+                {
+                    // Console.ReadKey() - wait for key press
+                    // For WASM, we'll call an imported function
+                    // For PE, BADGER will emit proper Windows API calls
+                    return ";; Console.ReadKey\ncall $console_readkey";
                 }
             }
             
@@ -335,7 +343,9 @@ public static class WasmEmit
                     var text = str.Substring(1, str.Length - 2);
                     var stringId = StringRegistry.RegisterString(text);
                     var offset = StringRegistry.GetStringOffset(stringId);
-                    return $";; string \"{text}\" at offset {offset}\ni32.const {offset}";
+                    var length = text.Length;
+                    // Push both pointer and length for console_log
+                    return $";; string \"{text}\" at offset {offset}, length {length}\ni32.const {offset}\ni32.const {length}";
                 }
                 
                 // Try to parse as integer
@@ -448,23 +458,98 @@ public static class WasmEmit
     }
     
     /// <summary>
-    /// Emit string literal.
-    /// Stores string in data section and returns pointer.
+    /// Emit argument expression (unwraps Argument node).
     /// </summary>
-    private static string EmitStringLiteral(AstNode node)
+    private static string EmitArgumentExpression(AstNode node)
+    {
+        // Check if this is actually a binary expression masquerading as an argument
+        // This happens due to CDTk field shifting
+        if (node.Fields.ContainsKey("left") && node.Fields.ContainsKey("right"))
+        {
+            // Check if right is an operator node or an expression
+            var right = node.Fields["right"];
+            if (right is AstNode rightNode && rightNode.Type.EndsWith("Operator"))
+            {
+                // This is a binary op but structure is incomplete - emit left only for now
+                return EmitExpression(node.Fields["left"]);
+            }
+            
+            // Try to emit as binary expression
+            return EmitBinaryExpression(node, "+");
+        }
+        
+        // Try different field names that CDTk might use
+        if (node.Fields.ContainsKey("expr") && node.Fields["expr"] != null)
+            return EmitExpression(node.Fields["expr"]);
+        
+        if (node.Fields.ContainsKey("base") && node.Fields["base"] != null)
+            return EmitExpression(node.Fields["base"]);
+        
+        if (node.Fields.ContainsKey("value") && node.Fields["value"] != null)
+            return EmitExpression(node.Fields["value"]);
+        
+        // Try to find any AstNode field as fallback
+        foreach (var kvp in node.Fields)
+        {
+            if (kvp.Value is AstNode childNode)
+                return EmitExpression(childNode);
+        }
+        
+        return "";
+    }
+    
+    /// <summary>
+    /// Emit string literal.
+    /// Stores string in data section and returns pointer and length.
+    /// </summary>
+    public static string EmitStringLiteral(AstNode node)
     {
         var text = GetField(node, "lexeme") ?? "";
         
         // Store string in a global registry for later data section emission
-        // For now, we'll use a simple approach - just emit a comment and placeholder
-        // In a full implementation, we'd track strings and add them to data section
         var stringId = StringRegistry.RegisterString(text);
         var offset = StringRegistry.GetStringOffset(stringId);
         var length = text.Length;
         
         // Return pointer to string in memory (offset) and length
-        // For Console.WriteLine, we'll pass both offset and length
-        return $";; string \"{text}\" at offset {offset}, length {length}\ni32.const {offset}";
+        // Console.WriteLine and string operations need both values
+        return $";; string \"{text}\" at offset {offset}, length {length}\ni32.const {offset}\ni32.const {length}";
+    }
+    
+    /// <summary>
+    /// Check if an expression node represents a string value.
+    /// </summary>
+    private static bool IsStringExpression(object? node)
+    {
+        if (node == null) return false;
+        
+        if (node is AstNode astNode)
+        {
+            // String literal is obviously a string
+            if (astNode.Type == "StringLiteral")
+                return true;
+            
+            // Check if this is a string concatenation (additive expression with strings)
+            if (astNode.Type == "AdditiveExpression" && 
+                astNode.Fields.ContainsKey("left") && 
+                astNode.Fields.ContainsKey("right"))
+            {
+                var left = astNode.Fields["left"];
+                var right = astNode.Fields["right"];
+                
+                // If either operand is a string, the result is a string (C# semantics)
+                return IsStringExpression(left) || IsStringExpression(right);
+            }
+            
+            // Unwrap wrapper nodes
+            if (astNode.Fields.ContainsKey("expr"))
+                return IsStringExpression(astNode.Fields["expr"]);
+                
+            if (astNode.Fields.ContainsKey("base"))
+                return IsStringExpression(astNode.Fields["base"]);
+        }
+        
+        return false;
     }
     
     /// <summary>
@@ -476,7 +561,7 @@ public static class WasmEmit
         var target = node.Fields.ContainsKey("target") ? node.Fields["target"] : null;
         var args = node.Fields.ContainsKey("args") ? node.Fields["args"] : null;
         
-        // Check if this is Console.WriteLine
+        // Check if this is Console.WriteLine or Console.ReadKey
         if (target is AstNode targetNode)
         {
             var targetStr = GetMethodName(targetNode);
@@ -484,15 +569,24 @@ public static class WasmEmit
             // Special case for Console.WriteLine
             if (targetStr == "Console.WriteLine" || targetStr.EndsWith(".WriteLine"))
             {
-                // Emit arguments (string literal)
+                // Emit arguments (should push ptr and len on stack)
                 var argCode = "";
                 if (args != null)
                 {
                     argCode = EmitArgumentList(args);
                 }
                 
-                // Call imported console_log function
+                // Call imported console_log function (expects ptr and len)
                 return $";; Console.WriteLine\n{argCode}\ncall $console_log";
+            }
+            
+            // Special case for Console.ReadKey
+            if (targetStr == "Console.ReadKey" || 
+                (targetStr.StartsWith("System.Console.ReadKey") || targetStr.EndsWith(".Console.ReadKey")))
+            {
+                // Console.ReadKey() - wait for key press
+                // Returns a ConsoleKeyInfo struct, but for now we'll just wait
+                return ";; Console.ReadKey\ncall $console_readkey";
             }
         }
         
@@ -544,11 +638,8 @@ public static class WasmEmit
     {
         if (argsNode == null) return "";
         
-        
         if (argsNode is AstNode node)
         {
-            // Print fields for debugging
-            
             // ArgumentList has 'first' field (CDTk structure)
             if (node.Fields.ContainsKey("first"))
             {
@@ -557,7 +648,6 @@ public static class WasmEmit
                 // First might be an Argument wrapper
                 if (first is AstNode firstNode)
                 {
-                    
                     // Argument has 'base' field (not 'expr' as expected - CDTk quirk)
                     if (firstNode.Type == "Argument")
                     {
@@ -767,6 +857,7 @@ public static class WasmEmit
     
     /// <summary>
     /// Emit binary expression (a + b, a * b, etc).
+    /// Handles string concatenation specially.
     /// </summary>
     public static string EmitBinaryExpression(AstNode node, string defaultOp)
     {
@@ -826,6 +917,31 @@ public static class WasmEmit
             {
                 op = str;
             }
+        }
+        
+        // Check for string concatenation (+ operator with string operands)
+        if (op == "+" && (IsStringExpression(left) || IsStringExpression(right)))
+        {
+            // String concatenation requires special handling
+            // For now, convert non-strings to strings and concatenate
+            var leftStrCode = EmitExpression(left);
+            var rightStrCode = EmitExpression(right);
+            
+            // If left is not a string, convert it
+            if (!IsStringExpression(left))
+            {
+                leftStrCode = $"{leftStrCode}\ncall $int_to_string  ;; convert left operand to string";
+            }
+            
+            // If right is not a string, convert it
+            if (!IsStringExpression(right))
+            {
+                rightStrCode = $"{rightStrCode}\ncall $int_to_string  ;; convert right operand to string";
+            }
+            
+            // Now concatenate: both operands push (ptr, len) pairs on stack
+            // Stack before call: [left_ptr, left_len, right_ptr, right_len]
+            return $"{leftStrCode}\n{rightStrCode}\ncall $string_concat  ;; concatenate strings";
         }
         
         // Emit left operand
@@ -1926,7 +2042,27 @@ public class WASM : MapSet
             sb.AppendLine("(module");
             sb.AppendLine("  ;; Imports");
             sb.AppendLine("  (import \"env\" \"memory\" (memory 1))");
-            sb.AppendLine("  (import \"env\" \"console_log\" (func $console_log (param i32)))");
+            sb.AppendLine("  (import \"env\" \"console_log\" (func $console_log (param i32) (param i32)))  ;; ptr, len");
+            sb.AppendLine("  (import \"env\" \"console_readkey\" (func $console_readkey (result i32)))  ;; returns key code");
+            sb.AppendLine();
+            
+            sb.AppendLine("  ;; Helper functions");
+            sb.AppendLine("  ;; String concatenation helper");
+            sb.AppendLine("  (func $string_concat (param $left_ptr i32) (param $left_len i32) (param $right_ptr i32) (param $right_len i32) (result i32) (result i32)");
+            sb.AppendLine("    ;; Allocate new string in memory");
+            sb.AppendLine("    ;; TODO: Implement proper memory allocation and string copying");
+            sb.AppendLine("    ;; For now, return left string only as placeholder (ignoring right)");
+            sb.AppendLine("    local.get $left_ptr");
+            sb.AppendLine("    local.get $left_len");
+            sb.AppendLine("  )");
+            sb.AppendLine();
+            sb.AppendLine("  ;; Integer to string conversion helper");
+            sb.AppendLine("  (func $int_to_string (param $value i32) (result i32) (result i32)");
+            sb.AppendLine("    ;; TODO: Implement integer to string conversion");
+            sb.AppendLine("    ;; For now, return placeholder");
+            sb.AppendLine("    i32.const 0  ;; ptr");
+            sb.AppendLine("    i32.const 0  ;; len");
+            sb.AppendLine("  )");
             sb.AppendLine();
             
             // First, process items to register strings
@@ -2991,9 +3127,9 @@ public class WASM : MapSet
     /// <summary>Double literal</summary>
     public Map DoubleLiteral = "(f64.const {lexeme})";
     
-    /// <summary>String literal - requires data section</summary>
-    public Map StringLiteral = @";; string ""{lexeme}""
-(i32.const {offset})";
+    /// <summary>String literal - requires data section and pushes ptr+len</summary>
+    public Map<AstNode, string> StringLiteral = TypedMap.For<string>()
+        .Emit(node => WasmEmit.EmitStringLiteral(node));
     
     /// <summary>Character literal</summary>
     public Map CharacterLiteral = "(i32.const {lexeme})";
