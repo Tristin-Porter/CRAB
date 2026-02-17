@@ -310,40 +310,17 @@ public static class WasmEmit
                 var baseName = GetFullMemberName(baseExpr);
                 
                 // Extract the method name from the base expression
-                string? methodName = null;
-                if (baseExpr is AstNode baseNode && baseNode.Fields.ContainsKey("suffix"))
-                {
-                    var baseSuffix = baseNode.Fields["suffix"];
-                    if (baseSuffix is AstNode baseSuffixNode && baseSuffixNode.Type == "NameSegmentRest")
-                    {
-                        if (baseSuffixNode.Fields.ContainsKey("segment"))
-                        {
-                            var segments = baseSuffixNode.Fields["segment"];
-                            if (segments is List<AstNode> segmentList && segmentList.Count > 0)
-                            {
-                                // Last segment should be the method name
-                                var lastSegment = segmentList[segmentList.Count - 1];
-                                if (lastSegment.Fields.ContainsKey("name"))
-                                {
-                                    var nameField = lastSegment.Fields["name"];
-                                    if (nameField is AstNode nameNode && nameNode.Fields.ContainsKey("lexeme"))
-                                    {
-                                        methodName = nameNode.Fields["lexeme"]?.ToString();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                string? methodName = ExtractMethodName(baseExpr);
                 
                 // Check if this is Console.ReadKey FIRST (before WriteLine)
                 if ((baseName == "Console" || baseName.EndsWith(".Console")) && methodName == "ReadKey")
                 {
-                    // Console.ReadKey() - wait for key press
-                    // Returns a ConsoleKeyInfo (i32), but if not used, we need to drop it
+                    // Console.ReadKey() - wait for key press and returns ConsoleKeyInfo (i32)
+                    // In expression statement context, the return value must be dropped
+                    // In assignment context, the caller will handle the return value
                     // For WASM, we'll call an imported function
                     // For PE, BADGER will emit proper Windows API calls
-                    return ";; Console.ReadKey\ncall $console_readkey\ndrop  ;; discard return value if not used";
+                    return ";; Console.ReadKey\ncall $console_readkey\ndrop  ;; drop return value in statement context";
                 }
                 
                 // Check if this is Console.WriteLine (base will be "Console", method is WriteLine)
@@ -827,6 +804,38 @@ public static class WasmEmit
         }
         
         return node.Type;
+    }
+    
+    /// <summary>
+    /// Extract method name from AST node with base/suffix structure.
+    /// Specifically handles NameSegmentRest structures for Console.ReadKey, Console.WriteLine, etc.
+    /// </summary>
+    private static string? ExtractMethodName(object? baseExpr)
+    {
+        if (baseExpr is not AstNode baseNode || !baseNode.Fields.ContainsKey("suffix"))
+            return null;
+        
+        var baseSuffix = baseNode.Fields["suffix"];
+        if (baseSuffix is not AstNode baseSuffixNode || baseSuffixNode.Type != "NameSegmentRest")
+            return null;
+        
+        if (!baseSuffixNode.Fields.ContainsKey("segment"))
+            return null;
+        
+        var segments = baseSuffixNode.Fields["segment"];
+        if (segments is not List<AstNode> segmentList || segmentList.Count == 0)
+            return null;
+        
+        // Last segment should be the method name
+        var lastSegment = segmentList[segmentList.Count - 1];
+        if (!lastSegment.Fields.ContainsKey("name"))
+            return null;
+        
+        var nameField = lastSegment.Fields["name"];
+        if (nameField is AstNode nameNode && nameNode.Fields.ContainsKey("lexeme"))
+            return nameNode.Fields["lexeme"]?.ToString();
+        
+        return null;
     }
     
     /// <summary>

@@ -986,6 +986,9 @@ public static class WasmJS
             case "nop":
                 output.Add(0x01);
                 break;
+            case "drop":
+                output.Add(0x1A);  // drop instruction opcode
+                break;
             case "br":
             case "br_if":
                 output.Add(instr == "br" ? (byte)0x0C : (byte)0x0D);
