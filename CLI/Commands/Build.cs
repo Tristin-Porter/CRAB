@@ -45,8 +45,13 @@ class Build : Command
         if (flags.TryGetValue("config", out var flagConfig) && !string.IsNullOrWhiteSpace(flagConfig))
             config = flagConfig.ToLower();
 
+        // Capitalize first letter for path (Debug/Release)
+        string configCapitalized = config.Length > 0 
+            ? char.ToUpper(config[0]) + config.Substring(1) 
+            : "Debug";
+
         // Parse output path - default to bin/Debug/crab1.0 or bin/Release/crab1.0
-        string outputPath = Path.Combine(baseDir, "bin", config.Substring(0, 1).ToUpper() + config.Substring(1), "crab1.0");
+        string outputPath = Path.Combine(baseDir, "bin", configCapitalized, "crab1.0");
         if (flags.TryGetValue("output", out var flagOutput) && !string.IsNullOrWhiteSpace(flagOutput))
             outputPath = flagOutput;
 
