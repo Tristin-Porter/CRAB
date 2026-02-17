@@ -56,6 +56,9 @@ public static class WasmJS
         if (moduleInfo.FunctionSection.Count > 0)
             EmitFunctionSection(wasm, moduleInfo.FunctionSection);
         
+        if (moduleInfo.GlobalSection.Count > 0)
+            EmitGlobalSection(wasm, moduleInfo.GlobalSection);
+        
         if (moduleInfo.MemorySection.Count > 0)
             EmitMemorySection(wasm, moduleInfo.MemorySection);
         
@@ -139,6 +142,28 @@ public static class WasmJS
             WriteULEB128(sectionData, typeIdx);
         
         wasm.Add(3);
+        WriteULEB128(wasm, (uint)sectionData.Count);
+        wasm.AddRange(sectionData);
+    }
+    
+    private static void EmitGlobalSection(List<byte> wasm, List<Global> globals)
+    {
+        var sectionData = new List<byte>();
+        
+        WriteULEB128(sectionData, (uint)globals.Count);
+        foreach (var global in globals)
+        {
+            // Global type
+            sectionData.Add(GetValueTypeByte(global.Type));
+            // Mutability
+            sectionData.Add(global.Mutable ? (byte)0x01 : (byte)0x00);
+            // Init expression
+            sectionData.AddRange(global.InitExpr);
+            // End of init expression
+            sectionData.Add(0x0B);
+        }
+        
+        wasm.Add(6); // Global section
         WriteULEB128(wasm, (uint)sectionData.Count);
         wasm.AddRange(sectionData);
     }
@@ -289,6 +314,10 @@ public static class WasmJS
                 {
                     pos = ParseData(tokens, pos, info);
                 }
+                else if (keyword == "global")
+                {
+                    pos = ParseGlobal(tokens, pos, info);
+                }
                 else
                 {
                     pos = SkipToClosingParen(tokens, pos);
@@ -421,7 +450,9 @@ public static class WasmJS
                     if (pos < tokens.Count && tokens[pos].StartsWith("$"))
                     {
                         string funcName = tokens[pos++];
-                        info.Symbols.Functions[funcName] = (uint)info.Symbols.Functions.Count;
+                        // Imported functions get indices starting from 0, in order of import
+                        uint funcIndex = (uint)info.ImportSection.Count(i => i.Kind == 0x00);
+                        info.Symbols.Functions[funcName] = funcIndex;
                     }
                     
                     // Parse function type signature and add to type section
@@ -523,7 +554,9 @@ public static class WasmJS
         if (pos < tokens.Count && tokens[pos].StartsWith("$"))
         {
             string funcName = tokens[pos++];
-            uint funcIndex = (uint)(info.Symbols.Functions.Count + info.FunctionSection.Count);
+            // Function index = number of imported functions + number of defined functions so far
+            uint importedFunctionCount = (uint)info.ImportSection.Count(i => i.Kind == 0x00);
+            uint funcIndex = importedFunctionCount + (uint)info.FunctionSection.Count;
             info.Symbols.Functions[funcName] = funcIndex;
         }
         
@@ -581,19 +614,8 @@ public static class WasmJS
             }
         }
         
-        // Parse instructions
-        while (pos < tokens.Count && tokens[pos] != ")")
-        {
-            if (tokens[pos] == "(")
-            {
-                pos++; // skip nested constructs
-            }
-            else
-            {
-                var instr = tokens[pos++];
-                EncodeInstruction(instr, tokens, ref pos, instructions, info.Symbols);
-            }
-        }
+        // Parse instructions - handle nested S-expressions properly
+        pos = ParseFunctionBody(tokens, pos, instructions, funcCode, info.Symbols, ref localIndex);
         
         funcCode.Instructions = instructions;
         
@@ -603,6 +625,99 @@ public static class WasmJS
         info.CodeSection.Add(funcCode);
         
         return SkipToClosingParen(tokens, startPos);
+    }
+    
+    private static int ParseFunctionBody(List<string> tokens, int pos, List<byte> instructions, 
+                                          FunctionCode funcCode, SymbolTable symbols, ref uint localIndex)
+    {
+        // Parse the function body, handling nested S-expressions properly
+        while (pos < tokens.Count && tokens[pos] != ")")
+        {
+            if (tokens[pos] == "(")
+            {
+                // Start of nested S-expression
+                pos++;
+                if (pos >= tokens.Count) break;
+                
+                string keyword = tokens[pos];
+                
+                if (keyword == "local")
+                {
+                    // Additional local declaration inside function body
+                    pos++;
+                    while (pos < tokens.Count && tokens[pos] != ")")
+                    {
+                        if (tokens[pos].StartsWith("$"))
+                        {
+                            string localName = tokens[pos++];
+                            symbols.Locals[localName] = localIndex++;
+                        }
+                        if (pos < tokens.Count && IsValueType(tokens[pos]))
+                            funcCode.Locals.Add(tokens[pos++]);
+                    }
+                    if (pos < tokens.Count && tokens[pos] == ")") pos++; // skip )
+                }
+                else if (keyword == "block" || keyword == "loop")
+                {
+                    // Block or loop construct - encode the instruction and skip label if present
+                    instructions.Add(keyword == "block" ? (byte)0x02 : (byte)0x03);
+                    pos++;
+                    
+                    // Skip optional label
+                    if (pos < tokens.Count && tokens[pos].StartsWith("$"))
+                        pos++;
+                    
+                    // Block type (for now, assume empty type)
+                    instructions.Add(0x40); // empty block type
+                    
+                    // Parse nested instructions recursively
+                    pos = ParseFunctionBody(tokens, pos, instructions, funcCode, symbols, ref localIndex);
+                    
+                    // Add end instruction for the block/loop
+                    instructions.Add(0x0B);
+                    
+                    if (pos < tokens.Count && tokens[pos] == ")") pos++; // skip )
+                }
+                else if (keyword == "if")
+                {
+                    // If construct
+                    instructions.Add(0x04); // if opcode
+                    pos++;
+                    
+                    // Block type
+                    instructions.Add(0x40); // empty block type
+                    
+                    // Parse nested instructions recursively (will include explicit "end" token)
+                    pos = ParseFunctionBody(tokens, pos, instructions, funcCode, symbols, ref localIndex);
+                    
+                    // Don't add end instruction - it's already encoded from the explicit "end" token
+                    
+                    if (pos < tokens.Count && tokens[pos] == ")") pos++; // skip )
+                }
+                else
+                {
+                    // Other S-expression - back up and let it be processed as instruction sequence
+                    pos--;
+                    // Skip to closing paren
+                    int depth = 1;
+                    pos++;
+                    while (pos < tokens.Count && depth > 0)
+                    {
+                        if (tokens[pos] == "(") depth++;
+                        else if (tokens[pos] == ")") depth--;
+                        pos++;
+                    }
+                }
+            }
+            else
+            {
+                // Regular instruction token
+                var instr = tokens[pos++];
+                EncodeInstruction(instr, tokens, ref pos, instructions, symbols);
+            }
+        }
+        
+        return pos;
     }
     
     private static int ParseExport(List<string> tokens, int pos, ModuleInfo info)
@@ -685,6 +800,82 @@ public static class WasmJS
         info.DataSection.Add(dataSegment);
         
         return SkipToClosingParen(tokens, startPos);
+    }
+    
+    private static int ParseGlobal(List<string> tokens, int pos, ModuleInfo info)
+    {
+        // (global $name (mut? type) (init_expr))
+        int startPos = pos;
+        pos += 2; // skip ( and global
+        
+        var global = new Global();
+        
+        // Skip optional name
+        if (pos < tokens.Count && tokens[pos].StartsWith("$"))
+        {
+            string globalName = tokens[pos++];
+            info.Symbols.Globals[globalName] = (uint)info.GlobalSection.Count;
+        }
+        
+        // Parse type and mutability
+        if (pos < tokens.Count && tokens[pos] == "(")
+        {
+            pos++; // skip (
+            if (pos < tokens.Count && tokens[pos] == "mut")
+            {
+                global.Mutable = true;
+                pos++; // skip mut
+            }
+            if (pos < tokens.Count && IsValueType(tokens[pos]))
+            {
+                global.Type = tokens[pos++];
+            }
+            if (pos < tokens.Count && tokens[pos] == ")")
+                pos++; // skip )
+        }
+        
+        // Parse init expression (simple case: i32.const value)
+        if (pos < tokens.Count && tokens[pos] == "(")
+        {
+            pos++; // skip (
+            if (pos < tokens.Count && tokens[pos] == "i32.const")
+            {
+                pos++; // skip i32.const
+                if (pos < tokens.Count && char.IsDigit(tokens[pos][0]))
+                {
+                    int value = int.Parse(tokens[pos++]);
+                    global.InitExpr.Add(0x41); // i32.const opcode
+                    EncodeSLEB128ToList(global.InitExpr, value);
+                }
+            }
+            if (pos < tokens.Count && tokens[pos] == ")")
+                pos++; // skip )
+        }
+        
+        info.GlobalSection.Add(global);
+        
+        return SkipToClosingParen(tokens, startPos);
+    }
+    
+    private static void EncodeSLEB128ToList(List<byte> buffer, int value)
+    {
+        bool more = true;
+        while (more)
+        {
+            byte b = (byte)(value & 0x7F);
+            value >>= 7;
+            
+            if ((value == 0 && (b & 0x40) == 0) || (value == -1 && (b & 0x40) != 0))
+            {
+                more = false;
+            }
+            else
+            {
+                b |= 0x80;
+            }
+            
+            buffer.Add(b);
+        }
     }
     
     private static bool IsValueType(string token)
@@ -795,6 +986,108 @@ public static class WasmJS
             case "nop":
                 output.Add(0x01);
                 break;
+            case "br":
+            case "br_if":
+                output.Add(instr == "br" ? (byte)0x0C : (byte)0x0D);
+                if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
+                {
+                    if (tokens[pos].StartsWith("$"))
+                    {
+                        // Label reference - for now just use 0
+                        pos++;
+                        WriteULEB128ToList(output, 0);
+                    }
+                    else
+                    {
+                        uint idx = uint.Parse(tokens[pos++]);
+                        WriteULEB128ToList(output, idx);
+                    }
+                }
+                break;
+            case "i32.ge_u":
+                output.Add(0x4F);
+                break;
+            case "i32.lt_s":
+                output.Add(0x48);
+                break;
+            case "i32.lt_u":
+                output.Add(0x49);
+                break;
+            case "i32.load8_u":
+                output.Add(0x2D);
+                // Alignment and offset
+                WriteULEB128ToList(output, 0); // alignment
+                WriteULEB128ToList(output, 0); // offset
+                break;
+            case "i32.store8":
+                output.Add(0x3A);
+                // Alignment and offset
+                WriteULEB128ToList(output, 0); // alignment
+                WriteULEB128ToList(output, 0); // offset
+                break;
+            case "i32.div_u":
+                output.Add(0x6E);
+                break;
+            case "i32.rem_u":
+                output.Add(0x70);
+                break;
+            case "i32.eqz":
+                output.Add(0x45);
+                break;
+            case "local.tee":
+                output.Add(0x22);
+                if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
+                {
+                    if (tokens[pos].StartsWith("$"))
+                    {
+                        string localName = tokens[pos++];
+                        uint idx = symbols.Locals.ContainsKey(localName) ? symbols.Locals[localName] : 0;
+                        WriteULEB128ToList(output, idx);
+                    }
+                    else
+                    {
+                        uint idx = uint.Parse(tokens[pos++]);
+                        WriteULEB128ToList(output, idx);
+                    }
+                }
+                break;
+            case "global.get":
+                output.Add(0x23);
+                if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
+                {
+                    if (tokens[pos].StartsWith("$"))
+                    {
+                        string globalName = tokens[pos++];
+                        // For now, assume it's the first global (heap_ptr)
+                        WriteULEB128ToList(output, 0);
+                    }
+                    else
+                    {
+                        uint idx = uint.Parse(tokens[pos++]);
+                        WriteULEB128ToList(output, idx);
+                    }
+                }
+                break;
+            case "global.set":
+                output.Add(0x24);
+                if (pos < tokens.Count && !tokens[pos].StartsWith("(") && tokens[pos] != ")")
+                {
+                    if (tokens[pos].StartsWith("$"))
+                    {
+                        string globalName = tokens[pos++];
+                        // For now, assume it's the first global (heap_ptr)
+                        WriteULEB128ToList(output, 0);
+                    }
+                    else
+                    {
+                        uint idx = uint.Parse(tokens[pos++]);
+                        WriteULEB128ToList(output, idx);
+                    }
+                }
+                break;
+            case "end":
+                output.Add(0x0B);
+                break;
             // Add more opcodes as needed
         }
     }
@@ -857,15 +1150,21 @@ public static class WasmJS
         sb.AppendLine("        const imports = {");
         sb.AppendLine("            env: {");
         sb.AppendLine("                memory: new WebAssembly.Memory({ initial: 1 }),");
-        sb.AppendLine("                console_log: (offset) => {");
-        sb.AppendLine("                    // Read string from memory at offset");
+        sb.AppendLine("                console_log: (offset, length) => {");
+        sb.AppendLine("                    // Read string from memory at offset with given length");
         sb.AppendLine("                    const memory = imports.env.memory;");
-        sb.AppendLine("                    const bytes = new Uint8Array(memory.buffer, offset);");
+        sb.AppendLine("                    const bytes = new Uint8Array(memory.buffer, offset, length);");
         sb.AppendLine("                    let str = '';");
-        sb.AppendLine("                    for (let i = 0; bytes[i] !== 0; i++) {");
+        sb.AppendLine("                    for (let i = 0; i < length; i++) {");
         sb.AppendLine("                        str += String.fromCharCode(bytes[i]);");
         sb.AppendLine("                    }");
+        sb.AppendLine("                    const outputDiv = document.getElementById('output');");
+        sb.AppendLine("                    if (outputDiv) outputDiv.textContent += str + '\\n';");
         sb.AppendLine("                    console.log(str);");
+        sb.AppendLine("                },");
+        sb.AppendLine("                console_readkey: () => {");
+        sb.AppendLine("                    // In browser, just return 0 (no blocking wait)");
+        sb.AppendLine("                    return 0;");
         sb.AppendLine("                }");
         sb.AppendLine("            }");
         sb.AppendLine("        };");
@@ -908,15 +1207,19 @@ public static class WasmJS
         sb.AppendLine("        const imports = {");
         sb.AppendLine("            env: {");
         sb.AppendLine("                memory: new WebAssembly.Memory({ initial: 1 }),");
-        sb.AppendLine("                console_log: (offset) => {");
-        sb.AppendLine("                    // Read string from memory at offset");
+        sb.AppendLine("                console_log: (offset, length) => {");
+        sb.AppendLine("                    // Read string from memory at offset with given length");
         sb.AppendLine("                    const memory = imports.env.memory;");
-        sb.AppendLine("                    const bytes = new Uint8Array(memory.buffer, offset);");
+        sb.AppendLine("                    const bytes = new Uint8Array(memory.buffer, offset, length);");
         sb.AppendLine("                    let str = '';");
-        sb.AppendLine("                    for (let i = 0; bytes[i] !== 0; i++) {");
+        sb.AppendLine("                    for (let i = 0; i < length; i++) {");
         sb.AppendLine("                        str += String.fromCharCode(bytes[i]);");
         sb.AppendLine("                    }");
         sb.AppendLine("                    console.log(str);");
+        sb.AppendLine("                },");
+        sb.AppendLine("                console_readkey: () => {");
+        sb.AppendLine("                    // In Node.js, just return 0 (no blocking wait)");
+        sb.AppendLine("                    return 0;");
         sb.AppendLine("                }");
         sb.AppendLine("            }");
         sb.AppendLine("        };");
@@ -993,6 +1296,7 @@ public static class WasmJS
         public List<FunctionType> TypeSection { get; } = new();
         public List<Import> ImportSection { get; } = new();
         public List<uint> FunctionSection { get; } = new();
+        public List<Global> GlobalSection { get; } = new();
         public List<Memory> MemorySection { get; } = new();
         public List<Export> ExportSection { get; } = new();
         public List<FunctionCode> CodeSection { get; } = new();
@@ -1019,6 +1323,13 @@ public static class WasmJS
     {
         public uint MinPages { get; set; }
         public uint? MaxPages { get; set; }
+    }
+    
+    private class Global
+    {
+        public string Type { get; set; } = "i32";
+        public bool Mutable { get; set; } = false;
+        public List<byte> InitExpr { get; set; } = new();
     }
     
     private class Export
