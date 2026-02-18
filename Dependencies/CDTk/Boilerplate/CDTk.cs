@@ -8729,7 +8729,7 @@ namespace CDTk
 
         /// <summary>
         /// Discover all public Map fields and Model properties in the derived class.
-        /// Maps use fields, Models use properties (with => for lazy initialization).
+        /// Maps use fields or properties, Models use properties (with => for lazy initialization).
         /// </summary>
         private void DiscoverFields()
         {
@@ -8775,8 +8775,48 @@ namespace CDTk
                 }
             }
             
-            // Discover Model properties (must be properties for lazy initialization)
+            // Discover Map properties (support functional Maps with => syntax)
             var properties = type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            foreach (var prop in properties)
+            {
+                // Old string-based Map properties
+                if (prop.PropertyType == typeof(Map) && prop.CanRead)
+                {
+                    var map = prop.GetValue(this) as Map;
+                    if (map != null)
+                    {
+                        var mapName = prop.Name;
+                        map.Name = mapName;
+                        map.DeclaringType = type;
+                        _mapsByName[mapName] = map;
+                        _namesByMap[map] = mapName;
+                    }
+                }
+                // New typed Map<TNode, TOutput> properties
+                else if (prop.PropertyType.IsGenericType && 
+                         prop.PropertyType.GetGenericTypeDefinition() == typeof(Map<,>) &&
+                         prop.CanRead)
+                {
+                    var typedMap = prop.GetValue(this);
+                    if (typedMap != null)
+                    {
+                        var mapName = prop.Name;
+                        
+                        // Set Name and DeclaringType properties via reflection
+                        var nameProperty = prop.PropertyType.GetProperty("Name", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                        var declaringTypeProperty = prop.PropertyType.GetProperty("DeclaringType", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                        var parentMapSetProperty = prop.PropertyType.GetProperty("ParentMapSet", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+                        
+                        nameProperty?.SetValue(typedMap, mapName);
+                        declaringTypeProperty?.SetValue(typedMap, type);
+                        parentMapSetProperty?.SetValue(typedMap, this);
+                        
+                        _typedMapsByName[mapName] = typedMap;
+                    }
+                }
+            }
+            
+            // Discover Model properties (must be properties for lazy initialization)
             foreach (var prop in properties)
             {
                 if (typeof(Model).IsAssignableFrom(prop.PropertyType) && prop.CanRead)
@@ -9554,6 +9594,15 @@ namespace CDTk
         
         /// <summary>Access to the underlying AST node for complex transformations</summary>
         public AstNode? Node => _node;
+        
+        /// <summary>Transform a child node using the MapSet's transformation pipeline</summary>
+        public string Transform(AstNode? node)
+        {
+            if (node == null || _mapSet == null)
+                return "";
+            
+            return _mapSet.Transform(node) ?? "";
+        }
         
         /// <summary>Invoke this Map reference to format its node</summary>
         public string Invoke()

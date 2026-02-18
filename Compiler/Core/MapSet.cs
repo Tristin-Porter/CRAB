@@ -617,38 +617,61 @@ public class WASM : MapSet
     /// - Body: Transformed through CDTk's Map templates
     /// </summary>
     public Map MethodDeclaration => new Map(
-        (Func<string> body, MapReference self) =>
+        (MapReference self) =>
         {
             var node = self.Node;
             if (node == null) return "";
             
-            // Extract fields from AST node
-            var attrsField = node.Fields.ContainsKey("attrs") ? node.Fields["attrs"] : null;
+            // Extract fields from AST node with field shifting workaround
+            // Due to CDTk parser bug, fields are shifted:
+            // - mods contains returnType
+            // - returnType contains name
+            // - name contains parameters (FormalParameterList) or body (MethodBody)
+            // - typeParams contains body (when parameters exist)
             var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
             var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
             var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
-            var parametersField = node.Fields.ContainsKey("parameters") ? node.Fields["parameters"] : null;
-            var bodyField = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
+            var typeParamsField = node.Fields.ContainsKey("typeParams") ? node.Fields["typeParams"] : null;
             
-            // Extract function name
-            string funcName = "";
-            if (nameField is AstNode nameNode && nameNode.Type == "Identifier" && nameNode.Fields.ContainsKey("lexeme"))
-            {
-                funcName = nameNode.Fields["lexeme"]?.ToString() ?? "";
-            }
-            
-            // Extract return type
+            // Extract return type from mods field (shifted)
             string resultType = "";
-            if (returnTypeField is AstNode typeNode)
+            if (modsField is AstNode typeNode)
             {
                 resultType = ExtractTypeFromNode(typeNode);
             }
             
-            // Extract parameters
-            string parameters = "";
-            if (parametersField != null)
+            // Extract function name from returnType field (shifted)
+            string funcName = "";
+            if (returnTypeField is AstNode nameNode && nameNode.Type == "Identifier" && nameNode.Fields.ContainsKey("lexeme"))
             {
-                parameters = EmitParameterList(parametersField);
+                funcName = nameNode.Fields["lexeme"]?.ToString() ?? "";
+            }
+            
+            // Extract parameters and body (shifted)
+            string parameters = "";
+            object? bodyField = null;
+            
+            if (nameField is AstNode nameContent)
+            {
+                if (nameContent.Type == "FormalParameterList")
+                {
+                    // name contains parameters, typeParams contains body
+                    parameters = EmitParameterList(nameContent);
+                    bodyField = typeParamsField;
+                }
+                else if (nameContent.Type == "MethodBody")
+                {
+                    // name contains body directly (no parameters)
+                    bodyField = nameContent;
+                }
+            }
+            
+            
+            // Format body through Maps - use MapReference.Transform
+            string bodyOutput = "";
+            if (bodyField is AstNode bodyNode)
+            {
+                bodyOutput = self.Transform(bodyNode);
             }
             
             // Build the function
@@ -669,7 +692,6 @@ public class WASM : MapSet
             }
             
             // Emit the body code (transformed through Maps)
-            var bodyOutput = body();
             if (!string.IsNullOrWhiteSpace(bodyOutput))
             {
                 sb.Append("\n");
@@ -747,7 +769,7 @@ public class WASM : MapSet
     /// Functional Map with proper parameter formatting.
     /// </summary>
     public Map ConstructorDeclaration => new Map(
-        (Func<string> body, MapReference self) =>
+        (MapReference self) =>
         {
             var node = self.Node;
             if (node == null) return "";
@@ -755,6 +777,7 @@ public class WASM : MapSet
             // Extract fields from AST node
             var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
             var parametersField = node.Fields.ContainsKey("parameters") ? node.Fields["parameters"] : null;
+            var bodyField = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
             
             // Extract constructor/class name
             string className = "";
@@ -768,6 +791,13 @@ public class WASM : MapSet
             if (parametersField != null)
             {
                 parameters = EmitParameterList(parametersField);
+            }
+            
+            // Format body through Maps - use MapReference.Transform
+            string bodyOutput = "";
+            if (bodyField is AstNode bodyNode)
+            {
+                bodyOutput = self.Transform(bodyNode);
             }
             
             // Build the constructor function
@@ -785,7 +815,6 @@ public class WASM : MapSet
             }
             
             // Emit the body code (transformed through Maps)
-            var bodyOutput = body();
             if (!string.IsNullOrWhiteSpace(bodyOutput))
             {
                 sb.Append("\n");
