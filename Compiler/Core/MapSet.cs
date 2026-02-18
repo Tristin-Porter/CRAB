@@ -2847,7 +2847,9 @@ public class WASM : MapSet
     /// <summary>Statements list - recursively emit all statements in the list</summary>
     /// <summary>
     /// Statements - CDTk handles Statement+ repetition
-    /// The {stmts} placeholder will be resolved by CDTk recursively
+    /// The {stmts} placeholder will be resolved by CDTk recursively.
+    /// CDTk processes lists by recursively applying the Map for each item,
+    /// automatically joining the results.
     /// </summary>
     public Map Statements = "{stmts}";
     
@@ -3030,12 +3032,21 @@ drop
     /// <summary>Shift expression</summary>
     public Map ShiftExpression = "({op} {left} {right})";
     
-    /// <summary>Additive expression - CDTk resolves {op} to operator Map</summary>
+    /// <summary>
+    /// Additive expression - CDTk resolves {op} to operator Map
+    /// Newlines between components create proper WAT stack ordering:
+    /// - Evaluate left operand (pushes value to stack)
+    /// - Evaluate right operand (pushes value to stack)
+    /// - Apply operator (pops two values, pushes result)
+    /// </summary>
     public Map AdditiveExpression = @"{left}
 {right}
 {op}";
     
-    /// <summary>Multiplicative expression - CDTk resolves {op} to operator Map</summary>
+    /// <summary>
+    /// Multiplicative expression - CDTk resolves {op} to operator Map
+    /// Same stack-based evaluation order as AdditiveExpression
+    /// </summary>
     public Map MultiplicativeExpression = @"{left}
 {right}
 {op}";
