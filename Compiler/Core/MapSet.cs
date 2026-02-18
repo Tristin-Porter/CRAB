@@ -2396,113 +2396,59 @@ public class WASM : MapSet
     }
     
     /// <summary>
-    /// Emit a method declaration inline (duplicate of MethodDeclaration typed Map logic).
+    /// Emit a method declaration inline (simplified after CDTk fix).
     /// This is needed because we can't call the MethodDeclaration typed Map from within this typed Map.
     /// </summary>
     private static string EmitMethodDeclarationInline(AstNode node)
     {
-        // Extract fields
-        var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
+        // CDTk fix: Fields are now correctly assigned
         var attrsField = node.Fields.ContainsKey("attrs") ? node.Fields["attrs"] : null;
+        var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
         var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
         var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
-        var typeParamsField = node.Fields.ContainsKey("typeParams") ? node.Fields["typeParams"] : null;
+        var parametersField = node.Fields.ContainsKey("parameters") ? node.Fields["parameters"] : null;
+        var bodyField = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
         
-        
+        // Extract function name
         string funcName = "";
-        string resultType = "";
-        string parameters = "";
-        string body = "";
+        if (nameField is AstNode nameNode && nameNode.Type == "Identifier" && nameNode.Fields.ContainsKey("lexeme"))
+        {
+            funcName = nameNode.Fields["lexeme"]?.ToString() ?? "";
+        }
         
-        // NEW CASE: Detect field shifting when name contains FormalParameterList
-        if (nameField is AstNode nameNode && nameNode.Type == "FormalParameterList" && 
-            typeParamsField is AstNode typeParamsNode && typeParamsNode.Type == "MethodBody")
+        // Extract return type
+        string resultType = "";
+        if (returnTypeField is AstNode typeNode)
         {
-            // Field-shifted case: mods=Type, returnType=Identifier(name), name=FormalParameterList, typeParams=MethodBody
-            
-            // Get function name from returnType field
-            if (returnTypeField is AstNode idNode && idNode.Type == "Identifier" && idNode.Fields.ContainsKey("lexeme"))
-                funcName = idNode.Fields["lexeme"]?.ToString() ?? "";
-            
-            // Get return type from mods field
-            if (modsField is AstNode modsType)
-                resultType = ExtractTypeFromNode(modsType);
-            
-            // Get parameters from name field (which contains FormalParameterList)
-            parameters = EmitParameterList(nameField);
-            
-            // Clear local variables for this function BEFORE emitting body
-            WASM.LocalVariableRegistry.ClearCurrentFunction();
-            
-            // Get body from typeParams field (which contains MethodBody)
-            if (typeParamsNode.Fields.ContainsKey("body"))
-                body = WASM.WasmEmit.EmitStatement(typeParamsNode.Fields["body"]);
+            resultType = ExtractTypeFromNode(typeNode);
+        }
+        
+        // Extract parameters
+        string parameters = "";
+        if (parametersField != null)
+        {
+            parameters = EmitParameterList(parametersField);
+        }
+        
+        // Clear local variables for this function BEFORE emitting body
+        WASM.LocalVariableRegistry.ClearCurrentFunction();
+        
+        // Extract body
+        string body = "";
+        if (bodyField is AstNode bodyNode)
+        {
+            if (bodyNode.Fields.ContainsKey("body"))
+            {
+                body = WASM.WasmEmit.EmitStatement(bodyNode.Fields["body"]);
+            }
             else
-                body = WASM.WasmEmit.EmitStatement(typeParamsNode);
-        }
-        // Detect case by checking if mods is an Identifier
-        else if (modsField is AstNode modsNode && modsNode.Type == "Identifier")
-        {
-            // WITH params case
-            funcName = modsNode.Fields.ContainsKey("lexeme") ? modsNode.Fields["lexeme"]?.ToString() ?? "" : "";
-            
-            if (attrsField is AstNode attrsType)
-                resultType = ExtractTypeFromNode(attrsType);
-            
-            if (returnTypeField != null)
             {
-                parameters = EmitParameterList(returnTypeField);
-            }
-            
-            // Clear local variables for this function BEFORE emitting body
-            WASM.LocalVariableRegistry.ClearCurrentFunction();
-            
-            if (nameField is AstNode bodyNode)
-            {
-                if (bodyNode.Fields.ContainsKey("body"))
-                    body = WASM.WasmEmit.EmitStatement(bodyNode.Fields["body"]);
-                else
-                    body = WASM.WasmEmit.EmitStatement(bodyNode);
-            }
-        }
-        else
-        {
-            // NO params case
-            if (returnTypeField is AstNode idNode && idNode.Type == "Identifier" && idNode.Fields.ContainsKey("lexeme"))
-                funcName = idNode.Fields["lexeme"]?.ToString() ?? "";
-            
-            if (modsField is AstNode modsType)
-                resultType = ExtractTypeFromNode(modsType);
-            
-            // Clear local variables for this function BEFORE emitting body
-            WASM.LocalVariableRegistry.ClearCurrentFunction();
-            
-            if (nameField is AstNode bodyNode)
-            {
-                // DEBUG: Print body structure
-                if (bodyNode.Fields.ContainsKey("body"))
-                {
-                    var innerBody = bodyNode.Fields["body"];
-                    if (innerBody is AstNode ibn)
-                    {
-                        if (ibn.Fields.ContainsKey("stmts"))
-                        {
-                            var stmts = ibn.Fields["stmts"];
-                            if (stmts is AstNode sn)
-                            {
-                            }
-                        }
-                    }
-                    body = WASM.WasmEmit.EmitStatement(bodyNode.Fields["body"]);
-                }
-                else
-                    body = WASM.WasmEmit.EmitStatement(bodyNode);
+                body = WASM.WasmEmit.EmitStatement(bodyNode);
             }
         }
         
         // Build the function
         var sb = new System.Text.StringBuilder();
-        
         sb.Append($"(func ${funcName}");
         
         if (!string.IsNullOrWhiteSpace(parameters))
@@ -2518,18 +2464,8 @@ public class WASM : MapSet
             sb.Append(")");
         }
         
-        // Emit function body (this will register local variables)
-        string bodyCode = "";
-        if (!string.IsNullOrWhiteSpace(body))
-        {
-            bodyCode = body;
-        }
-        
-        // Now emit local variable declarations based on what was registered
+        // Emit local variable declarations
         var locals = WASM.LocalVariableRegistry.GetCurrentFunctionVariables();
-        foreach (var (name, type) in locals)
-        {
-        }
         if (locals.Count > 0)
         {
             sb.AppendLine();
@@ -2539,11 +2475,11 @@ public class WASM : MapSet
             }
         }
         
-        // Now emit the body code
-        if (!string.IsNullOrWhiteSpace(bodyCode))
+        // Emit the body code
+        if (!string.IsNullOrWhiteSpace(body))
         {
             sb.Append("\n  ");
-            sb.Append(bodyCode);
+            sb.Append(body);
         }
         
         sb.Append("\n)\n");
