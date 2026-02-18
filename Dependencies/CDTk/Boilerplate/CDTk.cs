@@ -8807,9 +8807,12 @@ namespace CDTk
                         var declaringTypeProperty = prop.PropertyType.GetProperty("DeclaringType", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
                         var parentMapSetProperty = prop.PropertyType.GetProperty("ParentMapSet", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
                         
-                        nameProperty?.SetValue(typedMap, mapName);
-                        declaringTypeProperty?.SetValue(typedMap, type);
-                        parentMapSetProperty?.SetValue(typedMap, this);
+                        if (nameProperty != null)
+                            nameProperty.SetValue(typedMap, mapName);
+                        if (declaringTypeProperty != null)
+                            declaringTypeProperty.SetValue(typedMap, type);
+                        if (parentMapSetProperty != null)
+                            parentMapSetProperty.SetValue(typedMap, this);
                         
                         _typedMapsByName[mapName] = typedMap;
                     }

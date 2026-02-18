@@ -623,11 +623,14 @@ public class WASM : MapSet
             if (node == null) return "";
             
             // Extract fields from AST node with field shifting workaround
-            // Due to CDTk parser bug, fields are shifted:
-            // - mods contains returnType
-            // - returnType contains name
-            // - name contains parameters (FormalParameterList) or body (MethodBody)
-            // - typeParams contains body (when parameters exist)
+            // FIXME: Due to CDTk parser bug (see GitHub issue #TBD), fields are shifted:
+            // Expected: attrs, mods, returnType, name, parameters, body
+            // Actual mapping:
+            //   mods -> returnType
+            //   returnType -> name  
+            //   name -> parameters (FormalParameterList) or body (MethodBody)
+            //   typeParams -> body (when parameters exist)
+            // This workaround should be removed once the parser bug is fixed.
             var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
             var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
             var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
