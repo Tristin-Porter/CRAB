@@ -205,6 +205,25 @@ public class WASM : MapSet
     /// Placeholders like {name} are replaced with actual AST field values.
     /// </summary>
     // ============================================================
+    // SEMANTIC CONTEXT FIELDS (for functional Maps)
+    // ============================================================
+    
+    /// <summary>
+    /// Target language dialect (e.g., "WASM", "WAT", "Python" for hypothetical cross-compilation)
+    /// </summary>
+    public string Dialect { get; set; } = "WASM";
+    
+    /// <summary>
+    /// Minification flag - when true, output is compact without whitespace
+    /// </summary>
+    public bool Minify { get; set; } = false;
+    
+    /// <summary>
+    /// Optimization hints from optimization model
+    /// </summary>
+    public OptimizationHints OptHints { get; set; } = new OptimizationHints();
+    
+    // ============================================================
     // SEMANTIC ANALYSIS MODELS
     // ============================================================
     
@@ -934,12 +953,31 @@ public class WASM : MapSet
     /// <summary>Selection statement dispatcher</summary>
     public Map SelectionStatement = "{stmt}";
     
-    /// <summary>If statement (else clause should be omitted if empty, handled by template processing)</summary>
-    public Map IfStatement = @"(if {condition}
+    /// <summary>If statement with optional else clause - functional Map example</summary>
+    public Map IfStatement => new Map(
+        (Func<string> condition, Func<string> thenStmt, Func<string> elseClause, MapReference self) =>
+        {
+            // Access semantic context for formatting decisions
+            if (this.OptHints.CanInline.TryGetValue(self.Id, out var inline) && inline)
+                return "if(" + condition() + ")" + thenStmt();
+
+            if (this.OptHints.RequiresBlock.TryGetValue(self.Id, out var block) && block)
+                return "if (" + condition() + ") { " + thenStmt() + " }";
+
+            if (this.Dialect == "Python")
+                return "if " + condition() + ":\n" + thenStmt();
+
+            if (this.Minify)
+                return "if(" + condition() + ")" + thenStmt();
+
+            // Default WASM formatting
+            return @"(if " + condition() + @"
   (then
-{thenStmt}
-  ){elseClause}
+" + thenStmt() + @"
+  )" + elseClause() + @"
 )";
+        }
+    );
     
     /// <summary>Switch statement</summary>
     public Map SwitchStatement = @"(block $switch
@@ -2826,5 +2864,27 @@ drop
     /// </summary>
     public Map Fallback = @";; TODO: Add map for this construct
 nop";
+}
+
+/// <summary>
+/// Optimization hints that influence code generation.
+/// Populated by OptimizationModel to guide Maps.
+/// </summary>
+public class OptimizationHints
+{
+    /// <summary>
+    /// Maps node IDs to whether they can be inlined
+    /// </summary>
+    public Dictionary<string, bool> CanInline { get; set; } = new Dictionary<string, bool>();
+    
+    /// <summary>
+    /// Maps node IDs to whether they require block syntax
+    /// </summary>
+    public Dictionary<string, bool> RequiresBlock { get; set; } = new Dictionary<string, bool>();
+    
+    /// <summary>
+    /// Maps node IDs to suggested formatting style
+    /// </summary>
+    public Dictionary<string, string> FormattingStyle { get; set; } = new Dictionary<string, string>();
 }
         
