@@ -20,130 +20,7 @@ public class WASM : MapSet
     /// <summary>
     /// Manages string literals for WASM data section.
     /// </summary>
-    public static class StringRegistry
-    {
-        private static Dictionary<int, string> strings = new();
-        private static Dictionary<int, int> offsets = new();
-        private static int nextId = 0;
-        private static int currentOffset = 0;
-        
-        public static int RegisterString(string text)
-        {
-            var id = nextId++;
-            strings[id] = text;
-            offsets[id] = currentOffset;
-            currentOffset += text.Length + 1; // +1 for null terminator
-            return id;
-        }
-        
-        public static int GetStringOffset(int id)
-        {
-            return offsets.ContainsKey(id) ? offsets[id] : 0;
-        }
-        
-        public static string GetString(int id)
-        {
-            return strings.ContainsKey(id) ? strings[id] : "";
-        }
-        
-        public static Dictionary<int, string> GetAllStrings()
-        {
-            return new Dictionary<int, string>(strings);
-        }
-        
-        public static void Clear()
-        {
-            strings.Clear();
-            offsets.Clear();
-            nextId = 0;
-            currentOffset = 0;
-        }
-    }
     
-    /// <summary>
-    /// Manages local variables for current function scope.
-    /// Tracks variable names, types, and generates WASM local declarations.
-    /// </summary>
-    public static class LocalVariableRegistry
-    {
-        private static Dictionary<string, string> variables = new();  // name -> type
-        private static HashSet<string> currentFunctionVars = new();
-        
-        public static void RegisterVariable(string name, string wasmType)
-        {
-            if (!variables.ContainsKey(name))
-            {
-                variables[name] = wasmType;
-                currentFunctionVars.Add(name);
-            }
-        }
-        
-        public static string GetVariableType(string name)
-        {
-            return variables.ContainsKey(name) ? variables[name] : "i32";
-        }
-        
-        public static bool HasVariable(string name)
-        {
-            return variables.ContainsKey(name);
-        }
-        
-        public static List<(string name, string type)> GetCurrentFunctionVariables()
-        {
-            return currentFunctionVars.Select(name => (name, variables[name])).ToList();
-        }
-        
-        public static void ClearCurrentFunction()
-        {
-            currentFunctionVars.Clear();
-        }
-        
-        public static void Clear()
-        {
-            variables.Clear();
-            currentFunctionVars.Clear();
-        }
-    }
-    
-    // ============================================================
-    // UTILITY METHODS FOR WASM GENERATION
-    // ============================================================
-    
-    /// <summary>
-    /// Helper to safely get a field from an AST node.
-    /// </summary>
-    private static string? GetField(AstNode? node, string fieldName)
-    {
-        if (node == null) return null;
-        
-        if (node.Fields.ContainsKey(fieldName))
-        {
-            var value = node.Fields[fieldName];
-            
-            // If it's an AST node, try to get its lexeme
-            if (value is AstNode astNode && astNode.Fields.ContainsKey("lexeme"))
-            {
-                return astNode.Fields["lexeme"]?.ToString();
-            }
-            
-            return value?.ToString();
-        }
-        
-        return null;
-    }
-    
-    /// <summary>
-    /// Escape special characters in strings for WASM text format.
-    /// </summary>
-    private static string EscapeString(string text)
-    {
-        return text
-            .Replace("\\", "\\\\")  // Backslash
-            .Replace("\"", "\\\"")  // Quote
-            .Replace("\n", "\\n")   // Newline
-            .Replace("\r", "\\r")   // Carriage return
-            .Replace("\t", "\\t");  // Tab
-    }
     
     /// <summary>
     /// Generate WASM data section for string literals.
@@ -260,6 +137,20 @@ public class WASM : MapSet
     /// Maps can check per-node flags like CanInline[nodeId] or RequiresBlock[nodeId].
     /// </summary>
     public OptimizationHints OptHints { get; set; } = new OptimizationHints();
+    
+    /// <summary>
+    /// String literal analysis - USER DEFINED field, replaces static StringRegistry.
+    /// Populated by Models during semantic analysis phase.
+    /// Maps use this to get string offsets and generate data section.
+    /// </summary>
+    public StringLiteralInfo StringInfo { get; set; } = new StringLiteralInfo();
+    
+    /// <summary>
+    /// Local variable analysis - USER DEFINED field, replaces static LocalVariableRegistry.
+    /// Populated by Models during semantic analysis phase.
+    /// Maps use this to get variable types and generate local declarations.
+    /// </summary>
+    public LocalVariableInfo LocalVarInfo { get; set; } = new LocalVariableInfo();
     
     // ============================================================
     // EXAMPLE: Adding Your Own Custom Semantic Fields
@@ -2973,5 +2864,114 @@ public class OptimizationHints
     /// Example: var style = this.OptHints.FormattingStyle[self.Id];
     /// </summary>
     public Dictionary<string, string> FormattingStyle { get; set; } = new Dictionary<string, string>();
+}
+
+/// <summary>
+/// String literal analysis info - replaces static StringRegistry.
+/// Populated by Models, provides string offsets and data section generation.
+/// </summary>
+public class StringLiteralInfo
+{
+    private Dictionary<int, string> _strings = new();
+    private Dictionary<int, int> _offsets = new();
+    private Dictionary<string, int> _stringToId = new();
+    private int _nextId = 0;
+    private int _currentOffset = 0;
+    
+    /// <summary>Register a string and return its ID</summary>
+    public int RegisterString(string text)
+    {
+        // Check if already registered
+        if (_stringToId.TryGetValue(text, out var existingId))
+            return existingId;
+        
+        var id = _nextId++;
+        _strings[id] = text;
+        _offsets[id] = _currentOffset;
+        _stringToId[text] = id;
+        _currentOffset += text.Length + 1; // +1 for null terminator
+        return id;
+    }
+    
+    /// <summary>Get offset for string ID</summary>
+    public int GetOffset(int id) => _offsets.ContainsKey(id) ? _offsets[id] : 0;
+    
+    /// <summary>Get string by ID</summary>
+    public string GetString(int id) => _strings.ContainsKey(id) ? _strings[id] : "";
+    
+    /// <summary>Get all registered strings</summary>
+    public Dictionary<int, string> GetAllStrings() => new Dictionary<int, string>(_strings);
+    
+    /// <summary>Calculate heap start after all strings</summary>
+    public int CalculateHeapStart()
+    {
+        if (_strings.Count == 0) return 0;
+        var maxOffset = _strings.Max(kvp => _offsets[kvp.Key] + kvp.Value.Length + 1);
+        // Align to 4-byte boundary
+        return (maxOffset + 3) & ~3;
+    }
+    
+    /// <summary>Generate WASM data section</summary>
+    public string GenerateDataSection()
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (var kvp in _strings.OrderBy(x => x.Key))
+        {
+            var stringId = kvp.Key;
+            var text = kvp.Value;
+            var offset = _offsets[stringId];
+            
+            // Escape special characters
+            var escaped = text.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
+            
+            sb.AppendLine($"  (data (i32.const {offset}) \"{escaped}\\00\")");
+        }
+        return sb.ToString();
+    }
+}
+
+/// <summary>
+/// Local variable analysis info - replaces static LocalVariableRegistry.
+/// Populated by Models, provides variable types and scope information.
+/// </summary>
+public class LocalVariableInfo
+{
+    private Dictionary<string, Dictionary<string, string>> _functionVariables = new();  // funcId -> (varName -> type)
+    private string _currentFunction = "";
+    
+    /// <summary>Set current function context</summary>
+    public void SetCurrentFunction(string funcId)
+    {
+        _currentFunction = funcId;
+        if (!_functionVariables.ContainsKey(funcId))
+            _functionVariables[funcId] = new Dictionary<string, string>();
+    }
+    
+    /// <summary>Register a variable in current function</summary>
+    public void RegisterVariable(string name, string wasmType)
+    {
+        if (!_functionVariables.ContainsKey(_currentFunction))
+            _functionVariables[_currentFunction] = new Dictionary<string, string>();
+        
+        if (!_functionVariables[_currentFunction].ContainsKey(name))
+            _functionVariables[_currentFunction][name] = wasmType;
+    }
+    
+    /// <summary>Get variable type</summary>
+    public string GetVariableType(string funcId, string name)
+    {
+        if (_functionVariables.TryGetValue(funcId, out var vars))
+            if (vars.TryGetValue(name, out var type))
+                return type;
+        return "i32";  // Default
+    }
+    
+    /// <summary>Get all variables for a function</summary>
+    public List<(string name, string type)> GetFunctionVariables(string funcId)
+    {
+        if (_functionVariables.TryGetValue(funcId, out var vars))
+            return vars.Select(kvp => (kvp.Key, kvp.Value)).ToList();
+        return new List<(string, string)>();
+    }
 }
         
