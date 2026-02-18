@@ -2626,82 +2626,51 @@ public class WASM : MapSet
         .Emit(node => {
             if (node == null) return "";
             
-            // Extract fields
-            var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
+            // CDTk fix: Fields are now correctly assigned based on Named elements
+            // No field shifting workarounds needed!
             var attrsField = node.Fields.ContainsKey("attrs") ? node.Fields["attrs"] : null;
+            var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
             var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
             var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
+            var parametersField = node.Fields.ContainsKey("parameters") ? node.Fields["parameters"] : null;
             var bodyField = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
             
+            // Extract function name
             string funcName = "";
-            string resultType = "";
-            string parameters = "";
-            string body = "";
-            
-            // Detect case by checking if mods is an Identifier
-            if (modsField is AstNode modsNode && modsNode.Type == "Identifier")
+            if (nameField is AstNode nameNode && nameNode.Type == "Identifier" && nameNode.Fields.ContainsKey("lexeme"))
             {
-                // WITH params: mods=Identifier, attrs=Type, returnType=FormalParameterList, name=MethodBody
-                funcName = modsNode.Fields.ContainsKey("lexeme") ? modsNode.Fields["lexeme"]?.ToString() ?? "" : "";
-                
-                // Get result type from attrs (Type node)
-                if (attrsField is AstNode attrsType)
-                {
-                    resultType = ExtractTypeFromNode(attrsType);
-                }
-                
-                // Get parameters from returnType (FormalParameterList)
-                if (returnTypeField != null)
-                {
-                    parameters = EmitParameterList(returnTypeField);
-                }
-                
-                // Get body from name (MethodBody -> Block)
-                if (nameField is AstNode bodyNode)
-                {
-                    // MethodBody has a 'body' field containing the actual Block
-                    if (bodyNode.Fields.ContainsKey("body"))
-                    {
-                        body = WASM.WasmEmit.EmitStatement(bodyNode.Fields["body"]);
-                    }
-                    else
-                    {
-                        body = WASM.WasmEmit.EmitStatement(bodyNode);
-                    }
-                }
+                funcName = nameNode.Fields["lexeme"]?.ToString() ?? "";
             }
-            else
+            
+            // Extract return type
+            string resultType = "";
+            if (returnTypeField is AstNode typeNode)
             {
-                // NO params: attrs=Modifiers, mods=Type, returnType=Identifier, name=empty or body
-                
-                // Get function name from returnType (Identifier)
-                if (returnTypeField is AstNode idNode && idNode.Type == "Identifier" && idNode.Fields.ContainsKey("lexeme"))
+                resultType = ExtractTypeFromNode(typeNode);
+            }
+            
+            // Extract parameters
+            string parameters = "";
+            if (parametersField != null)
+            {
+                parameters = EmitParameterList(parametersField);
+            }
+            
+            // Clear local variables for this function BEFORE emitting body
+            WASM.LocalVariableRegistry.ClearCurrentFunction();
+            
+            // Extract body
+            string body = "";
+            if (bodyField is AstNode bodyNode)
+            {
+                // MethodBody has a 'body' field containing the actual Block
+                if (bodyNode.Fields.ContainsKey("body"))
                 {
-                    funcName = idNode.Fields["lexeme"]?.ToString() ?? "";
+                    body = WASM.WasmEmit.EmitStatement(bodyNode.Fields["body"]);
                 }
-                
-                // Get result type from mods (Type node)
-                if (modsField is AstNode modsType)
+                else
                 {
-                    resultType = ExtractTypeFromNode(modsType);
-                }
-                
-                // Try to get body from name field (which contains MethodBody for NO params)
-                if (nameField is AstNode bodyNode)
-                {
-                    // MethodBody has a 'body' field containing the actual Block
-                    if (bodyNode.Fields.ContainsKey("body"))
-                    {
-                        body = WASM.WasmEmit.EmitStatement(bodyNode.Fields["body"]);
-                    }
-                    else
-                    {
-                        body = WASM.WasmEmit.EmitStatement(bodyNode);
-                    }
-                }
-                else if (bodyField != null)
-                {
-                    body = WASM.WasmEmit.EmitStatement(bodyField);
+                    body = WASM.WasmEmit.EmitStatement(bodyNode);
                 }
             }
             
