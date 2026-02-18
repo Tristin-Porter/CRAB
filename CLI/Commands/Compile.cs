@@ -12,16 +12,13 @@ class Compile : Command
     public Compile()
     {
         Name = "compile";
-        Description = "Compile C# source files to WebAssembly or native assembly.";
+        Description = "Compile C# source files to WebAssembly text format (WAT).";
         
         SupportedFlags["input"] = "Input C# source file or directory.";
-        SupportedFlags["output"] = "Output file (default: output.wasm or output.bin based on --to-asm flag).";
+        SupportedFlags["output"] = "Output file (default: output.wat).";
         SupportedFlags["verbose"] = "Enable verbose compilation output.";
         SupportedFlags["verify"] = "Run additional verification passes (slower, more thorough).";
         SupportedFlags["optimize"] = "Enable optimizations (default: true).";
-        SupportedFlags["to-asm"] = "Compile all the way to native assembly using BADGER (WAT -> ASM).";
-        SupportedFlags["arch"] = "Target architecture when using --to-asm (x86_64, x86_32, x86_16, arm64, arm32, default: x86_64).";
-        SupportedFlags["format"] = "Output format when using --to-asm (native, pe, default: native).";
     }
 
     public override void Execute(string[] args, Dictionary<string, string?> flags)
@@ -36,25 +33,14 @@ class Compile : Command
         if (string.IsNullOrWhiteSpace(inputPath))
         {
             System.Console.WriteLine("Error: Input file or directory required.");
-            System.Console.WriteLine("Usage: compile <input.cs> [--output output.wasm] [--verbose] [--verify] [--to-asm]");
+            System.Console.WriteLine("Usage: compile <input.cs> [--output output.wat] [--verbose] [--verify]");
             return;
         }
 
         // Parse output
-        bool toAsm = flags.ContainsKey("to-asm");
-        string defaultOutput = toAsm ? "output.bin" : "output.wasm";
-        string outputPath = defaultOutput;
+        string outputPath = "output.wat";
         if (flags.TryGetValue("output", out var flagOutput) && !string.IsNullOrWhiteSpace(flagOutput))
             outputPath = flagOutput;
-
-        // Parse BADGER options
-        string architecture = "x86_64";
-        if (flags.TryGetValue("arch", out var flagArch) && !string.IsNullOrWhiteSpace(flagArch))
-            architecture = flagArch;
-        
-        string format = "native";
-        if (flags.TryGetValue("format", out var flagFormat) && !string.IsNullOrWhiteSpace(flagFormat))
-            format = flagFormat;
 
         // Parse options
         bool verbose = flags.ContainsKey("verbose");
@@ -71,20 +57,12 @@ class Compile : Command
         if (verbose)
         {
             System.Console.WriteLine("=".PadRight(60, '='));
-            if (toAsm)
-                System.Console.WriteLine("CRAB Compiler - C# to Native Assembly");
-            else
-                System.Console.WriteLine("CRAB Compiler - C# to WebAssembly");
+            System.Console.WriteLine("CRAB Compiler - C# to WebAssembly");
             System.Console.WriteLine("=".PadRight(60, '='));
             System.Console.WriteLine($"Input:      {inputPath}");
             System.Console.WriteLine($"Output:     {outputPath}");
             System.Console.WriteLine($"Verify:     {verify}");
             System.Console.WriteLine($"Optimize:   {optimize}");
-            if (toAsm)
-            {
-                System.Console.WriteLine($"Arch:       {architecture}");
-                System.Console.WriteLine($"Format:     {format}");
-            }
             System.Console.WriteLine("=".PadRight(60, '='));
         }
 
@@ -92,177 +70,85 @@ class Compile : Command
         {
             string wasmText;
             
-            // Check if input is already WAT/WASM format
-            bool isWasmInput = inputPath.EndsWith(".wat", StringComparison.OrdinalIgnoreCase) || 
-                              inputPath.EndsWith(".wasm", StringComparison.OrdinalIgnoreCase);
+            // Input is C# source, compile to WAT
+            if (verbose) System.Console.WriteLine("\n[1/6] Reading source files...");
+            string sourceCode = ReadSourceCode(inputPath);
             
-            if (isWasmInput && toAsm)
-            {
-                // Input is already WAT/WASM, skip C# compilation and go straight to BADGER
-                if (verbose) System.Console.WriteLine("\n[1/2] Reading WAT file...");
-                wasmText = File.ReadAllText(inputPath);
-                
-                if (verbose) System.Console.WriteLine($"      Read {wasmText.Length} characters from {inputPath}");
-            }
-            else
-            {
-                // Input is C# source, compile to WAT first
-                if (verbose) System.Console.WriteLine("\n[1/6] Reading source files...");
-                string sourceCode = ReadSourceCode(inputPath);
-                
-                if (verbose) System.Console.WriteLine($"      Read {sourceCode.Length} characters from {inputPath}");
+            if (verbose) System.Console.WriteLine($"      Read {sourceCode.Length} characters from {inputPath}");
 
-                if (verbose) System.Console.WriteLine("\n[2/6] Compiling with CDTk pipeline...");
-                var compiler = new Compiler()
-                    .WithTokens(new Tokens())
-                    .WithRules(new Rules())
-                    .WithTarget(new WASM())
-                    .Build();
+            if (verbose) System.Console.WriteLine("\n[2/6] Compiling with CDTk pipeline...");
+            var compiler = new Compiler()
+                .WithTokens(new Tokens())
+                .WithRules(new Rules())
+                .WithTarget(new WASM())
+                .Build();
 
-                // CDTk Compile method runs full pipeline: Tokens → Syntax → Structure → Semantics → Emission
-                var result = compiler.Compile(sourceCode);
-                
-                if (result.Diagnostics.HasErrors || result.Ast == null)
-                {
-                    System.Console.WriteLine("Error: Compilation failed. Check syntax.");
-                    if (result.Diagnostics.HasErrors)
-                    {
-                        foreach (var diag in result.Diagnostics.Items)
-                        {
-                            System.Console.WriteLine($"  {diag.Level}: {diag.Message}");
-                        }
-                    }
-                    return;
-                }
-                
-                if (verbose) System.Console.WriteLine("      Compilation complete.");
-
-                // Check for deprecated 'unsafe' keyword usage and emit warnings
-                CheckForUnsafeKeywordUsage(result.Ast, sourceCode);
-
-                // Note: CDTk automatically runs semantic analysis during Compile()
-                // The models are integrated as properties in MapSet and called automatically
-                // We can access results from the compilation result
-                if (verbose) System.Console.WriteLine("\n[3/6] Memory analysis complete (automatic via CDTk)...");
-                
-                if (verbose) 
-                {
-                    System.Console.WriteLine("      Memory safety verified");
-                }
-
-                if (verbose) System.Console.WriteLine("\n[4/6] Manual memory verification complete (automatic via CDTk)...");
-                
-                if (verbose)
-                {
-                    System.Console.WriteLine("      All memory operations verified safe");
-                }
-
-                // CDTk Compile() already generated the output
-                if (verbose) System.Console.WriteLine("\n[5/6] WebAssembly generation complete...");
-                wasmText = result.Output ?? "";
-                
-                // Apply post-processing fixes to clean up WASM output
-                // Fixes malformed parameters, removes fallback comments, cleans up formatting
-                wasmText = FixMethodDeclarations(wasmText);
-                
-                if (string.IsNullOrWhiteSpace(wasmText))
-                {
-                    System.Console.WriteLine("Error: WebAssembly generation failed.");
-                    return;
-                }
-                
-                // DEBUG: Save WAT text for inspection
-                File.WriteAllText("/tmp/debug_output.wat", wasmText);
-                
-                if (verbose) System.Console.WriteLine($"      Generated {wasmText.Length} characters of WebAssembly text format");
-            }
-
-            if (verbose) System.Console.WriteLine($"\n[{(isWasmInput && toAsm ? "2/2" : "6/6")}] Writing output...");
+            // CDTk Compile method runs full pipeline: Tokens → Syntax → Structure → Semantics → Emission
+            var result = compiler.Compile(sourceCode);
             
-            if (toAsm)
+            if (result.Diagnostics.HasErrors || result.Ast == null)
             {
-                // Pipeline: C# -> WAT -> ASM using BADGER
-                if (verbose)
+                System.Console.WriteLine("Error: Compilation failed. Check syntax.");
+                if (result.Diagnostics.HasErrors)
                 {
-                    System.Console.WriteLine($"      Invoking BADGER to compile WAT to {architecture} assembly...");
-                }
-                
-                try
-                {
-                    byte[] binary = Badger.BadgerCompiler.Compile(wasmText, architecture, format);
-                    File.WriteAllBytes(outputPath, binary);
-                    
-                    if (verbose)
+                    foreach (var diag in result.Diagnostics.Items)
                     {
-                        System.Console.WriteLine($"      BADGER compiled {binary.Length} bytes of {GetArchitectureDisplayName(architecture)} {format} code");
-                        System.Console.WriteLine($"      Wrote {new FileInfo(outputPath).Length} bytes to {outputPath}");
-                        System.Console.WriteLine("\n" + "=".PadRight(60, '='));
+                        System.Console.WriteLine($"  {diag.Level}: {diag.Message}");
                     }
-                    
-                    System.Console.WriteLine($"✓ Compilation successful: C# -> WAT -> {GetArchitectureDisplayName(architecture)} ASM");
-                    System.Console.WriteLine($"✓ Output: {outputPath} ({new FileInfo(outputPath).Length} bytes)");
                 }
-                catch (Exception badgerEx)
-                {
-                    System.Console.WriteLine($"Error: BADGER compilation failed - {badgerEx.Message}");
-                    if (verbose)
-                    {
-                        System.Console.WriteLine("\nStack trace:");
-                        System.Console.WriteLine(badgerEx.StackTrace);
-                    }
-                    return;
-                }
+                return;
             }
-            else
-            {
-                // Generate binary WASM with JavaScript wrapper and HTML loader
-                try
-                {
-                    // Use BADGER's WasmJS container to convert WAT to binary WASM
-                    var (wasmBinary, jsWrapper) = Badger.Containers.WasmJS.Emit(wasmText, Path.GetFileName(outputPath));
-                    
-                    // Write binary WASM file
-                    File.WriteAllBytes(outputPath, wasmBinary);
-                    
-                    // Write JavaScript wrapper
-                    string jsPath = Path.ChangeExtension(outputPath, ".js");
-                    File.WriteAllText(jsPath, jsWrapper);
-                    
-                    // Generate HTML loader
-                    string htmlPath = Path.ChangeExtension(outputPath, ".html");
-                    string htmlContent = GenerateHtmlLoader(Path.GetFileName(outputPath), Path.GetFileName(jsPath));
-                    File.WriteAllText(htmlPath, htmlContent);
-                    
-                    if (verbose)
-                    {
-                        System.Console.WriteLine($"      Wrote {new FileInfo(outputPath).Length} bytes to {outputPath}");
-                        System.Console.WriteLine($"      Wrote {new FileInfo(jsPath).Length} bytes to {jsPath}");
-                        System.Console.WriteLine($"      Wrote {new FileInfo(htmlPath).Length} bytes to {htmlPath}");
-                        System.Console.WriteLine("\n" + "=".PadRight(60, '='));
-                    }
+            
+            if (verbose) System.Console.WriteLine("      Compilation complete.");
 
-                    System.Console.WriteLine($"✓ Compilation successful: {outputPath}");
-                    System.Console.WriteLine($"✓ JavaScript wrapper: {jsPath}");
-                    System.Console.WriteLine($"✓ HTML loader: {htmlPath}");
-                    System.Console.WriteLine($"\nTo run in browser: Open {htmlPath} in a web browser");
-                }
-                catch (Exception wasmEx)
-                {
-                    System.Console.WriteLine($"Error: WASM binary generation failed - {wasmEx.Message}");
-                    if (verbose)
-                    {
-                        System.Console.WriteLine("\nStack trace:");
-                        System.Console.WriteLine(wasmEx.StackTrace);
-                    }
-                    
-                    // Fallback: write WAT text with .wat extension
-                    System.Console.WriteLine("Falling back to WAT text format...");
-                    string watPath = Path.ChangeExtension(outputPath, ".wat");
-                    File.WriteAllText(watPath, wasmText);
-                    System.Console.WriteLine($"✓ WAT text written to: {watPath}");
-                    return;
-                }
+            // Check for deprecated 'unsafe' keyword usage and emit warnings
+            CheckForUnsafeKeywordUsage(result.Ast, sourceCode);
+
+            // Note: CDTk automatically runs semantic analysis during Compile()
+            // The models are integrated as properties in MapSet and called automatically
+            // We can access results from the compilation result
+            if (verbose) System.Console.WriteLine("\n[3/6] Memory analysis complete (automatic via CDTk)...");
+            
+            if (verbose) 
+            {
+                System.Console.WriteLine("      Memory safety verified");
             }
+
+            if (verbose) System.Console.WriteLine("\n[4/6] Manual memory verification complete (automatic via CDTk)...");
+            
+            if (verbose)
+            {
+                System.Console.WriteLine("      All memory operations verified safe");
+            }
+
+            // CDTk Compile() already generated the output
+            if (verbose) System.Console.WriteLine("\n[5/6] WebAssembly generation complete...");
+            wasmText = result.Output ?? "";
+            
+            // Apply post-processing fixes to clean up WASM output
+            // Fixes malformed parameters, removes fallback comments, cleans up formatting
+            wasmText = FixMethodDeclarations(wasmText);
+            
+            if (string.IsNullOrWhiteSpace(wasmText))
+            {
+                System.Console.WriteLine("Error: WebAssembly generation failed.");
+                return;
+            }
+            
+            if (verbose) System.Console.WriteLine($"      Generated {wasmText.Length} characters of WebAssembly text format");
+
+            if (verbose) System.Console.WriteLine($"\n[6/6] Writing output...");
+            
+            // Write WAT text output
+            File.WriteAllText(outputPath, wasmText);
+            
+            if (verbose)
+            {
+                System.Console.WriteLine($"      Wrote {new FileInfo(outputPath).Length} bytes to {outputPath}");
+                System.Console.WriteLine("\n" + "=".PadRight(60, '='));
+            }
+
+            System.Console.WriteLine($"✓ Compilation successful: {outputPath}");
             
             if (verify && verbose)
             {

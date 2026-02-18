@@ -24,15 +24,13 @@
     <None Include="tests/**/*.cs">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <!-- Include the Testing/HelloWorld.cs file -->
+    <Compile Include="Testing\HelloWorld.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Remove="Dependencies\**" />
     <None Remove="Dependencies\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Include="Testing\Utilities\HtmlGenerator.cs" />
   </ItemGroup>
 
   <ItemGroup>
