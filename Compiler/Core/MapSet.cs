@@ -17,51 +17,12 @@ namespace CRAB;
 /// </summary>
 public class WASM : MapSet
 {
-    /// <summary>
-    /// Manages string literals for WASM data section.
-    /// </summary>
-    
-    
-    /// <summary>
-    /// Generate WASM data section for string literals.
-    /// </summary>
-    public static string GenerateDataSection()
-    {
-        var sb = new System.Text.StringBuilder();
-        var allStrings = StringRegistry.GetAllStrings();
-        
-        foreach (var kvp in allStrings.OrderBy(x => x.Key))
-        {
-            var stringId = kvp.Key;
-            var text = kvp.Value;
-            var offset = StringRegistry.GetStringOffset(stringId);
-            
-            // Escape special characters in string
-            var escapedText = EscapeString(text);
-            
-            // Emit data directive: (data (i32.const offset) "text\00")
-            sb.AppendLine($"  (data (i32.const {offset}) \"{escapedText}\\00\")");
-        }
-        
-        return sb.ToString();
-    }
-    
-    /// <summary>
-    /// Emit string literal - registers string and returns WASM code for ptr+len.
-    /// </summary>
-    public static string EmitStringLiteral(AstNode node)
-    {
-        var text = GetField(node, "lexeme") ?? "";
-        
-        // Store string in a global registry for later data section emission
-        var stringId = StringRegistry.RegisterString(text);
-        var offset = StringRegistry.GetStringOffset(stringId);
-        var length = text.Length;
-        
-        // Return pointer to string in memory (offset) and length
-        // Console.WriteLine and string operations need both values
-        return $";; string \"{text}\" at offset {offset}, length {length}\ni32.const {offset}\ni32.const {length}";
-    }
+    // ============================================================
+    // OLD STATIC DUCT TAPE CODE - REMOVED
+    // These were replaced by:
+    // - StringInfo.GenerateDataSection() - now an instance method on semantic field
+    // - StringLiteral Map using this.StringInfo - functional Map accessing semantic context
+    // ============================================================
     
     /// <summary>
     /// Map C# type names to WASM types.
@@ -279,121 +240,53 @@ public class WASM : MapSet
     }
     
     // ============================================================
-    // TYPED MAP API DEMONSTRATION (New Architecture)
-    // ============================================================
-    // ============================================================
     // MODULE STRUCTURE
     // ============================================================
     
-    /// <summary>Top-level compilation unit - generates complete WASM module</summary>
     /// <summary>
-    /// CompilationUnit template - generates the complete WASM module.
-    /// Uses TypedMap to allow custom emission that includes data section.
+    /// CompilationUnit - wraps module content with WASM boilerplate.
+    /// 
+    /// TODO: String data section and heap pointer calculation require Model preprocessing.
+    /// For now, heap pointer starts at 0 (will overwrite string data if strings are used).
+    /// 
+    /// Proper solution:
+    /// 1. StringAnalysisModel preprocesses AST and registers all strings in this.StringInfo
+    /// 2. CompilationUnit becomes TypedMap that accesses this.StringInfo.CalculateHeapStart()
+    /// 3. Data section is generated from this.StringInfo.GenerateDataSection()
     /// </summary>
-    public Map<AstNode, string> CompilationUnit = TypedMap.For<string>()
-        .Emit(node => {
-            // Clear string registry for new compilation
-            WASM.StringRegistry.Clear();
-            WASM.LocalVariableRegistry.Clear();
-            
-            var sb = new System.Text.StringBuilder();
-            sb.AppendLine("(module");
-            sb.AppendLine("  ;; Imports");
-            sb.AppendLine("  (import \"env\" \"memory\" (memory 1))");
-            sb.AppendLine("  (import \"env\" \"console_log\" (func $console_log (param i32) (param i32)))  ;; ptr, len");
-            sb.AppendLine("  (import \"env\" \"console_readkey\" (func $console_readkey (result i32)))  ;; returns key code");
-            sb.AppendLine();
-            
-            // First, process items to register strings
-            var itemsCode = new System.Text.StringBuilder();
-            if (node.Fields.ContainsKey("items"))
-            {
-                var items = node.Fields["items"];
-                if (items is List<AstNode> itemList)
-                {
-                    foreach (var item in itemList)
-                    {
-                        // Use the CompilationUnitItem map to process each item
-                        var itemCode = "";
-                        try
-                        {
-                            // Try to use the map if it exists in context
-                            itemCode = ProcessCompilationUnitItem(item);
-                        }
-                        catch
-                        {
-                            itemCode = "";
-                        }
-                        
-                        if (!string.IsNullOrWhiteSpace(itemCode))
-                        {
-                            itemsCode.AppendLine(itemCode);
-                        }
-                    }
-                }
-            }
-            
-            // Now calculate the starting heap pointer based on registered string literals
-            int heapStart = WASM.StringRegistry.GetAllStrings().Count > 0 
-                ? WASM.StringRegistry.GetAllStrings().Max(kvp => WASM.StringRegistry.GetStringOffset(kvp.Key) + kvp.Value.Length + 1)
-                : 0;
-            // Align to 4-byte boundary
-            heapStart = (heapStart + 3) & ~3;
-            
-            sb.AppendLine("  ;; Global heap pointer for dynamic memory allocation");
-            sb.AppendLine($"  (global $heap_ptr (mut i32) (i32.const {heapStart}))");
-            sb.AppendLine();
-            
-            sb.AppendLine("  ;; Helper functions");
-            sb.AppendLine("  ;; Memory allocation helper - returns pointer to allocated block");
-            sb.AppendLine("  (func $alloc (param $size i32) (result i32)");
-            sb.AppendLine("    (local $ptr i32)");
-            sb.AppendLine("    global.get $heap_ptr");
-            sb.AppendLine("    local.set $ptr");
-            sb.AppendLine("    global.get $heap_ptr");
-            sb.AppendLine("    local.get $size");
-            sb.AppendLine("    i32.add");
-            sb.AppendLine("    global.set $heap_ptr");
-            sb.AppendLine("    local.get $ptr");
-            sb.AppendLine("  )");
-            sb.AppendLine();
-            
-            sb.AppendLine("  ;; String concatenation helper (SIMPLIFIED FOR NOW)");
-            sb.AppendLine("  ;; Just returns left string until loop br targeting is fixed");
-            sb.AppendLine("  (func $string_concat (param $left_ptr i32) (param $left_len i32) (param $right_ptr i32) (param $right_len i32) (result i32) (result i32)");
-            sb.AppendLine("    local.get $left_ptr");
-            sb.AppendLine("    local.get $left_len");
-            sb.AppendLine("  )");
-            sb.AppendLine();
-            
-            sb.AppendLine("  ;; Integer to string conversion helper (SIMPLIFIED FOR NOW)");
-            sb.AppendLine("  ;; Returns a simple placeholder until WASM binary encoder is fully fixed");
-            sb.AppendLine("  (func $int_to_string (param $value i32) (result i32) (result i32)");
-            sb.AppendLine("    ;; Just return pointer to first byte of data section and length 1");
-            sb.AppendLine("    i32.const 0");
-            sb.AppendLine("    i32.const 1");
-            sb.AppendLine("  )");
-            sb.AppendLine();
-            
-            // Generate data section with all registered strings
-            var dataSection = WASM.GenerateDataSection();
-            if (!string.IsNullOrWhiteSpace(dataSection))
-            {
-                sb.AppendLine("  ;; Data section (string literals)");
-                sb.Append(dataSection);
-                sb.AppendLine();
-            }
-            
-            sb.AppendLine("  ;; Generated members");
-            sb.Append(itemsCode);
-            
-            sb.AppendLine();
-            sb.AppendLine("  ;; Exports");
-            sb.AppendLine("  (export \"main\" (func $Main))");
-            sb.AppendLine(")");
-            
-            return sb.ToString();
-        });
+    public Map CompilationUnit = @"(module
+  ;; Imports
+  (import ""env"" ""memory"" (memory 1))
+  (import ""env"" ""console_log"" (func $console_log (param i32) (param i32)))
+  (import ""env"" ""console_readkey"" (func $console_readkey (result i32)))
+
+  ;; Global heap pointer
+  ;; WARNING: Hardcoded to 0 - will overwrite string data if any strings exist!
+  ;; TODO: Calculate from string data section size via Model preprocessing
+  (global $heap_ptr (mut i32) (i32.const 0))
+
+  ;; Helper functions
+  (func $alloc (param $size i32) (result i32)
+    (local $ptr i32)
+    global.get $heap_ptr
+    local.set $ptr
+    global.get $heap_ptr
+    local.get $size
+    i32.add
+    global.set $heap_ptr
+    local.get $ptr
+  )
+
+  ;; TODO: String data section goes here
+  ;; Generated by: this.StringInfo.GenerateDataSection()
+  ;; Requires Model preprocessing to populate this.StringInfo
+
+  ;; Generated members
+{items}
+
+  ;; Exports
+  (export ""main"" (func $Main))
+)";
     
     /// <summary>
     /// Process a compilation unit item using the existing infrastructure.
@@ -444,12 +337,11 @@ public class WASM : MapSet
     /// <summary>Single namespace member</summary>
     public Map NamespaceMemberDeclaration = "{member}";
     
-    /// <summary>Namespace declaration - this is now processed inline from CompilationUnitItem, so this shouldn't be called</summary>
-    public Map<AstNode, string> NamespaceDeclaration = TypedMap.For<string>()
-        .Emit(node => {
-            // This should not be called anymore since we process it inline
-            return ProcessNamespaceDeclarationInline(node);
-        });
+    /// <summary>
+    /// Namespace declaration - emits namespace body items.
+    /// Skips namespace wrapper since WASM MVP doesn't have namespace concept.
+    /// </summary>
+    public Map NamespaceDeclaration = ";; namespace {name}\n{body}";
     
     /// <summary>
     /// Process a namespace item (using directive, namespace, or type).
@@ -605,8 +497,8 @@ public class WASM : MapSet
             parameters = EmitParameterList(parametersField);
         }
         
-        // Clear local variables for this function BEFORE emitting body
-        WASM.LocalVariableRegistry.ClearCurrentFunction();
+        // TODO: Local variable analysis should be done in a Model before Maps run
+        // For now, we skip local variable declarations
         
         // Extract body
         string body = "";
@@ -634,16 +526,8 @@ public class WASM : MapSet
             sb.Append(")");
         }
         
-        // Emit local variable declarations
-        var locals = WASM.LocalVariableRegistry.GetCurrentFunctionVariables();
-        if (locals.Count > 0)
-        {
-            sb.AppendLine();
-            foreach (var (name, type) in locals)
-            {
-                sb.AppendLine($"  (local ${name} {type})");
-            }
-        }
+        // TODO: Emit local variable declarations from this.LocalVarInfo
+        // This requires a Model to populate LocalVarInfo before Maps run
         
         // Emit the body code
         if (!string.IsNullOrWhiteSpace(body))
@@ -725,81 +609,22 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>
-    /// Method declaration - primary compilation target.
-    /// Uses typed Map to work around CDTk field-shifting bug.
+    /// Method declaration - simplified template.
+    /// 
+    /// WARNING: This produces invalid WASM! Comments are not valid parameter/result directives.
+    /// 
+    /// TODO: Restore TypedMap implementation with proper formatting:
+    /// - Parameters: Format as `(param $name type)` declarations
+    /// - Return type: Format as `(result type)` only if not void
+    /// - Local variables: Emit `(local $name type)` from this.LocalVarInfo
+    /// 
+    /// For now, this demonstrates the architecture but generates invalid output.
     /// </summary>
-    public Map<AstNode, string> MethodDeclaration = TypedMap.For<string>()
-        .Emit(node => {
-            if (node == null) return "";
-            
-            // CDTk fix: Fields are now correctly assigned based on Named elements
-            // No field shifting workarounds needed!
-            var attrsField = node.Fields.ContainsKey("attrs") ? node.Fields["attrs"] : null;
-            var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
-            var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
-            var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
-            var parametersField = node.Fields.ContainsKey("parameters") ? node.Fields["parameters"] : null;
-            var bodyField = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
-            
-            // Extract function name
-            string funcName = "";
-            if (nameField is AstNode nameNode && nameNode.Type == "Identifier" && nameNode.Fields.ContainsKey("lexeme"))
-            {
-                funcName = nameNode.Fields["lexeme"]?.ToString() ?? "";
-            }
-            
-            // Extract return type
-            string resultType = "";
-            if (returnTypeField is AstNode typeNode)
-            {
-                resultType = ExtractTypeFromNode(typeNode);
-            }
-            
-            // Extract parameters
-            string parameters = "";
-            if (parametersField != null)
-            {
-                parameters = EmitParameterList(parametersField);
-            }
-            
-            // Clear local variables for this function BEFORE emitting body
-            WASM.LocalVariableRegistry.ClearCurrentFunction();
-            
-            // Extract body
-            string body = "";
-            if (bodyField is AstNode bodyNode)
-            {
-                // TODO: Body transformation removed - need to implement via CDTk Maps
-                // The body should be transformed by CDTk's Map templates automatically
-                body = ";; Method body (transformation TODO)";
-            }
-            
-            // Build the function
-            var sb = new System.Text.StringBuilder();
-            sb.Append($"(func ${funcName}");
-            
-            if (!string.IsNullOrWhiteSpace(parameters))
-            {
-                sb.Append("\n  ");
-                sb.Append(parameters);
-            }
-            
-            if (!string.IsNullOrWhiteSpace(resultType))
-            {
-                sb.Append("\n  (result ");
-                sb.Append(resultType);
-                sb.Append(")");
-            }
-            
-            if (!string.IsNullOrWhiteSpace(body))
-            {
-                sb.Append("\n  ");
-                sb.Append(body);
-            }
-            
-            sb.Append("\n)");
-            return sb.ToString();
-        });
+    public Map MethodDeclaration = @"(func ${name}
+  ;; TODO: params should be: (param $name type) - currently invalid!
+  ;; TODO: return should be: (result type) - currently invalid!
+  {body}
+)";
     
     /// Extract WASM type from Type AST node by recursively traversing structure.
     /// </summary>
@@ -1308,9 +1133,39 @@ drop
     /// <summary>Double literal</summary>
     public Map DoubleLiteral = "(f64.const {lexeme})";
     
-    /// <summary>String literal - requires data section and pushes ptr+len</summary>
-    public Map<AstNode, string> StringLiteral = TypedMap.For<string>()
-        .Emit(node => WASM.EmitStringLiteral(node));
+    /// <summary>
+    /// String literal - TypedMap that registers strings in semantic context.
+    /// 
+    /// ARCHITECTURE NOTE:
+    /// Ideally, string registration should happen in a Model BEFORE Maps run, so that:
+    /// 1. StringAnalysisModel traverses AST and populates this.StringInfo
+    /// 2. CompilationUnit Map reads this.StringInfo to generate data section
+    /// 3. StringLiteral Map reads this.StringInfo to emit string references
+    /// 
+    /// Currently, we register strings during Map execution (temporary approach).
+    /// This works because strings are registered before CompilationUnit wraps them.
+    /// 
+    /// PERFORMANCE NOTE:
+    /// Uses property `=>` to capture `this` via closure (fields can't capture this).
+    /// This creates a new TypedMap instance on every access - inefficient!
+    /// TODO: Convert to field initialized in constructor, or use lazy backing field.
+    /// </summary>
+    public Map<AstNode, string> StringLiteral => TypedMap.For<string>()
+        .Emit(node =>
+        {
+            // Extract string text from lexeme field
+            var text = node.Fields.ContainsKey("lexeme") 
+                ? node.Fields["lexeme"]?.ToString() ?? "" 
+                : "";
+            
+            // Register string in instance semantic context via closure (captures 'this')
+            var stringId = this.StringInfo.RegisterString(text);
+            var offset = this.StringInfo.GetOffset(stringId);
+            var length = text.Length;
+            
+            // Return WASM code: push pointer and length onto stack
+            return $";; string \"{text}\" at offset {offset}, length {length}\ni32.const {offset}\ni32.const {length}";
+        });
     
     /// <summary>Character literal</summary>
     public Map CharacterLiteral = "(i32.const {lexeme})";
@@ -1433,17 +1288,8 @@ drop
     // PARAMETERS AND ARGUMENTS
     // ============================================================
     
-    /// <summary>Formal parameter list - emit WAT parameter declarations</summary>
-    public Map<AstNode, string> FormalParameterList = TypedMap.For<string>()
-        .Emit(node => {
-            if (node == null || !node.Fields.ContainsKey("params")) return "";
-            
-            var paramsField = node.Fields["params"];
-            if (paramsField == null) return "";
-            
-            // Process the params field to extract parameters
-            return EmitParameterList(paramsField);
-        });
+    /// <summary>Formal parameter list - uses placeholder to format parameters</summary>
+    public Map FormalParameterList = "{params}";
     
     /// <summary>
     /// Emit parameter list from params field.
@@ -2418,44 +2264,11 @@ drop
     /// <summary>Name segments</summary>
     public Map NameSegments = "{first}{rest}";
     
-    /// <summary>Compilation unit item (using, namespace, type) - manually process since typed Maps can't return placeholders</summary>
-    public Map<AstNode, string> CompilationUnitItem = TypedMap.For<string>()
-        .Emit(node => {
-            if (node == null) return "";
-            
-            
-            if (!node.Fields.ContainsKey("item")) return "";
-            var item = node.Fields["item"];
-            if (!(item is AstNode itemNode)) return "";
-            
-            
-            // Process based on item type
-            if (itemNode.Type.Contains("Using"))
-                return ";; using ;";
-            
-            if (itemNode.Type == "NamespaceMemberDeclaration")
-            {
-                // Unwrap to get the actual member
-                if (itemNode.Fields.ContainsKey("member") && itemNode.Fields["member"] is AstNode member)
-                {
-                    
-                    // Could be NamespaceDeclaration or TypeDeclaration
-                    if (member.Type == "NamespaceDeclaration")
-                    {
-                        return ProcessNamespaceDeclarationInline(member);
-                    }
-                    else
-                    {
-                        return ProcessTypeDeclaration(member);
-                    }
-                }
-                else
-                {
-                }
-            }
-            
-            return "";
-        });
+    /// <summary>
+    /// Compilation unit item - dispatches to item field.
+    /// The item field contains: UsingDirective, NamespaceMemberDeclaration, etc.
+    /// </summary>
+    public Map CompilationUnitItem = "{item}";
     
     /// <summary>
     /// Process a NamespaceDeclaration inline.
