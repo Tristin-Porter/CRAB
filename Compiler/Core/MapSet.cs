@@ -95,14 +95,14 @@ public class WASM : MapSet
     }
     
     /// <summary>
-    /// Static helper class for WASM code emission.
-    /// Used by typed Maps to generate WASM instructions from AST nodes.
+    /// Static helper class for WAT (WebAssembly Text format) code emission.
+    /// Used by typed Maps to generate WAT instructions from AST nodes.
     /// All methods are static so they can be called from field initializers.
     /// </summary>
     public static class WasmEmit
     {
         /// <summary>
-        /// Emit WASM code for an expression AST node.
+        /// Emit WAT code for an expression AST node.
         /// Returns WAT text format code.
         /// </summary>
         public static string EmitExpression(object? exprNode)
@@ -3342,7 +3342,7 @@ return";
     public Map SimpleName = "{name}{typeArgs}";
     
     /// <summary>Identifier name</summary>
-    public Map IdentifierName = "";  // Just the name, no WASM code - used in namespaces, types, etc.
+    public Map IdentifierName = "";  // Just the name, no WAT code - used in namespaces, types, etc.
     
     /// <summary>Qualified name (namespace.type)</summary>
     public Map QualifiedName = "{global}{segments}";
@@ -3364,7 +3364,7 @@ return";
     // PARAMETERS AND ARGUMENTS
     // ============================================================
     
-    /// <summary>Formal parameter list - emit WASM parameter declarations</summary>
+    /// <summary>Formal parameter list - emit WAT parameter declarations</summary>
     public Map<AstNode, string> FormalParameterList = TypedMap.For<string>()
         .Emit(node => {
             if (node == null || !node.Fields.ContainsKey("params")) return "";
