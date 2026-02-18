@@ -4,6 +4,17 @@ using System.Linq;
 
 namespace CRAB;
 
+/// <summary>
+/// WASM MapSet: User-defined implementation extending CDTk.MapSet.
+/// Demonstrates how to add custom semantic context fields for intelligent Map formatting.
+/// 
+/// The base MapSet class in CDTk provides only framework infrastructure.
+/// All semantic fields (Dialect, Minify, OptHints, etc.) are USER-DEFINED.
+/// Users are FREE to add any semantic fields they need for their target language.
+/// 
+/// This architecture ensures unlimited extensibility - the framework doesn't limit
+/// what context information Maps can access for formatting decisions.
+/// </summary>
 public class WASM : MapSet
 {
     /// <summary>
@@ -205,23 +216,85 @@ public class WASM : MapSet
     /// Placeholders like {name} are replaced with actual AST field values.
     /// </summary>
     // ============================================================
-    // SEMANTIC CONTEXT FIELDS (for functional Maps)
+    // USER-DEFINED SEMANTIC CONTEXT FIELDS
     // ============================================================
+    //
+    // IMPORTANT: These fields are NOT part of the base MapSet class in CDTk.
+    // They are USER-DEFINED fields specific to this WASM implementation.
+    //
+    // Users extending MapSet can define ANY semantic fields they need:
+    // - Target language variants (Dialect)
+    // - Formatting preferences (Minify, IndentStyle, BraceStyle)
+    // - Optimization hints (OptHints, CanInline, RequiresBlock)
+    // - Target architecture info (TargetArch, PointerSize, Endianness)
+    // - Debug/release modes (DebugMode, Assertions, SourceMaps)
+    // - Code generation options (EmitComments, EmitLineDirectives)
+    // - Custom metadata (ProjectName, Version, Author)
+    //
+    // The functional Map API accesses these via `this.*` in formatter lambdas.
+    // This provides unlimited expressive power while keeping Maps pure and AST-free.
+    //
+    // Example usage in a functional Map:
+    //   if (this.Dialect == "Python") return "if x:\n" + body();
+    //   if (this.Minify) return "if(x)" + body();
+    //   if (this.OptHints.CanInline[self.Id]) return "inline " + code();
+    //
     
     /// <summary>
-    /// Target language dialect (e.g., "WASM", "WAT", "Python" for hypothetical cross-compilation)
+    /// Target language dialect - USER DEFINED field, not in base MapSet.
+    /// Examples: "WASM", "WAT", "Python", "JavaScript", "C", etc.
+    /// Allows same semantic analysis to generate different target formats.
     /// </summary>
     public string Dialect { get; set; } = "WASM";
     
     /// <summary>
-    /// Minification flag - when true, output is compact without whitespace
+    /// Minification flag - USER DEFINED field, not in base MapSet.
+    /// When true, output is compact without whitespace.
+    /// Allows debug-friendly vs production-optimized output from same Maps.
     /// </summary>
     public bool Minify { get; set; } = false;
     
     /// <summary>
-    /// Optimization hints from optimization model
+    /// Optimization hints from optimization model - USER DEFINED field, not in base MapSet.
+    /// Populated by Models, consumed by Maps for intelligent formatting decisions.
+    /// Maps can check per-node flags like CanInline[nodeId] or RequiresBlock[nodeId].
     /// </summary>
     public OptimizationHints OptHints { get; set; } = new OptimizationHints();
+    
+    // ============================================================
+    // EXAMPLE: Adding Your Own Custom Semantic Fields
+    // ============================================================
+    //
+    // Users can add ANY fields they want for their use case. Examples:
+    //
+    // // Target architecture info
+    // public string TargetArch { get; set; } = "x86_64";
+    // public int PointerSize { get; set; } = 8;
+    // public bool IsLittleEndian { get; set; } = true;
+    //
+    // // Debug/release modes
+    // public bool DebugMode { get; set; } = false;
+    // public bool EmitAssertions { get; set; } = true;
+    // public bool EmitSourceMaps { get; set; } = false;
+    //
+    // // Formatting preferences
+    // public string BraceStyle { get; set; } = "K&R";  // or "Allman", "GNU", etc.
+    // public int IndentWidth { get; set; } = 2;
+    // public bool UseTabs { get; set; } = false;
+    //
+    // // Performance hints
+    // public Dictionary<string, int> LoopUnrollFactors { get; set; } = new();
+    // public HashSet<string> HotPaths { get; set; } = new();
+    //
+    // // Project metadata
+    // public string ProjectName { get; set; } = "MyProject";
+    // public string Version { get; set; } = "1.0.0";
+    //
+    // Then use in Maps:
+    //   if (this.DebugMode) return "/* DEBUG */ " + code();
+    //   if (this.TargetArch == "ARM") return arm_format();
+    //   if (this.BraceStyle == "Allman") return "\n{\n" + body() + "\n}";
+    //
     
     // ============================================================
     // SEMANTIC ANALYSIS MODELS
@@ -2867,23 +2940,37 @@ nop";
 }
 
 /// <summary>
-/// Optimization hints that influence code generation.
-/// Populated by OptimizationModel to guide Maps.
+/// USER-DEFINED class for optimization hints that influence code generation.
+/// NOT part of CDTk - this is a custom class for the WASM MapSet implementation.
+/// 
+/// Populated by OptimizationModel to guide Maps in making formatting decisions.
+/// Maps access these hints via `this.OptHints.*` in functional formatters.
+/// 
+/// Users can define similar classes with any semantic metadata they need:
+/// - Profiling data (HotPath, CallFrequency)
+/// - Style preferences (BraceStyle, IndentWidth)
+/// - Target-specific hints (VectorizeLoop, UnrollCount)
+/// - Custom annotations (Author, ReviewStatus, Priority)
+/// 
+/// This demonstrates the unlimited extensibility of the functional Map API.
 /// </summary>
 public class OptimizationHints
 {
     /// <summary>
-    /// Maps node IDs to whether they can be inlined
+    /// Maps node IDs to whether they can be inlined.
+    /// Example: if (this.OptHints.CanInline[self.Id]) return inline_format();
     /// </summary>
     public Dictionary<string, bool> CanInline { get; set; } = new Dictionary<string, bool>();
     
     /// <summary>
-    /// Maps node IDs to whether they require block syntax
+    /// Maps node IDs to whether they require block syntax.
+    /// Example: if (this.OptHints.RequiresBlock[self.Id]) return "{ " + body() + " }";
     /// </summary>
     public Dictionary<string, bool> RequiresBlock { get; set; } = new Dictionary<string, bool>();
     
     /// <summary>
-    /// Maps node IDs to suggested formatting style
+    /// Maps node IDs to suggested formatting style.
+    /// Example: var style = this.OptHints.FormattingStyle[self.Id];
     /// </summary>
     public Dictionary<string, string> FormattingStyle { get; set; } = new Dictionary<string, string>();
 }
