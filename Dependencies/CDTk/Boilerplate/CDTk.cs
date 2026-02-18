@@ -9232,6 +9232,9 @@ namespace CDTk
         /// <summary>The template string containing placeholders.</summary>
         public string Template { get; private set; }
 
+        /// <summary>Functional formatter delegate for semantic-aware formatting.</summary>
+        private Delegate? _formatter;
+
         /// <summary>Internal: The name assigned to this map through field discovery.</summary>
         internal string? Name { get; set; }
 
@@ -9258,6 +9261,7 @@ namespace CDTk
         public Map(string template)
         {
             Template = template ?? throw new ArgumentNullException(nameof(template));
+            _formatter = null;
             
             // Parse template into instruction IR
             try
@@ -9269,6 +9273,18 @@ namespace CDTk
                 // Template parsing failed - will use simple substitution
                 ParsedTemplate = null;
             }
+        }
+
+        /// <summary>
+        /// Create a map definition with a functional formatter.
+        /// Enables semantic-aware formatting with access to MapSet context.
+        /// Example: new Map((Map cond = this.Condition, Map body = this.Body, Map self) => {...})
+        /// </summary>
+        /// <param name="formatter">Formatter function that receives child Maps and returns formatted string</param>
+        public Map(Delegate formatter)
+        {
+            _formatter = formatter ?? throw new ArgumentNullException(nameof(formatter));
+            Template = "<functional>";
         }
 
         /// <summary>
@@ -9284,12 +9300,19 @@ namespace CDTk
 
         /// <summary>
         /// Generate output for the given AST node.
-        /// Substitutes placeholders with field values.
+        /// Substitutes placeholders with field values or invokes functional formatter.
         /// </summary>
         internal string Generate(AstNode node, MapSet? mapSet = null)
         {
             if (node == null) throw new ArgumentNullException(nameof(node));
 
+            // If this is a functional Map, invoke the formatter
+            if (_formatter != null)
+            {
+                return GenerateFunctional(node, mapSet);
+            }
+
+            // Otherwise use template substitution
             var vars = new Dictionary<string, string>(StringComparer.Ordinal);
 
             // Extract field values from the node
@@ -9422,6 +9445,156 @@ namespace CDTk
             result = System.Text.RegularExpressions.Regex.Replace(result, @"\{[a-zA-Z_][a-zA-Z0-9_]*\}", "");
 
             return result;
+        }
+
+        /// <summary>
+        /// Generate output using functional formatter with semantic context.
+        /// </summary>
+        private string GenerateFunctional(AstNode node, MapSet? mapSet)
+        {
+            if (_formatter == null || mapSet == null)
+                return "";
+
+            // Get formatter parameter info
+            var method = _formatter.Method;
+            var parameters = method.GetParameters();
+            
+            // Build arguments for formatter invocation
+            var args = new List<object?>();
+            
+            foreach (var param in parameters)
+            {
+                // Check if parameter is Func<string> (child Map formatter)
+                if (param.ParameterType == typeof(Func<string>))
+                {
+                    // Parameter name should match a field in the node
+                    var fieldName = param.Name ?? "";
+                    
+                    if (node.Fields.ContainsKey(fieldName))
+                    {
+                        var fieldValue = node.Fields[fieldName];
+                        
+                        // Create a Func<string> that formats this child
+                        if (fieldValue is AstNode childNode)
+                        {
+                            Func<string> childFormatter = () => mapSet.Transform(childNode) ?? "";
+                            args.Add(childFormatter);
+                        }
+                        else if (fieldValue is List<AstNode> childNodes)
+                        {
+                            // For lists, create a Func that formats all children
+                            Func<string> listFormatter = () => string.Join("\n", childNodes.Select(n => mapSet.Transform(n) ?? ""));
+                            args.Add(listFormatter);
+                        }
+                        else
+                        {
+                            // Fallback: return empty string
+                            Func<string> emptyFormatter = () => "";
+                            args.Add(emptyFormatter);
+                        }
+                    }
+                    else
+                    {
+                        // Field not found - return empty string
+                        Func<string> emptyFormatter = () => "";
+                        args.Add(emptyFormatter);
+                    }
+                }
+                else if (param.ParameterType == typeof(MapReference))
+                {
+                    // This is the 'self' parameter - provides node identity
+                    args.Add(new MapReference(node, mapSet, this));
+                }
+                else
+                {
+                    // Non-Map parameter - use default value if available
+                    if (param.HasDefaultValue)
+                    {
+                        args.Add(param.DefaultValue);
+                    }
+                    else
+                    {
+                        args.Add(null);
+                    }
+                }
+            }
+            
+            // Invoke formatter with arguments
+            try
+            {
+                var result = _formatter.DynamicInvoke(args.ToArray());
+                return result?.ToString() ?? "";
+            }
+            catch (Exception ex)
+            {
+                return $";; Error in functional map: {ex.Message}";
+            }
+        }
+    }
+
+    /// <summary>
+    /// Represents a reference to a Map that can be invoked to format a node.
+    /// Used for child Map parameters in functional Map API.
+    /// </summary>
+    public class MapReference
+    {
+        private readonly AstNode? _node;
+        private readonly MapSet? _mapSet;
+        private readonly Map? _map;
+        
+        public MapReference(AstNode? node, MapSet? mapSet, Map? map)
+        {
+            _node = node;
+            _mapSet = mapSet;
+            _map = map;
+        }
+        
+        /// <summary>Node ID for semantic context lookups</summary>
+        public string Id => _node?.Type + "_" + _node?.GetHashCode().ToString() ?? "unknown";
+        
+        /// <summary>Invoke this Map reference to format its node</summary>
+        public string Invoke()
+        {
+            if (_node == null || _mapSet == null)
+                return "";
+            
+            return _mapSet.Transform(_node) ?? "";
+        }
+        
+        /// <summary>Allow calling MapReference as a function</summary>
+        public static implicit operator Func<string>(MapReference reference)
+        {
+            return () => reference.Invoke();
+        }
+    }
+
+    /// <summary>
+    /// Represents a reference to a list of Maps.
+    /// </summary>
+    public class MapListReference
+    {
+        private readonly List<AstNode> _nodes;
+        private readonly MapSet? _mapSet;
+        
+        public MapListReference(List<AstNode> nodes, MapSet? mapSet)
+        {
+            _nodes = nodes;
+            _mapSet = mapSet;
+        }
+        
+        /// <summary>Invoke this Map list reference to format all nodes</summary>
+        public string Invoke()
+        {
+            if (_mapSet == null)
+                return "";
+            
+            return string.Join("\n", _nodes.Select(n => _mapSet.Transform(n) ?? ""));
+        }
+        
+        /// <summary>Allow calling MapListReference as a function</summary>
+        public static implicit operator Func<string>(MapListReference reference)
+        {
+            return () => reference.Invoke();
         }
     }
 

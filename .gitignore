@@ -38,3 +38,4 @@ test_output_*.bin
 !Examples/
 Examples/*/bin/
 Examples/*/obj/
+test*.cs
