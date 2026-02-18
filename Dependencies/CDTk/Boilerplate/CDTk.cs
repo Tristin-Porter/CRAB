@@ -9552,6 +9552,9 @@ namespace CDTk
         /// <summary>Node ID for semantic context lookups</summary>
         public string Id => _node?.Type + "_" + _node?.GetHashCode().ToString() ?? "unknown";
         
+        /// <summary>Access to the underlying AST node for complex transformations</summary>
+        public AstNode? Node => _node;
+        
         /// <summary>Invoke this Map reference to format its node</summary>
         public string Invoke()
         {
