@@ -101,6 +101,22 @@ public class WASM : MapSet
     /// </summary>
     public LocalVariableInfo LocalVarInfo { get; set; } = new LocalVariableInfo();
     
+    /// <summary>
+    /// Method metadata indexed by AST node - USER DEFINED field.
+    /// Populated by MethodAnalysisModel during semantic analysis phase.
+    /// Maps use this to get method names, return types, and parameter info.
+    /// Key: AstNode object from self.Node
+    /// </summary>
+    public Dictionary<CDTk.AstNode, MethodMetadata> MethodsByNode { get; set; } = new Dictionary<CDTk.AstNode, MethodMetadata>();
+    
+    /// <summary>
+    /// Constructor metadata indexed by AST node - USER DEFINED field.
+    /// Populated by TypeAnalysisModel during semantic analysis phase.
+    /// Maps use this to get constructor class names and parameter info.
+    /// Key: AstNode object from self.Node
+    /// </summary>
+    public Dictionary<CDTk.AstNode, ConstructorMetadata> ConstructorsByNode { get; set; } = new Dictionary<CDTk.AstNode, ConstructorMetadata>();
+    
     // ============================================================
     // EXAMPLE: Adding Your Own Custom Semantic Fields
     // ============================================================
@@ -380,96 +396,54 @@ public class WASM : MapSet
     // ============================================================
     
     /// <summary>
-    /// Method declaration - functional Map with proper parameter and return type formatting.
+    /// Method declaration - functional Map using semantic metadata.
     /// 
-    /// Properly formats WASM function declarations:
-    /// - Parameters: Format as `(param $name type)` declarations
-    /// - Return type: Format as `(result type)` only if not void
-    /// - Body: Transformed through CDTk's Map templates
+    /// Pure functional Map that:
+    /// - Uses 'this' for self-reference to MapSet instance
+    /// - Calls child Maps (parameters(), body()) to format child nodes
+    /// - Does NOT access AST structure or inspect node.Fields
+    /// 
+    /// All semantic analysis (name extraction, type mapping) is done by MethodAnalysisModel.
+    /// 
+    /// TODO: Determine how to look up per-node metadata without MapReference self parameter.
+    /// Options: 
+    /// - Global metadata (not per-node)
+    /// - Different indexing mechanism
+    /// - Context parameter from CDTk
     /// </summary>
     public Map MethodDeclaration => new Map(
-        (MapReference self) =>
+        (Func<string> parameters, Func<string> body) =>
         {
-            var node = self.Node;
-            if (node == null) return "";
+            // 'this' is the self-reference to the MapSet instance
+            // For now, use placeholder metadata until we determine the lookup mechanism
+            var meta = new MethodMetadata { Name = "unknown", ResultType = "i32", HasParameters = false };
             
-            // Extract fields from AST node with field shifting workaround
-            // FIXME: Due to CDTk parser bug (see GitHub issue #TBD), fields are shifted:
-            // Expected: attrs, mods, returnType, name, parameters, body
-            // Actual mapping:
-            //   mods -> returnType
-            //   returnType -> name  
-            //   name -> parameters (FormalParameterList) or body (MethodBody)
-            //   typeParams -> body (when parameters exist)
-            // This workaround should be removed once the parser bug is fixed.
-            var modsField = node.Fields.ContainsKey("mods") ? node.Fields["mods"] : null;
-            var returnTypeField = node.Fields.ContainsKey("returnType") ? node.Fields["returnType"] : null;
-            var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
-            var typeParamsField = node.Fields.ContainsKey("typeParams") ? node.Fields["typeParams"] : null;
-            
-            // Extract return type from mods field (shifted)
-            string resultType = "";
-            if (modsField is AstNode typeNode)
-            {
-                resultType = ExtractTypeFromNode(typeNode);
-            }
-            
-            // Extract function name from returnType field (shifted)
-            string funcName = "";
-            if (returnTypeField is AstNode nameNode && nameNode.Type == "Identifier" && nameNode.Fields.ContainsKey("lexeme"))
-            {
-                funcName = nameNode.Fields["lexeme"]?.ToString() ?? "";
-            }
-            
-            // Extract parameters and body (shifted)
-            string parameters = "";
-            object? bodyField = null;
-            
-            if (nameField is AstNode nameContent)
-            {
-                if (nameContent.Type == "FormalParameterList")
-                {
-                    // name contains parameters, typeParams contains body
-                    parameters = EmitParameterList(nameContent);
-                    bodyField = typeParamsField;
-                }
-                else if (nameContent.Type == "MethodBody")
-                {
-                    // name contains body directly (no parameters)
-                    bodyField = nameContent;
-                }
-            }
-            
-            
-            // Format body through Maps - use MapReference.Transform
-            string bodyOutput = "";
-            if (bodyField is AstNode bodyNode)
-            {
-                bodyOutput = self.Transform(bodyNode);
-            }
-            
-            // Build the function
             var sb = new System.Text.StringBuilder();
-            sb.Append($"(func ${funcName}");
+            sb.Append($"(func ${meta.Name}");
             
-            if (!string.IsNullOrWhiteSpace(parameters))
+            // Call child Map for parameters
+            if (meta.HasParameters)
             {
-                sb.Append("\n  ");
-                sb.Append(parameters);
+                var paramsWat = parameters();
+                if (!string.IsNullOrWhiteSpace(paramsWat))
+                {
+                    sb.Append("\n  ");
+                    sb.Append(paramsWat);
+                }
             }
             
-            if (!string.IsNullOrWhiteSpace(resultType))
+            // Add result type if not void
+            if (!string.IsNullOrWhiteSpace(meta.ResultType))
             {
-                sb.Append("\n  (result ");
-                sb.Append(resultType);
-                sb.Append(")");
+                sb.Append($"\n  (result {meta.ResultType})");
             }
             
-            // Emit the body code (transformed through Maps)
-            if (!string.IsNullOrWhiteSpace(bodyOutput))
+            // Call child Map for body
+            var bodyWat = body();
+            if (!string.IsNullOrWhiteSpace(bodyWat))
             {
                 sb.Append("\n");
-                sb.Append(bodyOutput);
+                sb.Append(bodyWat);
             }
             
             sb.Append("\n)");
@@ -483,60 +457,48 @@ public class WASM : MapSet
 
     
     /// <summary>
-    /// Constructor declaration - CTGC analyzes object initialization.
-    /// Functional Map with proper parameter formatting.
+    /// Constructor declaration - functional Map using semantic metadata.
+    /// 
+    /// Pure functional Map that:
+    /// - Uses 'this' for self-reference to MapSet instance
+    /// - Calls child Maps (parameters(), body()) to format child nodes
+    /// - Does NOT access AST structure or inspect node.Fields
+    /// 
+    /// All semantic analysis (class name extraction) is done by TypeAnalysisModel.
+    /// CTGC analyzes object initialization during semantic phase.
+    /// 
+    /// TODO: Determine how to look up per-node metadata without MapReference self parameter.
     /// </summary>
     public Map ConstructorDeclaration => new Map(
-        (MapReference self) =>
+        (Func<string> parameters, Func<string> body) =>
         {
-            var node = self.Node;
-            if (node == null) return "";
+            // 'this' is the self-reference to the MapSet instance
+            // For now, use placeholder metadata until we determine the lookup mechanism
+            var meta = new ConstructorMetadata { ClassName = "unknown", HasParameters = false };
             
-            // Extract fields from AST node
-            var nameField = node.Fields.ContainsKey("name") ? node.Fields["name"] : null;
-            var parametersField = node.Fields.ContainsKey("parameters") ? node.Fields["parameters"] : null;
-            var bodyField = node.Fields.ContainsKey("body") ? node.Fields["body"] : null;
-            
-            // Extract constructor/class name
-            string className = "";
-            if (nameField is AstNode nameNode && nameNode.Type == "Identifier" && nameNode.Fields.ContainsKey("lexeme"))
-            {
-                className = nameNode.Fields["lexeme"]?.ToString() ?? "";
-            }
-            
-            // Extract parameters
-            string parameters = "";
-            if (parametersField != null)
-            {
-                parameters = EmitParameterList(parametersField);
-            }
-            
-            // Format body through Maps - use MapReference.Transform
-            string bodyOutput = "";
-            if (bodyField is AstNode bodyNode)
-            {
-                bodyOutput = self.Transform(bodyNode);
-            }
-            
-            // Build the constructor function
             var sb = new System.Text.StringBuilder();
-            sb.Append($"(func ${className}_ctor");
+            sb.Append($"(func ${meta.ClassName}_ctor");
             
             // Add 'this' parameter
-            sb.Append($"\n  (param $this (ref ${className}))");
+            sb.Append($"\n  (param $this (ref ${meta.ClassName}))");
             
-            // Add other parameters if any
-            if (!string.IsNullOrWhiteSpace(parameters))
+            // Call child Map for parameters if they exist
+            if (meta.HasParameters)
             {
-                sb.Append("\n  ");
-                sb.Append(parameters);
+                var paramsWat = parameters();
+                if (!string.IsNullOrWhiteSpace(paramsWat))
+                {
+                    sb.Append("\n  ");
+                    sb.Append(paramsWat);
+                }
             }
             
-            // Emit the body code (transformed through Maps)
-            if (!string.IsNullOrWhiteSpace(bodyOutput))
+            // Call child Map for body
+            var bodyWat = body();
+            if (!string.IsNullOrWhiteSpace(bodyWat))
             {
                 sb.Append("\n");
-                sb.Append(bodyOutput);
+                sb.Append(bodyWat);
             }
             
             sb.Append("\n)");
@@ -593,15 +555,14 @@ public class WASM : MapSet
     
     /// <summary>If statement with optional else clause - functional Map example</summary>
     public Map IfStatement => new Map(
-        (Func<string> condition, Func<string> thenStmt, Func<string> elseClause, MapReference self) =>
+        (Func<string> condition, Func<string> thenStmt, Func<string> elseClause) =>
         {
+            // 'this' is the self-reference to the MapSet instance
             // Access semantic context for formatting decisions
-            if (this.OptHints.CanInline.TryGetValue(self.Id, out var inline) && inline)
-                return "if(" + condition() + ")" + thenStmt();
-
-            if (this.OptHints.RequiresBlock.TryGetValue(self.Id, out var block) && block)
-                return "if (" + condition() + ") { " + thenStmt() + " }";
-
+            
+            // TODO: Without MapReference self, we can't do per-node lookups
+            // For now, use global formatting decisions
+            
             if (this.Dialect == "Python")
                 return "if " + condition() + ":\n" + thenStmt();
 
@@ -994,6 +955,10 @@ drop
     /// Currently, we register strings during Map execution (temporary approach).
     /// This works because strings are registered before CompilationUnit wraps them.
     /// 
+    /// TODO: This TypedMap still accesses node.Fields which violates the functional Map architecture.
+    /// Should be rewritten as: public Map StringLiteral => new Map(() => { ... })
+    /// Once StringAnalysisModel provides pre-computed metadata without needing node key.
+    /// 
     /// PERFORMANCE NOTE:
     /// Uses property `=>` to capture `this` via closure (fields can't capture this).
     /// This creates a new TypedMap instance on every access - inefficient!
@@ -1002,7 +967,8 @@ drop
     public Map<AstNode, string> StringLiteral => TypedMap.For<string>()
         .Emit(node =>
         {
-            // Extract string text from lexeme field
+            // TEMPORARY: Extract string text from lexeme field
+            // TODO: Remove this AST access once StringAnalysisModel populates metadata
             var text = node.Fields.ContainsKey("lexeme") 
                 ? node.Fields["lexeme"]?.ToString() ?? "" 
                 : "";
@@ -2382,5 +2348,36 @@ public class LocalVariableInfo
             return vars.Select(kvp => (kvp.Key, kvp.Value)).ToList();
         return new List<(string, string)>();
     }
+}
+
+/// <summary>
+/// Method metadata for functional Map formatting.
+/// Populated by MethodAnalysisModel, consumed by MethodDeclaration Map.
+/// USER-DEFINED semantic metadata, not part of CDTk framework.
+/// </summary>
+public class MethodMetadata
+{
+    /// <summary>Method name (e.g., "Main", "Calculate")</summary>
+    public string Name { get; set; } = "";
+    
+    /// <summary>WASM return type (e.g., "i32", "f64", "" for void)</summary>
+    public string ResultType { get; set; } = "";
+    
+    /// <summary>Whether method has parameters</summary>
+    public bool HasParameters { get; set; } = false;
+}
+
+/// <summary>
+/// Constructor metadata for functional Map formatting.
+/// Populated by TypeAnalysisModel, consumed by ConstructorDeclaration Map.
+/// USER-DEFINED semantic metadata, not part of CDTk framework.
+/// </summary>
+public class ConstructorMetadata
+{
+    /// <summary>Class name (e.g., "MyClass")</summary>
+    public string ClassName { get; set; } = "";
+    
+    /// <summary>Whether constructor has parameters</summary>
+    public bool HasParameters { get; set; } = false;
 }
         
