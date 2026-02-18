@@ -94,37 +94,6 @@ public class WASM : MapSet
         }
     }
     
-    // ============================================================
-    // UTILITY METHODS FOR WASM GENERATION (simplified interfaces)
-    // ============================================================
-    
-    /// <summary>
-    /// Generate WASM data section for string literals.
-    /// Wraps WasmEmit.GenerateDataSection() for convenient access.
-    /// </summary>
-    public static string GenerateDataSection()
-    {
-        return WasmEmit.GenerateDataSection();
-    }
-    
-    /// <summary>
-    /// Emit string literal - registers string and returns WASM code for ptr+len.
-    /// Wraps WasmEmit.EmitStringLiteral() for convenient access.
-    /// </summary>
-    public static string EmitStringLiteral(AstNode node)
-    {
-        return WasmEmit.EmitStringLiteral(node);
-    }
-    
-    /// <summary>
-    /// Emit WAT code for a statement node.
-    /// Wraps WasmEmit.EmitStatement() for convenient access.
-    /// </summary>
-    public static string EmitStatement(object? stmtNode)
-    {
-        return WasmEmit.EmitStatement(stmtNode);
-    }
-    
     /// <summary>
     /// Static helper class for WAT (WebAssembly Text format) code emission.
     /// Used by typed Maps to generate WAT instructions from AST nodes.
@@ -2232,7 +2201,7 @@ public class WASM : MapSet
             sb.AppendLine();
             
             // Generate data section with all registered strings
-            var dataSection = WASM.GenerateDataSection();
+            var dataSection = WASM.WasmEmit.GenerateDataSection();
             if (!string.IsNullOrWhiteSpace(dataSection))
             {
                 sb.AppendLine("  ;; Data section (string literals)");
@@ -2470,11 +2439,11 @@ public class WASM : MapSet
         {
             if (bodyNode.Fields.ContainsKey("body"))
             {
-                body = WASM.EmitStatement(bodyNode.Fields["body"]);
+                body = WASM.WasmEmit.EmitStatement(bodyNode.Fields["body"]);
             }
             else
             {
-                body = WASM.EmitStatement(bodyNode);
+                body = WASM.WasmEmit.EmitStatement(bodyNode);
             }
         }
         
@@ -2633,11 +2602,11 @@ public class WASM : MapSet
                 // MethodBody has a 'body' field containing the actual Block
                 if (bodyNode.Fields.ContainsKey("body"))
                 {
-                    body = WASM.EmitStatement(bodyNode.Fields["body"]);
+                    body = WASM.WasmEmit.EmitStatement(bodyNode.Fields["body"]);
                 }
                 else
                 {
-                    body = WASM.EmitStatement(bodyNode);
+                    body = WASM.WasmEmit.EmitStatement(bodyNode);
                 }
             }
             
@@ -3180,7 +3149,7 @@ drop
     
     /// <summary>String literal - requires data section and pushes ptr+len</summary>
     public Map<AstNode, string> StringLiteral = TypedMap.For<string>()
-        .Emit(node => WASM.EmitStringLiteral(node));
+        .Emit(node => WASM.WasmEmit.EmitStringLiteral(node));
     
     /// <summary>Character literal</summary>
     public Map CharacterLiteral = "(i32.const {lexeme})";
@@ -3433,7 +3402,7 @@ drop
         }
         else if (typeField is string typeStr)
         {
-            wasmType = MapCSharpTypeToWasm(typeStr);
+            wasmType = WASM.WasmEmit.MapCSharpTypeToWasm(typeStr);
         }
         
         return $"(param ${name} {wasmType})";
