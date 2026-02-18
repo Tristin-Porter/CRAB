@@ -2845,21 +2845,11 @@ public class WASM : MapSet
 )";
     
     /// <summary>Statements list - recursively emit all statements in the list</summary>
-    public Map<AstNode, string> Statements = TypedMap.For<string>()
-        .Emit(node => {
-            if (node == null) return "";
-            
-            // The Statements rule creates stmts:Statement+
-            // CDTk's + repetition creates a nested structure or list
-            if (node.Fields.ContainsKey("stmts"))
-            {
-                var result = WASM.WasmEmit.EmitStatementList(node.Fields["stmts"]);
-                return result ?? "";
-            }
-            
-            // Fallback: try to emit as single statement
-            return WASM.WasmEmit.EmitStatement(node) ?? "";
-        });
+    /// <summary>
+    /// Statements - CDTk handles Statement+ repetition
+    /// The {stmts} placeholder will be resolved by CDTk recursively
+    /// </summary>
+    public Map Statements = "{stmts}";
     
     /// <summary>Empty statement (no-op)</summary>
     public Map EmptyStatement = "(nop)";
