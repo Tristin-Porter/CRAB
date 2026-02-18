@@ -2947,8 +2947,7 @@ public class WASM : MapSet
     /// <summary>
     /// Return statement - supports optional expression
     /// Outputs (return) for void returns, (return expr) for value returns
-    /// The expr field exists for all alternatives except void return
-    /// CDTk automatically resolves {expr} to the appropriate expression Map
+    /// The expr field doesn't exist for void return - CDTk substitutes empty string
     /// </summary>
     public Map ReturnStatement = @"{expr}
 return";
@@ -3027,8 +3026,10 @@ return";
     /// <summary>Bitwise AND expression</summary>
     public Map BitwiseAndExpression = "(i32.and {left} {right})";
     
-    /// <summary>Sequence expression (comma operator)</summary>
-    public Map Sequence = "{left}\n{right}";
+    /// <summary>Sequence expression (comma operator) - evaluates left then right, keeps only right value</summary>
+    public Map Sequence = @"{left}
+drop
+{right}";
     
     /// <summary>Equality expression</summary>
     public Map EqualityExpression = "({op} {left} {right})";
