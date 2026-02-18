@@ -11558,6 +11558,37 @@ namespace CDTk
         }
     }
 
+    /// <summary>
+    /// Named SPPF node representing a named element in the grammar.
+    /// Preserves the field name for correct field assignment during AST conversion.
+    /// </summary>
+    internal sealed class SPPFNamedNode : SPPFNode
+    {
+        public string Name { get; }
+        public SPPFNode Child { get; }
+
+        public SPPFNamedNode(string name, SPPFNode child, int leftExtent, int rightExtent)
+            : base(leftExtent, rightExtent)
+        {
+            Name = name;
+            Child = child;
+        }
+
+        public override int GetHashCode()
+        {
+            return HashCode.Combine(Name, Child, LeftExtent, RightExtent);
+        }
+
+        public override bool Equals(object? obj)
+        {
+            return obj is SPPFNamedNode other &&
+                   Name == other.Name &&
+                   Child.Equals(other.Child) &&
+                   LeftExtent == other.LeftExtent &&
+                   RightExtent == other.RightExtent;
+        }
+    }
+
     #endregion
 
     #region GLL Parsing Engine
@@ -11999,9 +12030,25 @@ namespace CDTk
 
         private void ProcessNamed(Named named, string ruleName, int slot)
         {
-            // Named just wraps the inner expression
-            // The name is stored in the Expr itself for later AST construction
+            // Save the current SPPF node before processing the inner expression
+            var beforeSPPF = _currentSPPFNode;
+            
+            // Process the inner expression
             ProcessExpr(named.Item, ruleName, slot);
+            
+            // After processing, if we have a new SPPF node, wrap it in a Named node
+            // This preserves the field name for correct AST field assignment
+            if (_currentSPPFNode != beforeSPPF && _currentSPPFNode != null)
+            {
+                // Create a Named SPPF node wrapping the result
+                var namedNode = new SPPFNamedNode(
+                    named.Name,
+                    _currentSPPFNode,
+                    _currentSPPFNode.LeftExtent,
+                    _currentSPPFNode.RightExtent
+                );
+                _currentSPPFNode = namedNode;
+            }
         }
 
         private void ProcessOptional(Optional opt, string ruleName, int slot)
@@ -13594,6 +13641,9 @@ namespace CDTk
                 case SPPFIntermediateNode intermediate:
                     return ConvertIntermediate(intermediate);
 
+                case SPPFNamedNode named:
+                    return ConvertNamed(named);
+
                 default:
                     return null;
             }
@@ -13737,10 +13787,34 @@ namespace CDTk
                 }
                 else
                 {
-                    // Multiple field names - non-repetition case: assign items one-to-one
-                    for (int i = 0; i < nonLiteralItems.Count && i < fieldNames.Count; i++)
+                    // Multiple field names - NEW: use field name metadata if available
+                    // This fixes the field shifting bug by using actual field names from Named elements
+                    foreach (var item in nonLiteralItems)
                     {
-                        target.Fields[fieldNames[i]] = nonLiteralItems[i];
+                        // Check if this item has field name metadata from SPPFNamedNode
+                        if (item.Fields.TryGetValue("_cdtk_field_name", out var fieldNameObj) && 
+                            fieldNameObj is string fieldName)
+                        {
+                            // Assign to the correct field based on the name
+                            target.Fields[fieldName] = item;
+                            
+                            // Remove the metadata field
+                            item.Fields.Remove("_cdtk_field_name");
+                        }
+                        else
+                        {
+                            // Fallback: this item doesn't have metadata
+                            // This might happen for non-Named elements or old code paths
+                            // Try to find an unassigned field to put it in
+                            foreach (var fname in fieldNames)
+                            {
+                                if (!target.Fields.ContainsKey(fname))
+                                {
+                                    target.Fields[fname] = item;
+                                    break;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -13828,6 +13902,21 @@ namespace CDTk
 
             // Use first alternative
             return Convert(intermediate.Alternatives[0]);
+        }
+
+        private AstNode? ConvertNamed(SPPFNamedNode named)
+        {
+            // Convert the child node and preserve the name as metadata
+            var childNode = Convert(named.Child);
+            
+            if (childNode != null)
+            {
+                // Add metadata about the field name
+                // This will be used by ExtractFields to correctly assign fields
+                childNode.Fields["_cdtk_field_name"] = named.Name;
+            }
+            
+            return childNode;
         }
     }
 
