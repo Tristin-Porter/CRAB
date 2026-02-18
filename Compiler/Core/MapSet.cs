@@ -3040,13 +3040,15 @@ drop
     /// <summary>Shift expression</summary>
     public Map ShiftExpression = "({op} {left} {right})";
     
-    /// <summary>Additive expression - TYPED MAP</summary>
-    public Map<AstNode, string> AdditiveExpression = TypedMap.For<string>()
-        .Emit(node => WASM.WasmEmit.EmitBinaryExpression(node, "+"));
+    /// <summary>Additive expression - CDTk resolves {op} to operator Map</summary>
+    public Map AdditiveExpression = @"{left}
+{right}
+{op}";
     
-    /// <summary>Multiplicative expression - TYPED MAP</summary>
-    public Map<AstNode, string> MultiplicativeExpression = TypedMap.For<string>()
-        .Emit(node => WASM.WasmEmit.EmitBinaryExpression(node, "*"));
+    /// <summary>Multiplicative expression - CDTk resolves {op} to operator Map</summary>
+    public Map MultiplicativeExpression = @"{left}
+{right}
+{op}";
     
     /// <summary>Switch expression (C# 8+)</summary>
     public Map SwitchExpression = @"(block $switch_expr
@@ -3224,9 +3226,8 @@ drop
     /// Each literal type (TrueLiteral, DecimalIntegerLiteral, etc.) has its own Map below.
     /// </summary>
     
-    /// <summary>Integer literal (decimal) - Typed implementation</summary>
-    public Map<AstNode, string> DecimalIntegerLiteral = TypedMap.For<string>()
-        .Emit(node => WASM.WasmEmit.EmitIntegerLiteral(node));
+    /// <summary>Integer literal (decimal) - CDTk handles {lexeme} substitution</summary>
+    public Map DecimalIntegerLiteral = "(i32.const {lexeme})";
     
     /// <summary>Hexadecimal integer literal</summary>
     public Map HexIntegerLiteral = "(i32.const {lexeme})";
