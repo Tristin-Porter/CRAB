@@ -2313,19 +2313,19 @@ public class WASM : MapSet
         
         if (typeNode.Type == "ClassDeclaration")
         {
-            // Extract class name (in mods field due to field shifting)
+            // CDTk fix: Fields are now correctly assigned
             string className = "";
-            if (typeNode.Fields.ContainsKey("mods") && typeNode.Fields["mods"] is AstNode modsNode)
+            if (typeNode.Fields.ContainsKey("name") && typeNode.Fields["name"] is AstNode nameNode)
             {
-                if (modsNode.Type == "Identifier" && modsNode.Fields.ContainsKey("lexeme"))
-                    className = modsNode.Fields["lexeme"]?.ToString() ?? "";
+                if (nameNode.Type == "Identifier" && nameNode.Fields.ContainsKey("lexeme"))
+                    className = nameNode.Fields["lexeme"]?.ToString() ?? "";
             }
             
             var output = new System.Text.StringBuilder();
             output.AppendLine($";; class {className}");
             
-            // Get class body (in name field due to field shifting)
-            if (typeNode.Fields.ContainsKey("name") && typeNode.Fields["name"] is AstNode bodyNode)
+            // Get class body from body field
+            if (typeNode.Fields.ContainsKey("body") && typeNode.Fields["body"] is AstNode bodyNode)
             {
                 
                 // ClassBody has members field
