@@ -2948,22 +2948,10 @@ public class WASM : MapSet
     /// Return statement - supports optional expression
     /// Outputs (return) for void returns, (return expr) for value returns
     /// The expr field exists for all alternatives except void return
-    /// TYPED MAP: Uses WasmEmit helper to recursively emit expression
+    /// CDTk automatically resolves {expr} to the appropriate expression Map
     /// </summary>
-    public Map<AstNode, string> ReturnStatement = TypedMap.For<string>()
-        .Emit(node =>
-        {
-            // Check if there's an expression to return
-            if (node.Fields.ContainsKey("expr") && node.Fields["expr"] != null)
-            {
-                var exprOutput = WASM.WasmEmit.EmitExpression(node.Fields["expr"]);
-                if (!string.IsNullOrWhiteSpace(exprOutput))
-                {
-                    return exprOutput + "\nreturn";
-                }
-            }
-            return "return";
-        });
+    public Map ReturnStatement = @"{expr}
+return";
     
     /// <summary>Throw statement</summary>
     public Map ThrowStatement = @";; throw {expr}
@@ -3015,6 +3003,21 @@ public class WASM : MapSet
     /// <summary>Logical AND expression</summary>
     public Map LogicalAndExpression = "(i32.and {left} {right})";
     
+    /// <summary>Conditional OR expression (alias for LogicalOr)</summary>
+    public Map ConditionalOrExpression = "(i32.or {left} {right})";
+    
+    /// <summary>Conditional AND expression (alias for LogicalAnd)</summary>
+    public Map ConditionalAndExpression = "(i32.and {left} {right})";
+    
+    /// <summary>Inclusive OR expression (bitwise)</summary>
+    public Map InclusiveOrExpression = "(i32.or {left} {right})";
+    
+    /// <summary>Exclusive OR expression (bitwise)</summary>
+    public Map ExclusiveOrExpression = "(i32.xor {left} {right})";
+    
+    /// <summary>AND expression (bitwise)</summary>
+    public Map AndExpression = "(i32.and {left} {right})";
+    
     /// <summary>Bitwise OR expression</summary>
     public Map BitwiseOrExpression = "(i32.or {left} {right})";
     
@@ -3023,6 +3026,9 @@ public class WASM : MapSet
     
     /// <summary>Bitwise AND expression</summary>
     public Map BitwiseAndExpression = "(i32.and {left} {right})";
+    
+    /// <summary>Sequence expression (comma operator)</summary>
+    public Map Sequence = "{left}\n{right}";
     
     /// <summary>Equality expression</summary>
     public Map EqualityExpression = "({op} {left} {right})";
