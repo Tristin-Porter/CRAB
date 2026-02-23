@@ -26,6 +26,7 @@
     </None>
     <!-- Include the Testing/HelloWorld.cs file -->
     <Compile Include="Testing\HelloWorld.cs" />
+    <Compile Include="Testing\Program.cs" />
   </ItemGroup>
 
   <ItemGroup>

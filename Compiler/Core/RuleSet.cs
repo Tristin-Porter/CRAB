@@ -431,7 +431,8 @@ public class Rules : RuleSet
     public Rule IntegralType = new Rule("type:@KwSbyte | type:@KwByte | type:@KwShort | type:@KwUshort | type:@KwInt | type:@KwUint | type:@KwLong | type:@KwUlong | type:@KwNint | type:@KwNuint")
         .Returns("type");
 
-    public Rule FloatingPointType = "type:@KwFloat | type:@KwDouble";
+    public Rule FloatingPointType = new Rule("type:@KwFloat | type:@KwDouble")
+        .Returns("type");
 
     public Rule TypeArgumentList = new Rule("@LessThan args:TypeArguments @GreaterThan")
         .Returns("args");
