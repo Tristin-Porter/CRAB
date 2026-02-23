@@ -2212,7 +2212,12 @@ drop
     // VARIABLE DECLARATIONS (Extended)
     // ============================================================
     
-    /// <summary>Local declaration statement</summary>
+    /// <summary>Local declaration statement.
+    /// Due to CDTk parser field shifting when the optional 'modifier' is absent,
+    /// the actual AST layout is: modifier=LocalVariableType, type=LocalVariableDeclarators.
+    /// {modifier} routes through LocalVariableType to emit the WASM type (i32/i64/f32/f64).
+    /// {type} routes through LocalVariableDeclarators to emit declarator info.
+    /// </summary>
     public Map LocalDeclaration = "{modifier} {type}";
     
     /// <summary>Local variable declarator</summary>
@@ -2227,7 +2232,8 @@ drop
     /// <summary>Local variable modifier (const, ref, etc.)</summary>
     public Map LocalVariableModifier = "{modifier}";
     
-    /// <summary>Local variable type</summary>
+    /// <summary>Local variable type. Uses {base} field (not {type}) because CDTk places
+    /// the matched alternative in 'base' for this rule pattern.</summary>
     public Map LocalVariableType = "{base}";
     
     /// <summary>Constant declarator</summary>
@@ -2327,10 +2333,15 @@ drop
     /// <summary>Primitive type dispatcher</summary>
     public Map PrimitiveType = "{type}";
     
-    /// <summary>Integral type - most map to i32 in WASM (except long/ulong)</summary>
+    /// <summary>Integral type - delegates to the matched keyword token via {type}.
+    /// The {type} field contains a KwXxx token node (e.g. KwLong, KwInt) whose Maps
+    /// produce the correct WASM type: KwInt-&gt;i32, KwLong-&gt;i64, KwUlong-&gt;i64, etc.
+    /// Requires FloatingPointType rule to have .Returns("type") to work correctly.</summary>
     public Map IntegralType = "{type}";
     
-    /// <summary>Floating point type - default to f64</summary>
+    /// <summary>Floating point type - delegates to the matched keyword token via {type}.
+    /// The {type} field contains KwFloat or KwDouble, whose Maps produce f32 and f64 respectively.
+    /// Requires FloatingPointType rule to have .Returns("type") to work correctly.</summary>
     public Map FloatingPointType = "{type}";
     
     /// <summary>Named type (user-defined type)</summary>
