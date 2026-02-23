@@ -2213,7 +2213,7 @@ drop
     // ============================================================
     
     /// <summary>Local declaration statement</summary>
-    public Map LocalDeclaration = "{type} {declarators}";
+    public Map LocalDeclaration = "{modifier} {type}";
     
     /// <summary>Local variable declarator</summary>
     public Map LocalVariableDeclarator = "(local ${name} {type} {init})";
@@ -2228,7 +2228,7 @@ drop
     public Map LocalVariableModifier = "{modifier}";
     
     /// <summary>Local variable type</summary>
-    public Map LocalVariableType = "{type}";
+    public Map LocalVariableType = "{base}";
     
     /// <summary>Constant declarator</summary>
     public Map ConstantDeclarator = "(global ${name} {type} {value})";
@@ -2328,10 +2328,10 @@ drop
     public Map PrimitiveType = "{type}";
     
     /// <summary>Integral type - most map to i32 in WASM (except long/ulong)</summary>
-    public Map IntegralType = "i32";
+    public Map IntegralType = "{type}";
     
     /// <summary>Floating point type - default to f64</summary>
-    public Map FloatingPointType = "f64";
+    public Map FloatingPointType = "{type}";
     
     /// <summary>Named type (user-defined type)</summary>
     public Map NamedType = "(ref ${name}{typeArgs})";
