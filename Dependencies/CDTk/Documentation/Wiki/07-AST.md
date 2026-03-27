@@ -12,10 +12,10 @@ CDTk automatically constructs AST nodes from:
 ```csharp
 public sealed class AstNode
 {
-    public string Type { get; }        // Rule name
-    public AstNode[] Children { get; }  // Child nodes
-    public SourceSpan Span { get; }    // Source location
-    // Access fields by label...
+    public string Type { get; }                    // Rule name
+    public Dictionary<string, object?> Fields { get; }  // Named fields from .Returns()
+    public SourceSpan Span { get; }                // Source location
+    // Access fields via node.Fields["key"] or extension methods
 }
 ```
 

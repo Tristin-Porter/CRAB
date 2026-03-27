@@ -37,7 +37,7 @@ class Tutorial1
             .Build();
 
         var result = compiler.Compile("42");
-        Console.WriteLine(result.Output[0]); // "Found number: 42"
+        Console.WriteLine(result.Output); // "Found number: 42"
     }
 }
 ```

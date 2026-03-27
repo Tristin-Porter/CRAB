@@ -82,7 +82,7 @@ Console.WriteLine(result.Output); // "2 + 2"
 - **Zero Magic:** All data flows are explicit—no hidden injection or reflection surprises
 - **Rich Diagnostics:** Validate grammar, mapping, and models before you compile, with automatic deduplication
 - **Fallback Mapping:** Define default transformations for unmapped AST nodes
-- **Full Specification Compliance:** 88% compliant with cdtk-spec.txt and ag-ll-spec.txt
+- **Full Specification Compliance:** 100% compliant with cdtk-spec.txt and ag-ll-spec.txt
 - **Examples & Docs:** [Full documentation](Documentation/) and real-world guides
 
 ---
@@ -98,7 +98,7 @@ CDTk has undergone comprehensive improvements to align with its specification:
 ✅ **Diagnostic Deduplication** - Hash-based deduplication prevents duplicate errors  
 ✅ **Fallback Mapping** - Support for default map when no specific mapping exists  
 
-See [Documentation/IMPLEMENTATION_FIXES_SUMMARY.md](Documentation/IMPLEMENTATION_FIXES_SUMMARY.md) for complete details.
+See [Documentation/](Documentation/) for complete details.
 
 ---
 
@@ -106,5 +106,4 @@ See [Documentation/IMPLEMENTATION_FIXES_SUMMARY.md](Documentation/IMPLEMENTATION
 
 - [NuGet: CDTk](https://www.nuget.org/packages/CDTk/)
 - [Documentation](Documentation/) - Complete guides and API reference
-- [Implementation Status](Documentation/IMPLEMENTATION_FIXES_SUMMARY.md) - Recent improvements and compliance
 - [Contributing](https://github.com/Tristin-Porter/CDTk/wiki/Contributing)

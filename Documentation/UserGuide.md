@@ -18,7 +18,7 @@ Welcome to CRAB, the C# to Reliable Assembly Builder! This guide will help you g
 
 ### Installation
 
-CRAB is distributed as a standalone executable. No .NET runtime required!
+CRAB is distributed as a standalone executable. The output WASM files have no .NET runtime requirement, but building CRAB itself requires .NET 10.0.
 
 ```bash
 # Download CRAB
@@ -51,7 +51,7 @@ Compile and run:
 crab compile Hello.cs
 
 # Run (BADGER compiles WAT to native and executes)
-crab run Hello.wat
+crab run output.wasm
 ```
 
 Output:
@@ -88,7 +88,7 @@ Compile C# source files to WebAssembly:
 crab compile Program.cs
 
 # Compile with output path
-crab compile Program.cs -o output.wat
+crab compile Program.cs --output output.wasm
 
 # Compile directory of files
 crab compile src/
@@ -97,13 +97,14 @@ crab compile src/
 crab compile Program.cs --verbose
 
 # Target native assembly (via BADGER)
-crab compile Program.cs --target x86_64
+crab compile Program.cs --to-asm --arch x86_64
 ```
 
 Flags:
-- `-o, --output <path>` - Output file path
+- `--output <path>` - Output file path
 - `--verbose` - Show detailed compilation information
-- `--target <arch>` - Target architecture (wasm, x86_64, arm64, etc.)
+- `--to-asm` - Compile all the way to native assembly using BADGER
+- `--arch <arch>` - Target architecture when using `--to-asm` (x86_64, x86_32, x86_16, arm64, arm32)
 
 ### `crab build`
 
@@ -126,17 +127,17 @@ Flags:
 
 ### `crab run`
 
-Execute a compiled WAT file by using BADGER to compile it to native assembly and run:
+Execute a compiled WASM file by using BADGER to compile it to native assembly and run:
 
 ```bash
-# Run a WAT file (compiled to native via BADGER)
-crab run Program.wat
+# Run a WASM file (compiled to native via BADGER)
+crab run Program.wasm
 
 # Run with arguments
-crab run Program.wat arg1 arg2
+crab run Program.wasm arg1 arg2
 
 # Specify architecture (default: x86_64)
-crab run Program.wat --arch x86_64
+crab run Program.wasm --arch x86_64
 ```
 
 Flags:

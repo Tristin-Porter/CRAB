@@ -7,9 +7,20 @@ Models extend the base Model class to perform semantic analysis on the AST.
 ```csharp
 public class MyModel : Model
 {
-    public MyModel(__AllRules rules, __Ast ast) : base(rules, ast)
+    private readonly __AllRules _rules;
+    private readonly __Ast _ast;
+
+    public MyModel(__AllRules rules, __Ast ast)
     {
+        _rules = rules;
+        _ast = ast;
         // Perform semantic analysis
+    }
+
+    public override object Build(object input)
+    {
+        // Transform the input (e.g., an AstNode)
+        return input;
     }
 }
 ```
