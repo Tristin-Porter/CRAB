@@ -49,7 +49,7 @@ Compile and run:
 crab compile Hello.cs
 
 # Run (BADGER compiles WAT to native executable and runs it)
-crab run Hello.wat
+crab run output.wasm
 ```
 
 Output:
@@ -68,7 +68,7 @@ cd MyApp
 crab build
 
 # Run the output (BADGER compiles to native and executes)
-crab run bin/Program.wat
+crab run bin/output.wasm
 ```
 
 ## Installation
@@ -274,7 +274,7 @@ crab new project MyLibrary
 
 # Compile C# to WASM
 crab compile Program.cs
-crab compile src/ -o output.wat
+crab compile src/ --output output.wasm
 crab compile Program.cs --verbose
 
 # Build projects
@@ -282,8 +282,8 @@ crab build
 crab build --config release
 
 # Run WAT files (compiled to native via BADGER)
-crab run Program.wat
-crab run Program.wat arg1 arg2
+crab run Program.wasm
+crab run Program.wasm arg1 arg2
 
 # Get help
 crab help
@@ -347,7 +347,7 @@ CRAB is 100% complete and production-ready with all core features fully implemen
   - Peephole optimizations
   - Full AST traversal for memory operation detection
 - **CLI commands** - All functional (new, compile, build, run, help)
-- **Comprehensive testing suite** - 8 test files covering all components
+- **Comprehensive testing suite** - 7 test files covering all components
 - **Complete documentation** - Architecture, memory models, user guide
 
 ### Performance Characteristics
@@ -394,9 +394,6 @@ cd CRAB
 
 # Build
 dotnet build
-
-# Run tests
-dotnet run --project Testing/TestRunner.cs
 
 # Try it out
 dotnet run -- help

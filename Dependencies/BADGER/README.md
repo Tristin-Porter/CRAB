@@ -255,13 +255,6 @@ BADGER/
 ├── Containers/             # Container format emitters
 │   ├── Native.cs
 │   └── PE.cs
-├── Testing/                # Comprehensive test suite
-│   ├── TestRunner.cs
-│   ├── WATParserTests.cs
-│   ├── LoweringTests.cs
-│   ├── AssemblyEncodingTests.cs
-│   ├── ContainerTests.cs
-│   └── IntegrationTests.cs
 └── Documentation/          # Detailed documentation
 ```
 

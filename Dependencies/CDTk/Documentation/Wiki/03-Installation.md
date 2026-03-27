@@ -2,8 +2,8 @@
 
 ## Prerequisites
 
-- **.NET 8.0 or later**
-- **C# 12 or later**
+- **.NET 10.0 or later**
+- **C# 13 or later**
 
 ## Installation Methods
 
@@ -92,7 +92,7 @@ class Program
         
         if (!result.Diagnostics.HasErrors)
         {
-            Console.WriteLine(result.Output[0]);
+            Console.WriteLine(result.Output);
             Console.WriteLine("✓ CDTk is installed correctly!");
         }
         else
@@ -144,8 +144,8 @@ Success! Found: 42
 - Check your `.csproj` has the `<Compile Include="CDTk.cs" />` entry
 - Rebuild your project
 
-### "Feature 'X' is not available in C# 11"
-- Update to C# 12: Add `<LangVersion>12</LangVersion>` to your `.csproj`
+### "Feature 'X' is not available in C# 12"
+- Update to C# 13: Add `<LangVersion>13</LangVersion>` to your `.csproj`
 
 ### Performance Issues in Debug Mode
 - Build in Release mode: `dotnet build -c Release`

@@ -63,20 +63,7 @@ End-to-end integration tests:
 
 ## Running Tests
 
-### Run All Tests
-```bash
-dotnet run --project Testing/TestRunner.cs
-```
-
-### Run Individual Test Suite
-```bash
-dotnet run --project Testing/TokenTests.cs
-dotnet run --project Testing/ParserTests.cs
-dotnet run --project Testing/CTGCTests.cs
-dotnet run --project Testing/ManualMemoryTests.cs
-dotnet run --project Testing/WASMGenerationTests.cs
-dotnet run --project Testing/IntegrationTests.cs
-```
+Tests are excluded from the main CRAB project build (`Testing/**/*.cs` is excluded in `CRAB.csproj`). To run tests, set up a separate test project that references the test files or use them as documentation of expected compiler behavior.
 
 ## Test Architecture
 
@@ -87,7 +74,7 @@ Tests are organized following these principles:
 3. **Generation Tests**: WASMGenerationTests test code generation
 4. **Integration Tests**: IntegrationTests test the complete pipeline
 
-Each test file is self-contained and can run independently.
+Each test file is self-contained and documents expected behavior.
 
 ## Adding New Tests
 
